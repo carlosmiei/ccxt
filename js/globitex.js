@@ -116,8 +116,18 @@ module.exports = class globitex extends Exchange {
         });
     }
 
+    async fetchTime (params = {}) {
+        const response = await this.publicGetTime (params);
+        //
+        // {
+        //    "timestamp": 1612088909341
+        // }
+        //
+        return this.safeInteger (response, 'timestamp');
+    }
+
     async fetchMarkets (params = {}) {
-        let response = await this.publicGetCoins (params);
+        let response = await this.publicGetSymbols (params);
         response = this.safeValue (response, 'symbols', []);
         // {
         //    "symbols": [
@@ -141,17 +151,17 @@ module.exports = class globitex extends Exchange {
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
-            const precision = {
-                'price': this.safeInteger (market, 'quoteAssetScale'),
-                'amount': this.safeInteger (market, 'baseAssetScale'),
-            };
-            const minimums = this.safeValue (market, 'restApiOrderAmountMin', {});
-            const marketAsk = this.safeValue (minimums, 'marketAsk', {});
-            const marketBid = this.safeValue (minimums, 'marketBid', {});
+            // const precision = {
+            //    'price': this.safeInteger (market, 'quoteAssetScale'),
+            //    'amount': this.safeInteger (market, 'baseAssetScale'),
+            // };
+            // const minimums = this.safeValue (market, 'restApiOrderAmountMin', {});
+            // const marketAsk = this.safeValue (minimums, 'marketAsk', {});
+            // const marketBid = this.safeValue (minimums, 'marketBid', {});
             result.push ({
                 'id': id,
                 'info': market,
-                'numericId': numericId,
+                // 'numericId': numericId,
                 'symbol': symbol,
                 'base': base,
                 'quote': quote,
@@ -160,18 +170,18 @@ module.exports = class globitex extends Exchange {
                 'active': true,
                 'taker': this.safeFloat (market, 'takerFeePercent'),
                 'maker': this.safeFloat (market, 'makerFeePercent'),
-                'precision': precision,
+                // 'precision': precision,
                 'limits': {
-                    'amount': {
-                        'min': this.safeFloat (marketAsk, 'amount'),
-                        'max': undefined,
-                    },
+                    //   'amount': {
+                    //      'min': this.safeFloat (marketAsk, 'amount'),
+                    //     'max': undefined,
+                    // },
                     'price': {
-                        'min': this.safeFloat (market, 'priceMin'),
+                    //    'min': this.safeFloat (market, 'priceMin'),
                         'max': undefined,
                     },
                     'cost': {
-                        'min': this.safeFloat (marketBid, 'amount'),
+                        //   'min': this.safeFloat (marketBid, 'amount'),
                         'max': undefined,
                     },
                 },
