@@ -68,12 +68,6 @@ module.exports = class globitex extends Exchange {
                         'orderbook/{symbol}',
                         'trades/{symbol}',
                         'trades/recent/{symbol}',
-                        // '{coin}/orderbook/', // last slash critical
-                        //  '{coin}/ticker/',
-                        //  '{coin}/trades/',
-                        //  '{coin}/trades/{from}/',
-                        //  '{coin}/trades/{from}/{to}',
-                        //  '{coin}/day-summary/{year}/{month}/{day}/',
                     ],
                 },
                 'private': {
@@ -92,37 +86,35 @@ module.exports = class globitex extends Exchange {
                         'withdraw_coin',
                     ],
                 },
-                'v4Public': {
-                    'get': [
-                        '{coin}/candle/',
-                    ],
-                },
-            },
-            'fees': {
-                'trading': {
-                    'maker': 0.003,
-                    'taker': 0.007,
-                },
-            },
-            'options': {
-                'limits': {
-                    'BTC': 0.001,
-                    'BCH': 0.001,
-                    'ETH': 0.01,
-                    'LTC': 0.01,
-                    'XRP': 0.1,
-                },
+            //     'v4Public': {
+            //         'get': [
+            //             '{coin}/candle/',
+            //         ],
+            //     },
+            // },
+            // 'fees': {
+            //     'trading': {
+            //         'maker': 0.003,
+            //         'taker': 0.007,
+            //     },
+            // },
+            // 'options': {
+            //     'limits': {
+            //         'BTC': 0.001,
+            //         'BCH': 0.001,
+            //         'ETH': 0.01,
+            //         'LTC': 0.01,
+            //         'XRP': 0.1,
+            //     },
             },
         });
     }
 
     async fetchTime (params = {}) {
         const response = await this.publicGetTime (params);
-        //
         // {
         //    "timestamp": 1612088909341
         // }
-        //
         return this.safeInteger (response, 'timestamp');
     }
 
@@ -145,47 +137,90 @@ module.exports = class globitex extends Exchange {
         for (let i = 0; i < response.length; i++) {
             const market = response[i];
             const id = this.safeString (market, 'symbol');
-            // const numericId = this.safeInteger (market, 'id');
             const baseId = this.safeString (market, 'commodity');
             const quoteId = this.safeString (market, 'currency');
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
-            // const precision = {
-            //    'price': this.safeInteger (market, 'quoteAssetScale'),
-            //    'amount': this.safeInteger (market, 'baseAssetScale'),
-            // };
-            // const minimums = this.safeValue (market, 'restApiOrderAmountMin', {});
-            // const marketAsk = this.safeValue (minimums, 'marketAsk', {});
-            // const marketBid = this.safeValue (minimums, 'marketBid', {});
+            const sizeMin = this.safeFloat (market, 'sizeMin');
+            const precision = this.safeFloat (market, 'sizeIncrement'); // Not sure if sizeIncrement or priceIncrement
             result.push ({
                 'id': id,
                 'info': market,
-                // 'numericId': numericId,
+                'numericId': undefined,
                 'symbol': symbol,
                 'base': base,
                 'quote': quote,
                 'baseId': this.safeString (market, 'baseAsset'),
                 'quoteId': this.safeString (market, 'quoteAsset'),
                 'active': true,
-                'taker': this.safeFloat (market, 'takerFeePercent'),
-                'maker': this.safeFloat (market, 'makerFeePercent'),
-                // 'precision': precision,
+                'precision': precision,
                 'limits': {
-                    //   'amount': {
-                    //      'min': this.safeFloat (marketAsk, 'amount'),
-                    //     'max': undefined,
-                    // },
-                    'price': {
-                    //    'min': this.safeFloat (market, 'priceMin'),
-                        'max': undefined,
-                    },
-                    'cost': {
-                        //   'min': this.safeFloat (marketBid, 'amount'),
+                    'amount': {
+                        'min': sizeMin,
                         'max': undefined,
                     },
                 },
             });
+        }
+        return result;
+    }
+
+    async fetchCurrencies (params = {}) {
+        let response = await this.publicGetAssets (params);
+        response = this.safeValue (response, 'instruments', []);
+        //
+        // "instruments": [
+        //     {
+        //         "symbol": "GBXETH",
+        //         "ask": "0.0000249",
+        //         "bid": "0.0000105",
+        //         "last": "0.0000000",
+        //         "low": "0.0000000",
+        //         "high": "0.0000000",
+        //         "open": "0.0000110",
+        //         "volume": "0.000",
+        //         "volumeQuote": "0.0000000",
+        //         "timestamp": 1612214672442
+        //     },
+        //
+        const result = {};
+        for (let i = 0; i < response.length; i++) {
+            const currency = response[i];
+            const id = this.safeString (currency, 'symbol');
+            const code = this.safeCurrencyCode (id);
+            // const name = this.safeString (currency, 'name');
+            // const fee = this.safeFloat (currency, 'withdrawalFee');
+            // const precision = this.safeFloat (currency, 'scale');
+            const askPrice = this.safeFloat (currency, 'ask');
+            const bidPrice = this.safeFloat (currency, 'bid');
+            result[code] = {
+                'id': id,
+                'info': currency,
+                'code': code,
+                //  'name': name,
+                'active': true,
+                // 'fee': fee,
+                // 'precision': precision,
+                'limits': {
+                    'amount': {
+                        'min': undefined,
+                        'max': undefined,
+                    },
+                    'price': {
+                        'min': bidPrice,
+                        'max': askPrice,
+                    },
+                    'cost': {
+                        'min': undefined,
+                        'max': undefined,
+                    },
+                    'withdraw': {
+                        'min': undefined,
+                        'max': undefined,
+                    },
+                },
+            };
         }
         return result;
     }
