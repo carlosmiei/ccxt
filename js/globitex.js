@@ -236,36 +236,42 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchTicker (symbol, params = {}) {
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        const request = {
-            'coin': market['base'],
-        };
-        const response = await this.publicGetCoinTicker (this.extend (request, params));
-        const ticker = this.safeValue (response, 'ticker', {});
-        const timestamp = this.safeTimestamp (ticker, 'date');
-        const last = this.safeFloat (ticker, 'last');
+        // {
+        //     "symbol": "GBXETH",
+        //     "ask": "0.0000249",
+        //     "bid": "0.0000105",
+        //     "last": "0.0000000",
+        //     "low": "0.0000000",
+        //     "high": "0.0000000",
+        //     "open": "0.0000110",
+        //     "volume": "0.000",
+        //     "volumeQuote": "0.0000000",
+        //     "timestamp": 1612216919341
+        // }
+        const response = await this.publicGetOrderBook (symbol);
+        const timestamp = this.safeTimestamp (response, 'timestamp');
+        const last = this.safeFloat (response, 'last');
         return {
             'symbol': symbol,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'high': this.safeFloat (ticker, 'high'),
-            'low': this.safeFloat (ticker, 'low'),
-            'bid': this.safeFloat (ticker, 'buy'),
+            'high': this.safeFloat (response, 'high'),
+            'low': this.safeFloat (response, 'low'),
+            'bid': this.safeFloat (response, 'buy'),
             'bidVolume': undefined,
-            'ask': this.safeFloat (ticker, 'sell'),
+            'ask': this.safeFloat (response, 'ask'),
             'askVolume': undefined,
             'vwap': undefined,
-            'open': undefined,
+            'open': this.safeFloat (response, 'open'),
             'close': last,
             'last': last,
             'previousClose': undefined,
             'change': undefined,
             'percentage': undefined,
             'average': undefined,
-            'baseVolume': this.safeFloat (ticker, 'vol'),
+            'baseVolume': this.safeFloat (response, 'volume'),
             'quoteVolume': undefined,
-            'info': ticker,
+            'info': response,
         };
     }
 
