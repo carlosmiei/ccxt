@@ -23,7 +23,7 @@ module.exports = class globitex extends Exchange {
                 'fetchBalance': true,
                 'fetchMarkets': true,
                 'fetchMyTrades': 'emulated',
-                'fetchOHLCV': true,
+                'fetchOHLCV': false,
                 'fetchOpenOrders': true,
                 'fetchOrder': true,
                 'fetchOrderBook': true,
@@ -32,19 +32,6 @@ module.exports = class globitex extends Exchange {
                 'fetchTickers': false,
                 'fetchTrades': true,
                 'withdraw': true,
-            },
-            'timeframes': {
-                '1m': '1m',
-                '5m': '5m',
-                '15m': '15m',
-                '30m': '30m',
-                '1h': '1h',
-                '6h': '6h',
-                '12h': '12h',
-                '1d': '1d',
-                '3d': '3d',
-                '1w': '1w',
-                '2w': '2w',
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/', // fill the image later
@@ -71,19 +58,29 @@ module.exports = class globitex extends Exchange {
                     ],
                 },
                 'private': {
+                    'get': [
+                        '2/trading/active',
+                        '1/trading/recent',
+                        '1/trading/order',
+                        '1/trading/trades',
+                        '1/payment/accounts',
+                        '1/payment/payout/fee/fiat',
+                        '1/payment/fee/crypto',
+                        '1/payment/deposit/fiat',
+                        '1/payment/transations',
+                        '1/gbx-utilization/list',
+
+                    ],
                     'post': [
-                        'cancel_order',
-                        'get_account_info',
-                        'get_order',
-                        'get_withdrawal',
-                        'list_system_messages',
-                        'list_orders',
-                        'list_orderbook',
-                        'place_buy_order',
-                        'place_sell_order',
-                        'place_market_buy_order',
-                        'place_market_sell_order',
-                        'withdraw_coin',
+                        '1/trading/new_order',
+                        '2/trading/cancel_order',
+                        '1/trading/cancel_orders',
+                        '1/payment/internal',
+                        '1/payment/payout/exchange',
+                        '1/payment/payout/crypto',
+                        '1/payment/payout/bank',
+                        '1/payment/deposit/{crypto}/{address}',
+                        // Euro wallet methods missing
                     ],
                 },
             //     'v4Public': {
@@ -611,21 +608,21 @@ module.exports = class globitex extends Exchange {
         return this.parseOrders (orders, market, since, limit);
     }
 
-    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' fetchOpenOrders () requires a symbol argument');
-        }
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        const request = {
-            'coin_pair': market['id'],
-            'status_list': '[2]', // open only
-        };
-        const response = await this.privatePostListOrders (this.extend (request, params));
-        const responseData = this.safeValue (response, 'response_data', {});
-        const orders = this.safeValue (responseData, 'orders', []);
-        return this.parseOrders (orders, market, since, limit);
-    }
+    // async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+    //     if (symbol === undefined) {
+    //         throw new ArgumentsRequired (this.id + ' fetchOpenOrders () requires a symbol argument');
+    //     }
+    //     await this.loadMarkets ();
+    //     const market = this.market (symbol);
+    //     const request = {
+    //         'coin_pair': market['id'],
+    //         'status_list': '[2]', // open only
+    //     };
+    //     const response = await this.privatePostListOrders (this.extend (request, params));
+    //     const responseData = this.safeValue (response, 'response_data', {});
+    //     const orders = this.safeValue (responseData, 'orders', []);
+    //     return this.parseOrders (orders, market, since, limit);
+    // }
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         if (symbol === undefined) {
