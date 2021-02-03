@@ -64,12 +64,11 @@ module.exports = class globitex extends Exchange {
                         '1/trading/order',
                         '1/trading/trades',
                         '1/payment/accounts',
-                        '1/payment/payout/fee/fiat',
-                        '1/payment/fee/crypto',
+                        '1/payment/{payout}/fee/fiat',
+                        '1/payment/fee/{crypto}',
                         '1/payment/deposit/fiat',
                         '1/payment/transations',
                         '1/gbx-utilization/list',
-
                     ],
                     'post': [
                         '1/trading/new_order',
@@ -79,30 +78,26 @@ module.exports = class globitex extends Exchange {
                         '1/payment/payout/exchange',
                         '1/payment/payout/crypto',
                         '1/payment/payout/bank',
-                        '1/payment/deposit/{crypto}/{address}',
-                        // Euro wallet methods missing
+                        '1/payment/deposit/crypto/address',
                     ],
                 },
-            //     'v4Public': {
-            //         'get': [
-            //             '{coin}/candle/',
-            //         ],
-            //     },
-            // },
-            // 'fees': {
-            //     'trading': {
-            //         'maker': 0.003,
-            //         'taker': 0.007,
-            //     },
-            // },
-            // 'options': {
-            //     'limits': {
-            //         'BTC': 0.001,
-            //         'BCH': 0.001,
-            //         'ETH': 0.01,
-            //         'LTC': 0.01,
-            //         'XRP': 0.1,
-            //     },
+            },
+            'fees': {
+                'trading': {
+                    'percentage': true,
+                    'tierBased': false,
+                    'maker': 0.04 / 100,
+                    'taker': 0.04 / 100,
+                },
+            },
+            'exceptions': {
+                'broad': {
+                },
+                'exact': {
+                },
+            },
+            'options': {
+                'createMarketBuyOrderRequiresPrice': true,
             },
         });
     }
@@ -245,7 +240,12 @@ module.exports = class globitex extends Exchange {
         //     "volumeQuote": "0.0000000",
         //     "timestamp": 1612216919341
         // }
-        const response = await this.publicGetOrderBook (symbol);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'symbol': market['id'],
+        };
+        const response = await this.publicGetOrderBook (this.extend (request, params));
         const timestamp = this.safeTimestamp (response, 'timestamp');
         const last = this.safeFloat (response, 'last');
         return {
@@ -560,39 +560,6 @@ module.exports = class globitex extends Exchange {
         };
     }
 
-    parseOHLCV (ohlcv, market = undefined) {
-        return [
-            this.safeTimestamp (ohlcv, 'timestamp'),
-            this.safeFloat (ohlcv, 'open'),
-            this.safeFloat (ohlcv, 'high'),
-            this.safeFloat (ohlcv, 'low'),
-            this.safeFloat (ohlcv, 'close'),
-            this.safeFloat (ohlcv, 'volume'),
-        ];
-    }
-
-    async fetchOHLCV (symbol, timeframe = '5m', since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        const request = {
-            'precision': this.timeframes[timeframe],
-            'coin': market['id'].toLowerCase (),
-        };
-        if (limit !== undefined && since !== undefined) {
-            request['from'] = parseInt (since / 1000);
-            request['to'] = this.sum (request['from'], limit * this.parseTimeframe (timeframe));
-        } else if (since !== undefined) {
-            request['from'] = parseInt (since / 1000);
-            request['to'] = this.sum (this.seconds (), 1);
-        } else if (limit !== undefined) {
-            request['to'] = this.seconds ();
-            request['from'] = request['to'] - (limit * this.parseTimeframe (timeframe));
-        }
-        const response = await this.v4PublicGetCoinCandle (this.extend (request, params));
-        const candles = this.safeValue (response, 'candles', []);
-        return this.parseOHLCVs (candles, market, timeframe, since, limit);
-    }
-
     async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' fetchOrders () requires a symbol argument');
@@ -608,21 +575,21 @@ module.exports = class globitex extends Exchange {
         return this.parseOrders (orders, market, since, limit);
     }
 
-    // async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-    //     if (symbol === undefined) {
-    //         throw new ArgumentsRequired (this.id + ' fetchOpenOrders () requires a symbol argument');
-    //     }
-    //     await this.loadMarkets ();
-    //     const market = this.market (symbol);
-    //     const request = {
-    //         'coin_pair': market['id'],
-    //         'status_list': '[2]', // open only
-    //     };
-    //     const response = await this.privatePostListOrders (this.extend (request, params));
-    //     const responseData = this.safeValue (response, 'response_data', {});
-    //     const orders = this.safeValue (responseData, 'orders', []);
-    //     return this.parseOrders (orders, market, since, limit);
-    // }
+    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOpenOrders () requires a symbol argument');
+        }
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'coin_pair': market['id'],
+            'status_list': '[2]', // open only
+        };
+        const response = await this.privatePostListOrders (this.extend (request, params));
+        const responseData = this.safeValue (response, 'response_data', {});
+        const orders = this.safeValue (responseData, 'orders', []);
+        return this.parseOrders (orders, market, since, limit);
+    }
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         if (symbol === undefined) {
