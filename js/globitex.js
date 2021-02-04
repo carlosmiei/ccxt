@@ -24,13 +24,13 @@ module.exports = class globitex extends Exchange {
                 'fetchMarkets': true,
                 'fetchMyTrades': 'emulated',
                 'fetchOHLCV': false,
-                'fetchOpenOrders': true,
-                'fetchOrder': true,
-                'fetchOrderBook': true,
-                'fetchOrders': true,
+                'fetchOpenOrders': false,
+                'fetchOrder': false,
+                'fetchOrderBook': false,
+                'fetchOrders': false,
                 'fetchTicker': true,
-                'fetchTickers': false,
-                'fetchTrades': true,
+                'fetchTickers': true,
+                'fetchTrades': false, // tmp testing
                 'withdraw': true,
             },
             'urls': {
@@ -38,7 +38,6 @@ module.exports = class globitex extends Exchange {
                 'api': {
                     'public': 'https://api.globitex.com/api/1/public/',
                     'private': 'https://api.globitex.com/api/',
-                    // 'v4Public': 'https://www.mercadobitcoin.com.br/v4',
                 },
                 'www': 'https://www.globitex.com',
                 'doc': [
@@ -227,6 +226,33 @@ module.exports = class globitex extends Exchange {
         return this.parseOrderBook (response);
     }
 
+    async fetchTickers (symbols = undefined, params = {}) {
+        // [ {
+        //     "symbol": "GBXETH",
+        //     "ask": "0.0000249",
+        //     "bid": "0.0000105",
+        //     "last": "0.0000000",
+        //     "low": "0.0000000",
+        //     "high": "0.0000000",
+        //     "open": "0.0000110",
+        //     "volume": "0.000",
+        //     "volumeQuote": "0.0000000",
+        //     "timestamp": 1612216919341
+        // }]
+        await this.loadMarkets ();
+        let response = await this.publicGetTicker (params);
+        response = this.safeValue (response, 'instruments', []);
+        const result = {};
+        // const ids = Object.keys (response);
+        for (let i = 0; i < response.length; i++) {
+            const marketId = this.safeString (response[i], 'symbol');
+            const market = this.safeMarket (marketId);
+            const symbol = market['symbol'];
+            result[symbol] = this.parseTicker (response[marketId], market);
+        }
+        return this.filterByArray (result, 'symbol', symbols);
+    }
+
     async fetchTicker (symbol, params = {}) {
         // {
         //     "symbol": "GBXETH",
@@ -245,30 +271,38 @@ module.exports = class globitex extends Exchange {
         const request = {
             'symbol': market['id'],
         };
-        const response = await this.publicGetOrderBook (this.extend (request, params));
-        const timestamp = this.safeTimestamp (response, 'timestamp');
-        const last = this.safeFloat (response, 'last');
+        const response = await this.publicGetTickerSymbol (this.extend (request, params));
+        return this.parseTicker (response, market);
+    }
+
+    parseTicker (ticker, market = undefined) {
+        let symbol = undefined;
+        if (market) {
+            symbol = market['symbol'];
+        }
+        const timestamp = this.safeTimestamp (ticker, 'timestamp');
+        const last = this.safeFloat (ticker, 'last');
         return {
             'symbol': symbol,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'high': this.safeFloat (response, 'high'),
-            'low': this.safeFloat (response, 'low'),
-            'bid': this.safeFloat (response, 'buy'),
+            'high': this.safeFloat (ticker, 'high'),
+            'low': this.safeFloat (ticker, 'low'),
+            'bid': this.safeFloat (ticker, 'buy'),
             'bidVolume': undefined,
-            'ask': this.safeFloat (response, 'ask'),
+            'ask': this.safeFloat (ticker, 'ask'),
             'askVolume': undefined,
             'vwap': undefined,
-            'open': this.safeFloat (response, 'open'),
+            'open': this.safeFloat (ticker, 'open'),
             'close': last,
             'last': last,
             'previousClose': undefined,
             'change': undefined,
             'percentage': undefined,
             'average': undefined,
-            'baseVolume': this.safeFloat (response, 'volume'),
+            'baseVolume': this.safeFloat (ticker, 'volume'),
             'quoteVolume': undefined,
-            'info': response,
+            'info': ticker,
         };
     }
 
@@ -316,21 +350,22 @@ module.exports = class globitex extends Exchange {
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        const market = this.market (symbol);
-        let method = 'publicGetCoinTrades';
-        const request = {
-            'coin': market['base'],
-        };
-        if (since !== undefined) {
-            method += 'From';
-            request['from'] = parseInt (since / 1000);
-        }
-        const to = this.safeInteger (params, 'to');
-        if (to !== undefined) {
-            method += 'To';
-        }
-        const response = await this[method] (this.extend (request, params));
-        return this.parseTrades (response, market, since, limit);
+        // const market = this.market (symbol);
+        // let method = 'publicGetCoinTrades';
+        // const request = {
+        //     'coin': market['base'],
+        // };
+        // if (since !== undefined) {
+        //     method += 'From';
+        //     request['from'] = parseInt (since / 1000);
+        // }
+        // const to = this.safeInteger (params, 'to');
+        // if (to !== undefined) {
+        //     method += 'To';
+        // }
+        // const response = await this[method] (this.extend (request, params));
+        // return this.parseTrades (response, market, since, limit);
+        return undefined;
     }
 
     async fetchBalance (params = {}) {
