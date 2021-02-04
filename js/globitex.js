@@ -26,7 +26,7 @@ module.exports = class globitex extends Exchange {
                 'fetchOHLCV': false,
                 'fetchOpenOrders': false,
                 'fetchOrder': false,
-                'fetchOrderBook': false,
+                'fetchOrderBook': true,
                 'fetchOrders': false,
                 'fetchTicker': true,
                 'fetchTickers': true,
@@ -217,13 +217,21 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
+        // {
+        //     "asks": [
+        //         [
+        //             "0.0000240", : size
+        //             "177341.243" : value
+        //         ],
+        //         "bids":....
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
-            'coin': market['base'],
+            'symbol': market['id'],
         };
-        const response = await this.publicGetCoinOrderbook (this.extend (request, params));
-        return this.parseOrderBook (response);
+        const response = await this.publicGetOrderbookSymbol (this.extend (request, params));
+        const final = this.parseOrderBook (response, undefined, 'bids', 'asks');
+        return final;
     }
 
     async fetchTickers (symbols = undefined, params = {}) {
