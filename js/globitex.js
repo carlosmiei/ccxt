@@ -14,7 +14,7 @@ module.exports = class globitex extends Exchange {
             'name': 'Globitex',
             'countries': ['fr', 'de', 'pt'], // Europe fill the remaining later
             'rateLimit': 1000,
-            'version': 'v3',
+            // 'version': 'v3',
             'has': {
                 'cancelOrder': true,
                 'CORS': true,
@@ -27,6 +27,7 @@ module.exports = class globitex extends Exchange {
                 'fetchOpenOrders': false,
                 'fetchOrder': false,
                 'fetchOrderBook': true,
+                'fetchOrderBooks': false,
                 'fetchOrders': false,
                 'fetchTicker': true,
                 'fetchTickers': true,
@@ -68,6 +69,7 @@ module.exports = class globitex extends Exchange {
                         '1/payment/deposit/fiat',
                         '1/payment/transations',
                         '1/gbx-utilization/list',
+                        '1/payment/accounts',
                     ],
                     'post': [
                         '1/trading/new_order',
@@ -88,6 +90,10 @@ module.exports = class globitex extends Exchange {
                     'maker': 0.04 / 100,
                     'taker': 0.04 / 100,
                 },
+            },
+            'requiredCredentials': {
+                'apiKey': true,
+                'secret': false,
             },
             'exceptions': {
                 'broad': {
@@ -377,22 +383,28 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchBalance (params = {}) {
+        // {
+        //     "accounts": [
+        //      {"account":"AFN561A01","main":true,"balance": [
+        //        {"currency":"EUR","available":"100.0","reserved":"0.0"},
+        //        {"currency":"BTC","available":"1.00000002","reserved":"0.0"}
+        //     ]},
         await this.loadMarkets ();
-        const response = await this.privatePostGetAccountInfo (params);
-        const data = this.safeValue (response, 'response_data', {});
-        const balances = this.safeValue (data, 'balance', {});
+        const response = await this.privateGet1PaymentAccounts (params);
+        const data = this.safeValue (response, 'accounts', {});
+        const mainAccount = data[0]; // Tmp main account
+        const balances = this.safeValue (mainAccount, 'balance', {});
         const result = { 'info': response };
-        const currencyIds = Object.keys (balances);
-        for (let i = 0; i < currencyIds.length; i++) {
-            const currencyId = currencyIds[i];
+        for (let i = 0; i < balances.length; i++) {
+            const balance = balances[i];
+            const currencyId = this.safeString (balance, 'currency');
             const code = this.safeCurrencyCode (currencyId);
-            if (currencyId in balances) {
-                const balance = this.safeValue (balances, currencyId, {});
-                const account = this.account ();
-                account['free'] = this.safeFloat (balance, 'available');
-                account['total'] = this.safeFloat (balance, 'total');
-                result[code] = account;
-            }
+            const account = this.account ();
+            const reserved = this.safeFloat (balance, 'reserved');
+            const available = this.safeFloat (balance, 'available');
+            account['total'] = reserved + available;
+            account['free'] = available;
+            result[code] = account;
         }
         return this.parseBalance (result);
     }
@@ -664,26 +676,28 @@ module.exports = class globitex extends Exchange {
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
-        let url = this.urls['api'][api] + '/';
+        let url = this.urls['api'][api]; // + '/';
+        const uri = this.implodeParams (path, params);
         const query = this.omit (params, this.extractParams (path));
-        if (api === 'public' || (api === 'v4Public')) {
-            url += this.implodeParams (path, params);
+        const privateUrl = url.replace ('https://api.globitex.com', '') + uri;
+        if (false || api === 'public') {
+            url += uri;
             if (Object.keys (query).length) {
                 url += '?' + this.urlencode (query);
             }
         } else {
             this.checkRequiredCredentials ();
-            url += this.version + '/';
             const nonce = this.nonce ();
             body = this.urlencode (this.extend ({
-                'tapi_method': path,
-                'tapi_nonce': nonce,
+                // 'tapi_method': path,
+                // 'tapi_nonce': nonce,
             }, params));
-            const auth = '/tapi/' + this.version + '/' + '?' + body;
+            const message = this.apiKey + '&' + '?' + privateUrl;
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'TAPI-ID': this.apiKey,
-                'TAPI-MAC': this.hmac (this.encode (auth), this.encode (this.secret), 'sha512'),
+                'X-API-Key': this.apiKey,
+                'X-Nonce': nonce,
+                'X-Signature': this.hmac (this.encode (message), this.encode (this.secret), 'sha512'), // convert to hex and lower_case
             };
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
