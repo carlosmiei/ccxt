@@ -404,6 +404,7 @@ module.exports = class globitex extends Exchange {
             const available = this.safeFloat (balance, 'available');
             account['total'] = reserved + available;
             account['free'] = available;
+            account['used'] = reserved;
             result[code] = account;
         }
         return this.parseBalance (result);
@@ -679,20 +680,19 @@ module.exports = class globitex extends Exchange {
         let url = this.urls['api'][api]; // + '/';
         const uri = this.implodeParams (path, params);
         const query = this.omit (params, this.extractParams (path));
-        const privateUrl = url.replace ('https://api.globitex.com', '') + uri;
-        if (false || api === 'public') {
+        const privateUrl = url.replace ('https://api.globitex.com', '') + uri; // hardcoded tmp
+        let request = '';
+        if (Object.keys (query).length) {
+            request = '?' + this.urlencode (query);
+        }
+        if (method === 'GET') {
             url += uri;
-            if (Object.keys (query).length) {
-                url += '?' + this.urlencode (query);
-            }
-        } else {
+            url += request;
+        }
+        if (api === 'private') {
             this.checkRequiredCredentials ();
             const nonce = this.nonce ();
-            body = this.urlencode (this.extend ({
-                // 'tapi_method': path,
-                // 'tapi_nonce': nonce,
-            }, params));
-            const message = this.apiKey + '&' + '?' + privateUrl;
+            const message = this.apiKey + '&' + nonce + privateUrl + request;
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-API-Key': this.apiKey,
