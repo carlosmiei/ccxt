@@ -2,6 +2,7 @@
 
 //  ---------------------------------------------------------------------------
 
+const { AuthenticationError } = require ('./base/errors');
 const Exchange = require ('./base/Exchange');
 const { ExchangeError, ArgumentsRequired, InvalidOrder } = require ('./base/errors');
 
@@ -20,9 +21,10 @@ module.exports = class globitex extends Exchange {
                 'CORS': true,
                 'createMarketOrder': true,
                 'createOrder': true,
+                'fetchAccounts': true,
                 'fetchBalance': true,
                 'fetchMarkets': true,
-                'fetchMyTrades': 'emulated',
+                'fetchMyTrades': false, // 'emulated',
                 'fetchOHLCV': false,
                 'fetchOpenOrders': false,
                 'fetchOrder': false,
@@ -97,6 +99,7 @@ module.exports = class globitex extends Exchange {
             },
             'exceptions': {
                 'broad': {
+                    'Missing signature': AuthenticationError,
                 },
                 'exact': {
                 },
@@ -113,6 +116,31 @@ module.exports = class globitex extends Exchange {
         //    "timestamp": 1612088909341
         // }
         return this.safeInteger (response, 'timestamp');
+    }
+
+    async fetchAccounts (params = {}) {
+        await this.loadMarkets ();
+        // Using this metod because globitex do not have a dedicated one to fetch accounts info
+        const response = await this.privateGet1PaymentAccounts (params);
+        // {
+        //     "accounts": [
+        //      {"account":"AFN561A01","main":true,"balance": [
+        //        {"currency":"EUR","available":"100.0","reserved":"0.0"},
+        //        {"currency":"BTC","available":"1.00000002","reserved":"0.0"}
+        //     ]},
+        //      {"account":"AFN561A02","main":false,"balance": [
+        //        {"currency":"EUR","available":"120.0","reserved":"0.0"},
+        //        {"currency":"BTC","available":"1.90000002","reserved":"0.0"}
+        const data = this.safeValue (response, 'accounts', []);
+        const result = [];
+        for (let i = 0; i < data.length; i++) {
+            const account = data[i];
+            result.push ({
+                'id': this.safeString (account, 'account'),
+                'info': account,
+            });
+        }
+        return result;
     }
 
     async fetchMarkets (params = {}) {
@@ -390,6 +418,7 @@ module.exports = class globitex extends Exchange {
         //        {"currency":"BTC","available":"1.00000002","reserved":"0.0"}
         //     ]},
         await this.loadMarkets ();
+        await this.loadAccounts ();
         const response = await this.privateGet1PaymentAccounts (params);
         const data = this.safeValue (response, 'accounts', {});
         const mainAccount = data[0]; // Tmp main account
@@ -412,31 +441,72 @@ module.exports = class globitex extends Exchange {
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
-            'coin_pair': this.marketId (symbol),
+            'account': 'account number here',
+            'type': type,
+            'side': side,
+            'symbol': market['id'], // symbol here check this, BTCEUR
+            'quantity': 'quantity here', // 1.00000001 for BTCEUR
+            'expireTime': 'utc timestamp in sconds',
+            'stopPrice': 'yes for stop and stop limit',
+            'timeInForce': 'notReq but check',
         };
-        let method = this.capitalize (side) + 'Order';
+        const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
+        if (clientOrderId !== undefined) {
+            request['clientOrderId'] = clientOrderId;
+            params = this.omit (params, [ 'clientOrderId', 'client_oid' ]);
+        }
+        const stopPrice = this.safeFloat2 (params, 'stopPrice', 'stop_price');
+        if (stopPrice !== undefined && (type === 'stop' || type === 'stopLimit')) {
+            request['stopPrice'] = this.priceToPrecision (symbol, stopPrice);
+            params = this.omit (params, [ 'stopPrice', 'stop_price' ]);
+        }
+        const timeInForce = this.safeString2 (params, 'timeInForce', 'time_in_force');
+        if (timeInForce !== undefined) {
+            request['timeInForce'] = timeInForce;
+            params = this.omit (params, [ 'timeInForce', 'time_in_force' ]);
+        }
         if (type === 'limit') {
-            method = 'privatePostPlace' + method;
-            request['limit_price'] = this.priceToPrecision (symbol, price);
-            request['quantity'] = this.amountToPrecision (symbol, amount);
-        } else {
-            method = 'privatePostPlaceMarket' + method;
-            if (side === 'buy') {
-                if (price === undefined) {
-                    throw new InvalidOrder (this.id + ' createOrder() requires the price argument with market buy orders to calculate total order cost (amount to spend), where cost = amount * price. Supply a price argument to createOrder() call if you want the cost to be calculated for you from price and amount');
+            request['price'] = this.priceToPrecision (symbol, price);
+            // request['size'] = this.amountToPrecision (symbol, amount);
+        }
+        if (type === 'market') {
+            let cost = this.safeFloat2 (params, 'cost', 'funds');
+            if (cost === undefined) {
+                if (price !== undefined) {
+                    cost = amount * price;
                 }
-                request['cost'] = this.priceToPrecision (symbol, amount * price);
             } else {
-                request['quantity'] = this.amountToPrecision (symbol, amount);
+                params = this.omit (params, [ 'cost', 'funds' ]);
+            }
+            if (cost !== undefined) {
+                request['funds'] = this.costToPrecision (symbol, cost);
+            } else {
+                request['size'] = this.amountToPrecision (symbol, amount);
             }
         }
-        const response = await this[method] (this.extend (request, params));
-        // TODO: replace this with a call to parseOrder for unification
-        return {
-            'info': response,
-            'id': response['response_data']['order']['order_id'].toString (),
-        };
+        const response = await this.privatePostOrders (this.extend (request, params));
+        //
+        //     {
+        //         "id": "d0c5340b-6d6c-49d9-b567-48c4bfca13d2",
+        //         "price": "0.10000000",
+        //         "size": "0.01000000",
+        //         "product_id": "BTC-USD",
+        //         "side": "buy",
+        //         "stp": "dc",
+        //         "type": "limit",
+        //         "time_in_force": "GTC",
+        //         "post_only": false,
+        //         "created_at": "2016-12-08T20:02:28.53864Z",
+        //         "fill_fees": "0.0000000000000000",
+        //         "filled_size": "0.00000000",
+        //         "executed_value": "0.0000000000000000",
+        //         "status": "pending",
+        //         "settled": false
+        //     }
+        //
+        return this.parseOrder (response, market);
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
@@ -446,33 +516,40 @@ module.exports = class globitex extends Exchange {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
-            'coin_pair': market['id'],
-            'order_id': id,
+            'clientOrder_Id': id,
+            'account': id, // check where it0s the account
         };
-        const response = await this.privatePostCancelOrder (this.extend (request, params));
-        //
-        //     {
-        //         response_data: {
-        //             order: {
-        //                 order_id: 2176769,
-        //                 coin_pair: 'BRLBCH',
-        //                 order_type: 2,
-        //                 status: 3,
-        //                 has_fills: false,
-        //                 quantity: '0.10000000',
-        //                 limit_price: '1996.15999',
-        //                 executed_quantity: '0.00000000',
-        //                 executed_price_avg: '0.00000',
-        //                 fee: '0.00000000',
-        //                 created_timestamp: '1536956488',
-        //                 updated_timestamp: '1536956499',
-        //                 operations: []
-        //             }
-        //         },
-        //         status_code: 100,
-        //         server_unix_timestamp: '1536956499'
+        const response = await this.privatePost1TradingCancelOrder (this.extend (request, params));
+        //     { "ExecutionReport":
+        //     { "orderId": "58521038",
+        //     "clientOrderId": "11111112",
+        //     "orderStatus": "canceled",
+        //     "symbol": "BTCEUR",
+        //     "side": "buy",
+        //     "price": "0.1",
+        //     "quantity": "100",
+        //     "type": "limit",
+        //     "timeInForce": "GTC",
+        //     "lastQuantity": "0",
+        //     "lastPrice": "0",
+        //     "leavesQuantity": "0",
+        //     "cumQuantity": "0",
+        //     "averagePrice": "0",
+        //     "created": 1497515137193,
+        //     "lastTimestamp": 1497515167420,
+        //     "execReportType": "canceled",
+        //     "account": "VER564A02",
+        //     "orderSource": "REST"
         //     }
-        //
+        //   }
+        // OR IF IT FAILS
+        // { "CancelReject": {
+        //     "clientOrderId": "11111112",
+        //     "cancelRequestClientOrderId": "011111112",
+        //     "rejectReasonCode": "orderNotFound",
+        //     "account": "VER564A02"
+        //     }
+        //   }
         const responseData = this.safeValue (response, 'response_data', {});
         const order = this.safeValue (responseData, 'order', {});
         return this.parseOrder (order, market);
