@@ -447,11 +447,15 @@ module.exports = class globitex extends Exchange {
             'type': type,
             'side': side,
             'symbol': market['id'], // symbol here check this, BTCEUR
-            'quantity': 'quantity here', // 1.00000001 for BTCEUR
-            'expireTime': 'utc timestamp in sconds',
-            'stopPrice': 'yes for stop and stop limit',
-            'timeInForce': 'notReq but check',
+            'quantity': this.amountToPrecision (symbol, amount),
         };
+        // ExpireTime
+        const expireTime = this.safeValue (params, 'expireTime');
+        if (expireTime !== undefined) {
+            request['expireTime'] = expireTime;
+        } else {
+            throw new InvalidOrder (this.id + ' createOrder method requires a expireTime or expireIn param for a ' + type + ' order, you can also set the expireIn exchange-wide option');
+        }
         const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
         if (clientOrderId !== undefined) {
             request['clientOrderId'] = clientOrderId;
@@ -480,32 +484,36 @@ module.exports = class globitex extends Exchange {
             } else {
                 params = this.omit (params, [ 'cost', 'funds' ]);
             }
-            if (cost !== undefined) {
-                request['funds'] = this.costToPrecision (symbol, cost);
-            } else {
-                request['size'] = this.amountToPrecision (symbol, amount);
-            }
+            // if (cost !== undefined) {
+            //     request['funds'] = this.costToPrecision (symbol, cost);
+            // } else {
+            //     request['size'] = this.amountToPrecision (symbol, amount);
+            // }
         }
-        const response = await this.privatePostOrders (this.extend (request, params));
-        //
-        //     {
-        //         "id": "d0c5340b-6d6c-49d9-b567-48c4bfca13d2",
-        //         "price": "0.10000000",
-        //         "size": "0.01000000",
-        //         "product_id": "BTC-USD",
-        //         "side": "buy",
-        //         "stp": "dc",
-        //         "type": "limit",
-        //         "time_in_force": "GTC",
-        //         "post_only": false,
-        //         "created_at": "2016-12-08T20:02:28.53864Z",
-        //         "fill_fees": "0.0000000000000000",
-        //         "filled_size": "0.00000000",
-        //         "executed_value": "0.0000000000000000",
-        //         "status": "pending",
-        //         "settled": false
+        const response = await this.privatePostTradingNewOrder (this.extend (request, params));
+        // "ExecutionReport":
+        //   {
+        //     "orderId":"58521038",
+        //     "clientOrderId":"fe02900d762ad2458a942ce5d126c7b2",
+        //     "orderStatus":"new",
+        //     "symbol":"BTCEUR",
+        //     "side":"sell",
+        //     "price":"553.08",
+        //     "quantity":"0.00030",
+        //     "type":"limit",
+        //     "timeInForce":"GTC",
+        //     "lastQuantity":"0.00000",
+        //     "lastPrice":"",
+        //     "leavesQuantity":"0.00030",
+        //     "cumQuantity":"0.00000",
+        //     "averagePrice":"0",
+        //     "created":1480067768415,
+        //     "execReportType":"new",
+        //     "timestamp":1480067768415,
+        //     "account":"VER564A02",
+        //     "orderSource": "REST"
         //     }
-        //
+        // }
         return this.parseOrder (response, market);
     }
 
