@@ -441,9 +441,10 @@ module.exports = class globitex extends Exchange {
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
+        await this.loadAccounts ();
         const market = this.market (symbol);
         const request = {
-            'account': 'account number here',
+            'account': this.accounts[0]['id'], // protect this code later
             'type': type,
             'side': side,
             'symbol': market['id'], // symbol here check this, BTCEUR
@@ -702,33 +703,75 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' fetchOrders () requires a symbol argument');
-        }
+        // {"trades": [
+        //     {
+        //       "tradeId": 39,
+        //       "symbol": "BTCEUR",
+        //       "side": "sell",
+        //       "originalOrderId": "114",
+        //       "clientOrderId": "FTO18jd4ou41--25",
+        //       "execQuantity": "10",
+        //       "execPrice": "150",
+        //       "timestamp": 1395231854030,
+        //       "fee": "0.03",
+        //       "isLiqProvided": false,
+        //       "feeCurrency": "EUR",
+        //       "account": "ADE922A21"
+        //     },
         await this.loadMarkets ();
-        const market = this.market (symbol);
+        await this.loadAccounts ();
+        let market = undefined;
         const request = {
-            'coin_pair': market['id'],
+            'by': 'ts',  // order by timestamp or client id: default timestamp
+            'startIndex': 0, // starts on 0 by default
+            'account': this.accounts[0], // check this as well
+            'sort': 'desc', // desc or asc
+            'from': '', // time stamp from
+            'till': '', // timestamp till
         };
-        const response = await this.privatePostListOrders (this.extend (request, params));
-        const responseData = this.safeValue (response, 'response_data', {});
-        const orders = this.safeValue (responseData, 'orders', []);
+        if (limit !== undefined) {
+            request['limit'] = 1000; // default 100
+        }
+        // can be multiple values comma separated, default is all
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['id'];
+        }
+        const response = await this.privateGet1TradingTrades (this.extend (request, params));
+        const orders = this.safeValue (response, 'trades', []);
         return this.parseOrders (orders, market, since, limit);
     }
 
     async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' fetchOpenOrders () requires a symbol argument');
-        }
+        // "orders":[
+        //     {
+        //         "orderId":"7242835",
+        //         "orderStatus":"new",
+        //         "lastTimestamp":1495038022000,
+        //         "orderPrice":"2000.000",
+        //         "orderQuantity":"1.00000",
+        //         "avgPrice":"0",
+        //         "type":"limit",
+        //         "timeInForce":"GTC",
+        //         "clientOrderId":"1495038022448",
+        //         "symbol":"BTCEUR",
+        //         "side":"sell",
+        //         "account":"ZAN034A01",
+        //         "orderSource":"WEB",
+        //         "leavesQuantity":"1.00000",
+        //         "cumQuantity":"0.00000",
+        //         "execQuantity":"0.00000"
         await this.loadMarkets ();
-        const market = this.market (symbol);
-        const request = {
-            'coin_pair': market['id'],
-            'status_list': '[2]', // open only
-        };
-        const response = await this.privatePostListOrders (this.extend (request, params));
-        const responseData = this.safeValue (response, 'response_data', {});
-        const orders = this.safeValue (responseData, 'orders', []);
+        await this.loadAccounts ();
+        const request = {};
+        let market = undefined;
+        // can be multiple values comma separated, default is all
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['id'];
+        }
+        const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
+        const orders = this.safeValue (response, 'orders', []);
         return this.parseOrders (orders, market, since, limit);
     }
 
