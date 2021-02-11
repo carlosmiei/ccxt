@@ -15,7 +15,6 @@ module.exports = class globitex extends Exchange {
             'name': 'Globitex',
             'countries': ['fr', 'de', 'pt'], // Europe fill the remaining later
             'rateLimit': 1000,
-            // 'version': 'v3',
             'has': {
                 'cancelOrder': true,
                 'CORS': true,
@@ -31,6 +30,7 @@ module.exports = class globitex extends Exchange {
                 'fetchOrder': false,
                 'fetchOrderBook': true,
                 'fetchOrderBooks': false,
+                'fetchClosedOrders': true,
                 'fetchOrders': false,
                 'fetchTicker': true,
                 'fetchTickers': true,
@@ -633,7 +633,6 @@ module.exports = class globitex extends Exchange {
         const request = {
             'clientOrderId': clientOrderId,
             'account': this.accounts[0]['id'], // verify if we want allways the main account later
-
         };
         params = this.omit (params, ['clientOrderId', 'client_oid']);
         const market = this.market (symbol);
@@ -688,7 +687,6 @@ module.exports = class globitex extends Exchange {
             'account': this.accounts[0], // check this as well
             'sort': 'desc', // desc or asc
             'isTrades': true, // default
-            // 'statuses':
         };
         if (limit !== undefined) {
             request['maxResults'] = 1000; // default 100
@@ -716,6 +714,14 @@ module.exports = class globitex extends Exchange {
         const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
         const orders = this.safeValue (response, 'orders', []);
         return this.parseOrders (orders, market, since, limit);
+    }
+
+    async fetchClosedOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        const request = {
+            'statuses': 'canceled,expired,suspended',
+        };
+        const orders = await this.fetchOrders (symbol, since, limit, this.extend (request, params));
+        return this.filterBy (orders, 'status', 'closed');
     }
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
