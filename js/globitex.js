@@ -26,7 +26,7 @@ module.exports = class globitex extends Exchange {
                 'fetchMarkets': true,
                 'fetchMyTrades': false, // 'emulated',
                 'fetchOHLCV': false,
-                'fetchOpenOrders': false,
+                'fetchOpenOrders': true,
                 'fetchOrder': false,
                 'fetchOrderBook': true,
                 'fetchOrderBooks': false,
@@ -543,10 +543,11 @@ module.exports = class globitex extends Exchange {
             throw new ArgumentsRequired (this.id + ' cancelOrder () requires a symbol argument');
         }
         await this.loadMarkets ();
+        await this.loadAccounts ();
         const market = this.market (symbol);
         const request = {
             'clientOrder_Id': id,
-            'account': id, // check where it0s the account
+            'account': this.accounts[0]['id'], // check if main account is required
         };
         const response = await this.privatePost1TradingCancelOrder (this.extend (request, params));
         //     { "ExecutionReport":
@@ -579,9 +580,15 @@ module.exports = class globitex extends Exchange {
         //     "account": "VER564A02"
         //     }
         //   }
-        const responseData = this.safeValue (response, 'response_data', {});
-        const order = this.safeValue (responseData, 'order', {});
-        return this.parseOrder (order, market);
+        const responseData = this.safeValue (response, 'ExecutionReport', {});
+        if (responseData) {
+            const order = this.safeValue (responseData, 'order', {});
+            return this.parseOrder (order, market);
+        }
+        const errorResponse = this.safeValue (response, 'CancelReject');
+        const reason = this.safeString (errorResponse, 'rejectReasonCode');
+        // FAILED TO CANCEL
+        throw new ArgumentsRequired ('Order with id' + id + ' Failed due to:' + reason);
     }
 
     parseOrder (order, market = undefined) {
