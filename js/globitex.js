@@ -20,6 +20,7 @@ module.exports = class globitex extends Exchange {
                 'cancelOrder': true,
                 'CORS': true,
                 'createMarketOrder': true,
+                'cancelAllOrders': true,
                 'createOrder': true,
                 'fetchAccounts': true,
                 'fetchBalance': true,
@@ -512,35 +513,15 @@ module.exports = class globitex extends Exchange {
             // }
         }
         const response = await this.privatePostTradingNewOrder (this.extend (request, params));
-        // "ExecutionReport":
-        //   {
-        //     "orderId":"58521038",
-        //     "clientOrderId":"fe02900d762ad2458a942ce5d126c7b2",
-        //     "orderStatus":"new",
-        //     "symbol":"BTCEUR",
-        //     "side":"sell",
-        //     "price":"553.08",
-        //     "quantity":"0.00030",
-        //     "type":"limit",
-        //     "timeInForce":"GTC",
-        //     "lastQuantity":"0.00000",
-        //     "lastPrice":"",
-        //     "leavesQuantity":"0.00030",
-        //     "cumQuantity":"0.00000",
-        //     "averagePrice":"0",
-        //     "created":1480067768415,
-        //     "execReportType":"new",
-        //     "timestamp":1480067768415,
-        //     "account":"VER564A02",
-        //     "orderSource": "REST"
-        //     }
-        // }
         return this.parseOrder (response, market);
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' cancelOrder () requires a symbol argument');
+        }
+        if (id === undefined) {
+            throw new ArgumentsRequired (this.id + ' cancelOrder () requires a clientOrderId argument');
         }
         await this.loadMarkets ();
         await this.loadAccounts ();
@@ -550,28 +531,7 @@ module.exports = class globitex extends Exchange {
             'account': this.accounts[0]['id'], // check if main account is required
         };
         const response = await this.privatePost1TradingCancelOrder (this.extend (request, params));
-        //     { "ExecutionReport":
-        //     { "orderId": "58521038",
-        //     "clientOrderId": "11111112",
-        //     "orderStatus": "canceled",
-        //     "symbol": "BTCEUR",
-        //     "side": "buy",
-        //     "price": "0.1",
-        //     "quantity": "100",
-        //     "type": "limit",
-        //     "timeInForce": "GTC",
-        //     "lastQuantity": "0",
-        //     "lastPrice": "0",
-        //     "leavesQuantity": "0",
-        //     "cumQuantity": "0",
-        //     "averagePrice": "0",
-        //     "created": 1497515137193,
-        //     "lastTimestamp": 1497515167420,
-        //     "execReportType": "canceled",
-        //     "account": "VER564A02",
-        //     "orderSource": "REST"
-        //     }
-        //   }
+        // Normal order structure if everything is sucessfully
         // OR IF IT FAILS
         // { "CancelReject": {
         //     "clientOrderId": "11111112",
@@ -589,6 +549,23 @@ module.exports = class globitex extends Exchange {
         const reason = this.safeString (errorResponse, 'rejectReasonCode');
         // FAILED TO CANCEL
         throw new ArgumentsRequired ('Order with id' + id + ' Failed due to:' + reason);
+    }
+
+    async cancelAllOrders (symbol = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const request = {
+            'account': this.accounts[0]['id'], // check this
+        };
+        let market = undefined;
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['symbol']; // the request will be more performant if you include it
+        }
+        // if (side !== undefined) {
+        //     request['side'] = side;
+        // }
+        return await this.privatePost1TradingCancelOrders (this.extend (request, params));
     }
 
     parseOrder (order, market = undefined) {
