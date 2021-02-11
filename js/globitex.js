@@ -270,18 +270,6 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchTickers (symbols = undefined, params = {}) {
-        // [ {
-        //     "symbol": "GBXETH",
-        //     "ask": "0.0000249",
-        //     "bid": "0.0000105",
-        //     "last": "0.0000000",
-        //     "low": "0.0000000",
-        //     "high": "0.0000000",
-        //     "open": "0.0000110",
-        //     "volume": "0.000",
-        //     "volumeQuote": "0.0000000",
-        //     "timestamp": 1612216919341
-        // }]
         await this.loadMarkets ();
         let response = await this.publicGetTicker (params);
         response = this.safeValue (response, 'instruments', []);
@@ -297,18 +285,6 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchTicker (symbol, params = {}) {
-        // {
-        //     "symbol": "GBXETH",
-        //     "ask": "0.0000249",
-        //     "bid": "0.0000105",
-        //     "last": "0.0000000",
-        //     "low": "0.0000000",
-        //     "high": "0.0000000",
-        //     "open": "0.0000110",
-        //     "volume": "0.000",
-        //     "volumeQuote": "0.0000000",
-        //     "timestamp": 1612216919341
-        // }
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
@@ -350,28 +326,44 @@ module.exports = class globitex extends Exchange {
     }
 
     parseTrade (trade, market = undefined) {
-        const timestamp = this.safeTimestamp2 (trade, 'date', 'executed_timestamp');
+        // {
+        //     "tradeId": 39,
+        //     "symbol": "BTCEUR",
+        //     "side": "sell",
+        //     "originalOrderId": "114",
+        //     "clientOrderId": "FTO18jd4ou41--25",
+        //     "execQuantity": "10",
+        //     "execPrice": "150",
+        //     "timestamp": 1395231854030,
+        //     "fee": "0.03",
+        //     "isLiqProvided": false,
+        //     "feeCurrency": "EUR",
+        //     "account": "ADE922A21"
+        //   },
+        const timestamp = this.safeTimestamp2 (trade, 'timestamp');
         let symbol = undefined;
         if (market !== undefined) {
             symbol = market['symbol'];
         }
-        const id = this.safeString2 (trade, 'tid', 'operation_id');
+        const id = this.safeString2 (trade, 'tradeId');
+        const originalOrderId = this.safeString (trade, 'originalOrderId');
         const type = undefined;
-        const side = this.safeString (trade, 'type');
-        const price = this.safeFloat (trade, 'price');
-        const amount = this.safeFloat2 (trade, 'amount', 'quantity');
+        const side = this.safeString (trade, 'side');
+        const price = this.safeFloat (trade, 'execPrice');
+        const amount = this.safeFloat2 (trade, 'execQuantity');
+        const feeCurrency = this.safeString (trade, 'feeCurrency');
+        const feeCost = this.safeString (trade, 'fee');
         let cost = undefined;
         if (price !== undefined) {
             if (amount !== undefined) {
                 cost = price * amount;
             }
         }
-        const feeCost = this.safeFloat (trade, 'fee_rate');
         let fee = undefined;
         if (feeCost !== undefined) {
             fee = {
                 'cost': feeCost,
-                'currency': undefined,
+                'currency': feeCurrency,
             };
         }
         return {
@@ -380,7 +372,7 @@ module.exports = class globitex extends Exchange {
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'symbol': symbol,
-            'order': undefined,
+            'order': originalOrderId, // verificar se este id estºa correto
             'type': type,
             'side': side,
             'takerOrMaker': undefined,
@@ -688,24 +680,6 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        // "orders":[
-        //     {
-        //         "orderId":"7242835",
-        //         "orderStatus":"new",
-        //         "lastTimestamp":1495038022000,
-        //         "orderPrice":"2000.000",
-        //         "orderQuantity":"1.00000",
-        //         "avgPrice":"0",
-        //         "type":"limit",
-        //         "timeInForce":"GTC",
-        //         "clientOrderId":"1495038022448",
-        //         "symbol":"BTCEUR",
-        //         "side":"sell",
-        //         "account":"ZAN034A01",
-        //         "orderSource":"WEB",
-        //         "leavesQuantity":"1.00000",
-        //         "cumQuantity":"0.00000",
-        //         "execQuantity":"0.00000"
         await this.loadMarkets ();
         await this.loadAccounts ();
         let market = undefined;
@@ -730,24 +704,6 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        // "orders":[
-        //     {
-        //         "orderId":"7242835",
-        //         "orderStatus":"new",
-        //         "lastTimestamp":1495038022000,
-        //         "orderPrice":"2000.000",
-        //         "orderQuantity":"1.00000",
-        //         "avgPrice":"0",
-        //         "type":"limit",
-        //         "timeInForce":"GTC",
-        //         "clientOrderId":"1495038022448",
-        //         "symbol":"BTCEUR",
-        //         "side":"sell",
-        //         "account":"ZAN034A01",
-        //         "orderSource":"WEB",
-        //         "leavesQuantity":"1.00000",
-        //         "cumQuantity":"0.00000",
-        //         "execQuantity":"0.00000"
         await this.loadMarkets ();
         await this.loadAccounts ();
         const request = {};
@@ -763,21 +719,42 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' fetchMyTrades () requires a symbol argument');
-        }
+        //     {
+        //       "tradeId": 39,
+        //       "symbol": "BTCEUR",
+        //       "side": "sell",
+        //       "originalOrderId": "114",
+        //       "clientOrderId": "FTO18jd4ou41--25",
+        //       "execQuantity": "10",
+        //       "execPrice": "150",
+        //       "timestamp": 1395231854030,
+        //       "fee": "0.03",
+        //       "isLiqProvided": false,
+        //       "feeCurrency": "EUR",
+        //       "account": "ADE922A21"
+        //     },
         await this.loadMarkets ();
-        const market = this.market (symbol);
+        await this.loadAccounts ();
+        let market = undefined;
         const request = {
-            'coin_pair': market['id'],
-            'has_fills': true,
+            'by': 'ts',  // order by timestamp or client id: default timestamp
+            'startIndex': 0, // starts on 0 by default
+            'account': this.accounts[0], // check this as well
+            'sort': 'desc', // desc or asc
+            'from': '', // time stamp from
+            'till': '', // timestamp till
         };
-        const response = await this.privatePostListOrders (this.extend (request, params));
-        const responseData = this.safeValue (response, 'response_data', {});
-        const ordersRaw = this.safeValue (responseData, 'orders', []);
-        const orders = this.parseOrders (ordersRaw, market, since, limit);
-        const trades = this.ordersToTrades (orders);
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
+        if (limit !== undefined) {
+            request['limit'] = 1000; // default 100
+        }
+        // can be multiple values comma separated, default is all
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['id'];
+        }
+        const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
+        const orders = this.safeValue (response, 'orders', []);
+        return this.parseTrades (orders, market, since, limit);
     }
 
     ordersToTrades (orders) {
