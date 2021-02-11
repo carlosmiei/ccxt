@@ -584,77 +584,55 @@ module.exports = class globitex extends Exchange {
         return this.parseOrder (order, market);
     }
 
-    parseOrderStatus (status) {
-        const statuses = {
-            '2': 'open',
-            '3': 'canceled',
-            '4': 'closed',
-        };
-        return this.safeString (statuses, status, status);
-    }
-
     parseOrder (order, market = undefined) {
-        //
         //     {
-        //         "order_id": 4,
-        //         "coin_pair": "BRLBTC",
-        //         "order_type": 1,
-        //         "status": 2,
-        //         "has_fills": true,
-        //         "quantity": "2.00000000",
-        //         "limit_price": "900.00000",
-        //         "executed_quantity": "1.00000000",
-        //         "executed_price_avg": "900.00000",
-        //         "fee": "0.00300000",
-        //         "created_timestamp": "1453838494",
-        //         "updated_timestamp": "1453838494",
-        //         "operations": [
-        //             {
-        //                 "operation_id": 1,
-        //                 "quantity": "1.00000000",
-        //                 "price": "900.00000",
-        //                 "fee_rate": "0.30",
-        //                 "executed_timestamp": "1453838494",
-        //             },
-        //         ],
-        //     }
-        //
-        const id = this.safeString (order, 'order_id');
-        let side = undefined;
-        if ('order_type' in order) {
-            side = (order['order_type'] === 1) ? 'buy' : 'sell';
-        }
-        const status = this.parseOrderStatus (this.safeString (order, 'status'));
-        const marketId = this.safeString (order, 'coin_pair');
+        //      "orderId": "1",
+        //      "orderStatus": "partiallyFilled",
+        //      "lastTimestamp": 1395659434845,
+        //      "orderPrice": "800",
+        //      "orderQuantity": "1.01",
+        //      "avgPrice": "800",
+        //      "quantityLeaves": "0.01", what is this?????
+        //      "type": "limit",
+        //      "timeInForce": "GTC",
+        //      "cumQuantity": "1",
+        //      "clientOrderId": "111111111111111111111111",
+        //      "symbol": "BTCEUR",
+        //      "side": "buy",
+        //      "execQuantity": "0.2",
+        //      "orderSource": "WEB",
+        //      "account": "ADE922A21"
+        //     },
+        const id = this.safeString (order, 'orderId');
+        const side = this.safeString (order, 'side');
+        const status = this.safeString (order, 'orderStatus'); // this.parseOrderStatus (this.safeString (order, 'status'));
+        const marketId = this.safeString (order, 'symbol');
         market = this.safeMarket (marketId, market);
-        const timestamp = this.safeTimestamp (order, 'created_timestamp');
-        const fee = {
-            'cost': this.safeFloat (order, 'fee'),
-            'currency': market['quote'],
-        };
-        const price = this.safeFloat (order, 'limit_price');
-        // price = this.safeFloat (order, 'executed_price_avg', price);
-        const average = this.safeFloat (order, 'executed_price_avg');
+        const timestamp = this.safeTimestamp (order, 'lastTimestamp');
+        const clientOrderId = this.safeString (order, 'clientOrderId');
+        const price = this.safeFloat (order, 'orderPrice'); // check price
+        const average = this.safeFloat (order, 'avgPrice');
         const amount = this.safeFloat (order, 'quantity');
-        const filled = this.safeFloat (order, 'executed_quantity');
+        const filled = this.safeFloat (order, 'execQuantity');
+        const timeInForce = this.safeString (order, 'timeInForce');
         const remaining = amount - filled;
         const cost = filled * average;
-        const lastTradeTimestamp = this.safeTimestamp (order, 'updated_timestamp');
-        const rawTrades = this.safeValue (order, 'operations', []);
-        const trades = this.parseTrades (rawTrades, market, undefined, undefined, {
-            'side': side,
-            'order': id,
-        });
+        // const lastTradeTimestamp = this.safeTimestamp (order, 'updated_timestamp');
+        // const rawTrades = this.safeValue (order, 'operations', []);
+        // const trades = this.parseTrades (rawTrades, market, undefined, undefined, {
+        //     'side': side,
+        //     'order': id,
+        // });
         return {
             'info': order,
             'id': id,
-            'clientOrderId': undefined,
+            'clientOrderId': clientOrderId,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'lastTradeTimestamp': lastTradeTimestamp,
+            'lastTradeTimestamp': undefined,
             'symbol': market['symbol'],
             'type': 'limit',
-            'timeInForce': undefined,
+            'timeInForce': timeInForce,
             'postOnly': undefined,
             'side': side,
             'price': price,
@@ -665,8 +643,7 @@ module.exports = class globitex extends Exchange {
             'filled': filled,
             'remaining': remaining,
             'status': status,
-            'fee': fee,
-            'trades': trades,
+            'trades': undefined,
         };
     }
 
