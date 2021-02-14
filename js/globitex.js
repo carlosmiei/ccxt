@@ -424,7 +424,7 @@ module.exports = class globitex extends Exchange {
         if (limit !== undefined) {
             request['limit'] = 1000; // default 100
         }
-        const response = await this.publicGet1TradesSymbol (this.extend (request, params));
+        const response = await this.publicGetTradesSymbol (this.extend (request, params));
         const trades = this.safeValue (response, 'trades', []);
         return this.parseTrades (trades, market, since, limit);
     }
