@@ -386,6 +386,7 @@ module.exports = class globitex extends Exchange {
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
         // {
         //     "trades": [
+        //       timestamp, price, amount, id;
         //       [1393492619000,"575.64","0.02","3814483"],
         //       [1393492619001,"574.30","0.12","3814482"],
         //       [1393492619002,"573.67","3.80","3814481"],
@@ -409,6 +410,10 @@ module.exports = class globitex extends Exchange {
         let market = undefined;
         market = this.market (symbol);
         const request = {
+            'side': false, // default is false,
+            // 'formatItem': false, // Format of items returned: as an array (default) or as a list of objects
+            'formatTimestamp': 'millisecond', // seconds or millisecons(default)
+            // 'formatWrap': true, //  if the result array is wrapped in trades object (true) or array (default)
             'by': 'ts',  // order by timestamp or client id: default timestamp
             'startIndex': 0, // starts on 0 by default
             'sort': 'desc', // desc or asc
@@ -420,8 +425,8 @@ module.exports = class globitex extends Exchange {
             request['limit'] = 1000; // default 100
         }
         const response = await this.publicGet1TradesSymbol (this.extend (request, params));
-        const orders = this.safeValue (response, 'trades', []);
-        return this.parseOrders (orders, market, since, limit);
+        const trades = this.safeValue (response, 'trades', []);
+        return this.parseTrades (trades, market, since, limit);
     }
 
     async fetchBalance (params = {}) {
