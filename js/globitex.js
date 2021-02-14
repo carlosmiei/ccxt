@@ -24,17 +24,17 @@ module.exports = class globitex extends Exchange {
                 'fetchAccounts': true,
                 'fetchBalance': true,
                 'fetchMarkets': true,
-                'fetchMyTrades': false, // 'emulated',
+                'fetchMyTrades': true, // 'emulated',
                 'fetchOHLCV': false,
                 'fetchOpenOrders': true,
                 'fetchOrder': false,
                 'fetchOrderBook': true,
                 'fetchOrderBooks': false,
                 'fetchClosedOrders': true,
-                'fetchOrders': false,
+                'fetchOrders': true,
                 'fetchTicker': true,
                 'fetchTickers': true,
-                'fetchTrades': false, // tmp testing
+                'fetchTrades': true, // tmp testing
                 'withdraw': true,
             },
             'urls': {
@@ -384,42 +384,43 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
-        // {"trades": [
-        //     {
-        //       "tradeId": 39,
-        //       "symbol": "BTCEUR",
-        //       "side": "sell",
-        //       "originalOrderId": "114",
-        //       "clientOrderId": "FTO18jd4ou41--25",
-        //       "execQuantity": "10",
-        //       "execPrice": "150",
-        //       "timestamp": 1395231854030,
-        //       "fee": "0.03",
-        //       "isLiqProvided": false,
-        //       "feeCurrency": "EUR",
-        //       "account": "ADE922A21"
-        //     },
+        // {
+        //     "trades": [
+        //       [1393492619000,"575.64","0.02","3814483"],
+        //       [1393492619001,"574.30","0.12","3814482"],
+        //       [1393492619002,"573.67","3.80","3814481"],
+        //       [1393492619003,"571.00","0.01","3814479"],
+        //       ...
+        //     ]
+        //   }
+        // OR IF ITS FORMATTED
+        // [
+        //     {"date":1393492619000,"price":"575.64","amount":"0.02","tid":"3814483"},
+        //     {"date":1393492619001,"price":"574.30","amount":"0.12","tid":"3814482"},
+        //     {"date":1393492619002,"price":"573.67","amount":"3.80","tid":"3814481"},
+        //     {"date":1393492619003,"price":"571.00","amount":"0.01","tid":"3814479"},
+        //     ...
+        //   ]
         await this.loadMarkets ();
         await this.loadAccounts ();
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchTrades () requires a symbol argument');
+        }
         let market = undefined;
+        market = this.market (symbol);
         const request = {
             'by': 'ts',  // order by timestamp or client id: default timestamp
             'startIndex': 0, // starts on 0 by default
-            'account': this.accounts[0], // check this as well
             'sort': 'desc', // desc or asc
             'from': '', // time stamp from
             'till': '', // timestamp till
         };
+        request['symbols'] = market['id'];
         if (limit !== undefined) {
             request['limit'] = 1000; // default 100
         }
-        // can be multiple values comma separated, default is all
-        if (symbol !== undefined) {
-            market = this.market (symbol);
-            request['symbols'] = market['id'];
-        }
-        const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
-        const orders = this.safeValue (response, 'orders', []);
+        const response = await this.publicGet1TradesSymbol (this.extend (request, params));
+        const orders = this.safeValue (response, 'trades', []);
         return this.parseOrders (orders, market, since, limit);
     }
 
@@ -711,7 +712,7 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
+        const response = await this.privateGet2TradingActive (this.extend (request, params));
         const orders = this.safeValue (response, 'orders', []);
         return this.parseOrders (orders, market, since, limit);
     }
@@ -758,8 +759,8 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
-        const orders = this.safeValue (response, 'orders', []);
+        const response = await this.privateGet1TradingTrades (this.extend (request, params));
+        const orders = this.safeValue (response, 'trades', []);
         return this.parseTrades (orders, market, since, limit);
     }
 
