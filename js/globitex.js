@@ -17,14 +17,14 @@ module.exports = class globitex extends Exchange {
             'rateLimit': 1000,
             'has': {
                 'cancelOrder': false,
-                'CORS': true,
+                'CORS': false,
                 'createMarketOrder': false,
                 'cancelAllOrders': false,
                 'createOrder': false,
                 'fetchAccounts': true, // tested
                 'fetchBalance': true, // tested
                 'fetchMarkets': true,
-                'fetchMyTrades': true, // 'emulated',
+                'fetchMyTrades': true,
                 'fetchOHLCV': false,
                 'fetchOpenOrders': false,
                 'fetchOrder': false,
@@ -32,10 +32,11 @@ module.exports = class globitex extends Exchange {
                 'fetchOrderBooks': false,
                 'fetchClosedOrders': false,
                 'fetchFundingFees': true,
-                'fetchOrders': true,
+                'fetchTradingFees': false,
+                'fetchOrders': false,
                 'fetchTicker': false,
                 'fetchTickers': false,
-                'fetchTrades': false, // tmp testing
+                'fetchTrades': false,
                 'withdraw': true,
             },
             'urls': {
@@ -75,6 +76,7 @@ module.exports = class globitex extends Exchange {
                         '1/payment/transations',
                         '1/gbx-utilization/list',
                         '1/payment/accounts',
+                        '1/payment/payout/fee/crypto',
                     ],
                     'post': [
                         '1/trading/new_order',
@@ -201,10 +203,11 @@ module.exports = class globitex extends Exchange {
         if (codes === undefined) {
             codes = Object.keys (this.currencies);
         }
-        const amount = ('amount' in params);
-        if (!amount) {
-            throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
-        }
+        // const amount = ('amount' in params);
+        // if (!amount) {
+        //     throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
+        // }
+        const amount = 100;
         const account = await this.getAccountId (params);
         for (let i = 0; i < codes.length; i++) {
             const code = codes[i];
@@ -882,9 +885,10 @@ module.exports = class globitex extends Exchange {
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api'][api]; // + '/';
+        const myUrl = new URL (url);
         const uri = this.implodeParams (path, params);
         const query = this.omit (params, this.extractParams (path));
-        const privateUrl = url.replace ('https://api.globitex.com', '') + uri; // hardcoded tmp
+        const privateUrl = myUrl.pathname + uri;
         let request = '';
         if (Object.keys (query).length) {
             request = '?' + this.urlencode (query);
