@@ -31,6 +31,7 @@ module.exports = class globitex extends Exchange {
                 'fetchOrderBook': false,
                 'fetchOrderBooks': false,
                 'fetchClosedOrders': false,
+                'fetchFundingFees': true,
                 'fetchOrders': true,
                 'fetchTicker': false,
                 'fetchTickers': false,
@@ -191,6 +192,44 @@ module.exports = class globitex extends Exchange {
             });
         }
         return result;
+    }
+
+    async fetchFundingFees (codes = undefined, params = {}) {
+        await this.loadMarkets ();
+        const withdrawFees = {};
+        const info = {};
+        if (codes === undefined) {
+            codes = Object.keys (this.currencies);
+        }
+        const amount = ('amount' in params);
+        if (!amount) {
+            throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
+        }
+        const account = await this.getAccountId (params);
+        for (let i = 0; i < codes.length; i++) {
+            const code = codes[i];
+            const currency = this.currency (code);
+            const request = {
+                'currency': currency['id'],
+                'account': account,
+                'amount': amount,
+            };
+            const withdrawResponse = await this.privateGet1PaymentPayoutFeeCrypto (request);
+            withdrawFees[code] = {
+                'recomended': parseFloat (withdrawResponse['recomended']),
+                'minimum': parseFloat (withdrawResponse['minimum']),
+                'maximum': parseFloat (withdrawResponse['maxmimum']),
+                'feeExpireTime': (withdrawResponse['feeExpireTime']),
+                'feeId': withdrawResponse['feeId'],
+            };
+            info[code] = {
+                'withdraw': withdrawResponse,
+            };
+        }
+        return {
+            'withdraw': withdrawFees,
+            'info': info,
+        };
     }
 
     async fetchCurrencies (params = {}) {
