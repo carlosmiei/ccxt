@@ -655,41 +655,44 @@ module.exports = class globitex extends Exchange {
         const request = {
             'currency': currency['id'],
             'quantity': amount.toFixed (10),
-            'account': address,
+            // 'account': address,
         };
         // check if it is fiat tmp
         if (code === 'EUR' || code === 'USD') {
             // missing signature etc
             const bankRequest = this.getBankTransferRequest (params);
             const finalRequest = this.extend (request, bankRequest);
-            const response = this.privatePost1PaymentPayoutBank (finalRequest);
+            const response = this.privatePost1PaymentPayoutBank (this.extend (finalRequest, params));
             return response;
         }
         // else crypto transfer
-        // if (code === 'BRL') {
-        //     const account_ref = ('account_ref' in params);
-        //     if (!account_ref) {
-        //         throw new ArgumentsRequired (this.id + ' requires account_ref parameter to withdraw ' + code);
-        //     }
-        // } else if (code !== 'LTC') {
-        //     const tx_fee = ('tx_fee' in params);
-        //     if (!tx_fee) {
-        //         throw new ArgumentsRequired (this.id + ' requires tx_fee parameter to withdraw ' + code);
-        //     }
-        //     if (code === 'XRP') {
-        //         if (tag === undefined) {
-        //             if (!('destination_tag' in params)) {
-        //                 throw new ArgumentsRequired (this.id + ' requires a tag argument or destination_tag parameter to withdraw ' + code);
-        //             }
-        //         } else {
-        //             request['destination_tag'] = tag;
-        //         }
-        //     }
-        // }
-        const response = await this.privatePostWithdrawCoin (this.extend (request, params));
+        request['account'] = address;
+        const requestTime = ('requestTime' in params);
+        if (!requestTime) {
+            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
+        }
+        requestTime['requestTime'] = requestTime;
+        const account = ('account' in params);
+        if (!account) {
+            throw new ArgumentsRequired (this.id + ' requires account parameter to withdraw ');
+        }
+        const commission = ('commission' in params);
+        if (!requestTime) {
+            throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
+        }
+        requestTime['commission'] = commission;
+        const feeId = ('feeId' in params);
+        if (feeId) {
+            request['feeId'] = feeId;
+        }
+        const myClientTransId = ('clientTransId' in params);
+        if (myClientTransId) {
+            request['clientTransId'] = myClientTransId;
+        }
+        const response = await this.privatePost1PaymentPayoutCrypto (this.extend (request, params));
         return {
             'info': response,
-            'id': response['response_data']['withdrawal']['id'],
+            'id': response['transactionCode'],
         };
     }
 
@@ -721,19 +724,19 @@ module.exports = class globitex extends Exchange {
             }
         }
         const commissionSource = ('commissionSource' in params);
-        if (!commissionSource) {
+        if (commissionSource) {
             request['commissionSource'] = commissionSource;
         }
         const clientTransId = ('clientTransId' in params);
-        if (!clientTransId) {
+        if (clientTransId) {
             request['clientTransId'] = clientTransId;
         }
         const beneficiaryAccountType = ('beneficiaryAccountType' in params);
-        if (!beneficiaryAccountType) {
+        if (beneficiaryAccountType) {
             request['beneficiaryAccountType'] = beneficiaryAccountType;
         }
         const myClientTransId = ('clientTransId' in params);
-        if (!myClientTransId) {
+        if (myClientTransId) {
             request['clientTransId'] = myClientTransId;
         }
         return request;
