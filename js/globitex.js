@@ -669,11 +669,11 @@ module.exports = class globitex extends Exchange {
         }
         // check if it is fiat tmp
         if (code === 'EUR' || code === 'USD') {
-            const bankRequest = this.getBankTransferRequest (params, request);
+            const bankRequest = this.getBankTransferRequest (request, params);
             response = this.privatePost1PaymentPayoutBank (this.extend (bankRequest, params));
         } else {
             // else crypto transfer
-            const cryptoRequest = this.getCryptoTransferRequest (address, params, request);
+            const cryptoRequest = this.getCryptoTransferRequest (address, request, params);
             response = await this.privatePost1PaymentPayoutCrypto (this.extend (cryptoRequest, params));
         }
         return {
@@ -682,7 +682,7 @@ module.exports = class globitex extends Exchange {
         };
     }
 
-    getCryptoTransferRequest (address, params = {}, request) {
+    getCryptoTransferRequest (address, request, params = {}) {
         request['address'] = address;
         const account = ('account' in params);
         if (!account) {
@@ -699,18 +699,13 @@ module.exports = class globitex extends Exchange {
             request['feeId'] = feeId;
         }
         // Create messageSigning
-        const message = 'requestTime=' + request['requestTime']
-                         + '&amount=' + request['amount']
-                         + '&currency=' + request['currency']
-                         + '&account=' + request['account']
-                         + '&address=' + request['address']
-                         + '&commission=' + request['commission'];
+        const message = 'requestTime=' + request['requestTime'] + '&amount=' + request['amount'] + '&currency=' + request['currency'] + '&account=' + request['account'] + '&address=' + request['address'] + '&commission=' + request['commission'];
         const transactionSignature = this.signMessage (message);
         request['transactionSignature'] = transactionSignature;
         return request;
     }
 
-    getBankTransferRequest (params = {}, request) {
+    getBankTransferRequest (request, params = {}) {
         const accountFrom = ('account' in params);
         if (!accountFrom) {
             throw new ArgumentsRequired (this.id + ' requires accountFrom parameter to withdraw ');
@@ -749,12 +744,7 @@ module.exports = class globitex extends Exchange {
             request['beneficiaryAccountType'] = beneficiaryAccountType;
         }
         // Create messageSigning
-        const message = 'requestTime=' + request['requestTime']
-                        + 'accountFrom=' + request['account']
-                        + '&amount=' + request['ammount']
-                        + '&currency=' + request['currency']
-                        + '&beneficiaryName=' + request['beneficiaryName']
-                        + '&beneficiaryAccount=' + request['beneficiaryAccount'];
+        const message = 'requestTime=' + request['requestTime'] + 'accountFrom=' + request['account'] + '&amount=' + request['ammount'] + '&currency=' + request['currency'] + '&beneficiaryName=' + request['beneficiaryName'] + '&beneficiaryAccount=' + request['beneficiaryAccount'];
         const transactionSignature = this.signMessage (message);
         request['transactionSignature'] = transactionSignature;
         return request;
