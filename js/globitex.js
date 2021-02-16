@@ -653,35 +653,90 @@ module.exports = class globitex extends Exchange {
         await this.loadMarkets ();
         const currency = this.currency (code);
         const request = {
-            'coin': currency['id'],
+            'currency': currency['id'],
             'quantity': amount.toFixed (10),
-            'address': address,
+            'account': address,
         };
-        if (code === 'BRL') {
-            const account_ref = ('account_ref' in params);
-            if (!account_ref) {
-                throw new ArgumentsRequired (this.id + ' requires account_ref parameter to withdraw ' + code);
-            }
-        } else if (code !== 'LTC') {
-            const tx_fee = ('tx_fee' in params);
-            if (!tx_fee) {
-                throw new ArgumentsRequired (this.id + ' requires tx_fee parameter to withdraw ' + code);
-            }
-            if (code === 'XRP') {
-                if (tag === undefined) {
-                    if (!('destination_tag' in params)) {
-                        throw new ArgumentsRequired (this.id + ' requires a tag argument or destination_tag parameter to withdraw ' + code);
-                    }
-                } else {
-                    request['destination_tag'] = tag;
-                }
-            }
+        // check if it is fiat tmp
+        if (code === 'EUR' || code === 'USD') {
+            // missing signature etc
+            const bankRequest = this.getBankTransferRequest (params);
+            const finalRequest = this.extend (request, bankRequest);
+            const response = this.privatePost1PaymentPayoutBank (finalRequest);
+            return response;
         }
+        // else crypto transfer
+        // if (code === 'BRL') {
+        //     const account_ref = ('account_ref' in params);
+        //     if (!account_ref) {
+        //         throw new ArgumentsRequired (this.id + ' requires account_ref parameter to withdraw ' + code);
+        //     }
+        // } else if (code !== 'LTC') {
+        //     const tx_fee = ('tx_fee' in params);
+        //     if (!tx_fee) {
+        //         throw new ArgumentsRequired (this.id + ' requires tx_fee parameter to withdraw ' + code);
+        //     }
+        //     if (code === 'XRP') {
+        //         if (tag === undefined) {
+        //             if (!('destination_tag' in params)) {
+        //                 throw new ArgumentsRequired (this.id + ' requires a tag argument or destination_tag parameter to withdraw ' + code);
+        //             }
+        //         } else {
+        //             request['destination_tag'] = tag;
+        //         }
+        //     }
+        // }
         const response = await this.privatePostWithdrawCoin (this.extend (request, params));
         return {
             'info': response,
             'id': response['response_data']['withdrawal']['id'],
         };
+    }
+
+    getBankTransferRequest (params = {}) {
+        const request = {};
+        // Bank tranfer only tmp
+        const requestTime = ('requestTime' in params);
+        if (!requestTime) {
+            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
+        }
+        const paymentType = ('paymentType' in params);
+        if (!paymentType) {
+            throw new ArgumentsRequired (this.id + ' requires paymentType parameter to withdraw ');
+        }
+        // IBAN ACCOUNT
+        const beneficiaryAccount = ('beneficiaryAccount' in params);
+        if (!beneficiaryAccount) {
+            throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
+        }
+        // IBAN ACCOUNT NAME
+        const beneficiaryBankName = ('beneficiaryBankName' in params);
+        if (!beneficiaryBankName) {
+            throw new ArgumentsRequired (this.id + ' requires beneficiaryBankName parameter to withdraw ');
+        }
+        if (paymentType === 'internacional') {
+            const beneficiarySwiftCode = ('beneficiarySwiftCode' in params);
+            if (!beneficiarySwiftCode) {
+                throw new ArgumentsRequired (this.id + ' requires beneficiarySwiftCode parameter to withdraw for International transfers');
+            }
+        }
+        const commissionSource = ('commissionSource' in params);
+        if (!commissionSource) {
+            request['commissionSource'] = commissionSource;
+        }
+        const clientTransId = ('clientTransId' in params);
+        if (!clientTransId) {
+            request['clientTransId'] = clientTransId;
+        }
+        const beneficiaryAccountType = ('beneficiaryAccountType' in params);
+        if (!beneficiaryAccountType) {
+            request['beneficiaryAccountType'] = beneficiaryAccountType;
+        }
+        const myClientTransId = ('clientTransId' in params);
+        if (!myClientTransId) {
+            request['clientTransId'] = myClientTransId;
+        }
+        return request;
     }
 
     async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
