@@ -649,51 +649,52 @@ module.exports = class globitex extends Exchange {
     }
 
     async withdraw (code, amount, address, tag = undefined, params = {}) {
+        let response = {};
         this.checkAddress (address);
         await this.loadMarkets ();
         const currency = this.currency (code);
+        // Common parameters
         const request = {
             'currency': currency['id'],
             'quantity': amount.toFixed (10),
-            // 'account': address,
+            'account': address,
         };
+        const requestTime = ('requestTime' in params);
+        if (!requestTime) {
+            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
+        }
+        request['requestTime'] = requestTime;
+        const myClientTransId = ('clientTransId' in params);
+        if (myClientTransId) {
+            request['clientTransId'] = myClientTransId;
+        }
         // check if it is fiat tmp
         if (code === 'EUR' || code === 'USD') {
             // missing signature etc
             const bankRequest = this.getBankTransferRequest (params);
             const finalRequest = this.extend (request, bankRequest);
-            const response = this.privatePost1PaymentPayoutBank (this.extend (finalRequest, params));
-            return response;
+            response = this.privatePost1PaymentPayoutBank (this.extend (finalRequest, params));
+        } else {
+            // else crypto transfer
+            const commission = ('commission' in params);
+            if (!requestTime) {
+                throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
+            }
+            requestTime['commission'] = commission;
+            const feeId = ('feeId' in params);
+            if (feeId) {
+                request['feeId'] = feeId;
+            }
+            response = await this.privatePost1PaymentPayoutCrypto (this.extend (request, params));
         }
-        // else crypto transfer
-        request['account'] = address;
-        const requestTime = ('requestTime' in params);
-        if (!requestTime) {
-            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
-        }
-        requestTime['requestTime'] = requestTime;
-        const account = ('account' in params);
-        if (!account) {
-            throw new ArgumentsRequired (this.id + ' requires account parameter to withdraw ');
-        }
-        const commission = ('commission' in params);
-        if (!requestTime) {
-            throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
-        }
-        requestTime['commission'] = commission;
-        const feeId = ('feeId' in params);
-        if (feeId) {
-            request['feeId'] = feeId;
-        }
-        const myClientTransId = ('clientTransId' in params);
-        if (myClientTransId) {
-            request['clientTransId'] = myClientTransId;
-        }
-        const response = await this.privatePost1PaymentPayoutCrypto (this.extend (request, params));
         return {
             'info': response,
             'id': response['transactionCode'],
         };
+    }
+
+    getCryptoTransferRequest (params = {}) {
+
     }
 
     getBankTransferRequest (params = {}) {
