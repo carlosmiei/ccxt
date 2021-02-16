@@ -16,25 +16,25 @@ module.exports = class globitex extends Exchange {
             'countries': ['fr', 'de', 'pt'], // Europe fill the remaining later
             'rateLimit': 1000,
             'has': {
-                'cancelOrder': true,
+                'cancelOrder': false,
                 'CORS': true,
-                'createMarketOrder': true,
-                'cancelAllOrders': true,
-                'createOrder': true,
-                'fetchAccounts': true,
-                'fetchBalance': true,
+                'createMarketOrder': false,
+                'cancelAllOrders': false,
+                'createOrder': false,
+                'fetchAccounts': true, // tested
+                'fetchBalance': true, // tested
                 'fetchMarkets': true,
                 'fetchMyTrades': true, // 'emulated',
                 'fetchOHLCV': false,
-                'fetchOpenOrders': true,
+                'fetchOpenOrders': false,
                 'fetchOrder': false,
-                'fetchOrderBook': true,
+                'fetchOrderBook': false,
                 'fetchOrderBooks': false,
-                'fetchClosedOrders': true,
+                'fetchClosedOrders': false,
                 'fetchOrders': true,
-                'fetchTicker': true,
-                'fetchTickers': true,
-                'fetchTrades': true, // tmp testing
+                'fetchTicker': false,
+                'fetchTickers': false,
+                'fetchTrades': false, // tmp testing
                 'withdraw': true,
             },
             'urls': {
@@ -64,6 +64,7 @@ module.exports = class globitex extends Exchange {
                     'get': [
                         '2/trading/active',
                         '1/trading/recent',
+                        '1/trading/orders/recent',
                         '1/trading/order',
                         '1/trading/trades',
                         '1/payment/accounts',
@@ -409,7 +410,7 @@ module.exports = class globitex extends Exchange {
         let market = undefined;
         market = this.market (symbol);
         const request = {};
-        request['symbols'] = market['id'];
+        request['symbol'] = market['id'];
         const response = await this.publicGetTradesSymbol (this.extend (request, params));
         const trades = this.safeValue (response, 'trades', []);
         return this.parseTrades (trades, market, since, limit);
@@ -424,10 +425,18 @@ module.exports = class globitex extends Exchange {
         //     ]},
         await this.loadMarkets ();
         await this.loadAccounts ();
+        const account = await this.getAccountId (params);
         const response = await this.privateGet1PaymentAccounts (params);
-        const data = this.safeValue (response, 'accounts', {});
-        const mainAccount = data[0]; // Tmp main account
-        const balances = this.safeValue (mainAccount, 'balance', {});
+        const allAccounts = this.safeValue (response, 'accounts', {});
+        let selectedAccount = {};
+        // do not support maps/filter
+        for (let i = 0; i < allAccounts.length; i++) {
+            if (this.safeString (allAccounts[i], 'account') === account) {
+                selectedAccount = allAccounts[i];
+                break;
+            }
+        }
+        const balances = this.safeValue (selectedAccount, 'balance', []);
         const result = { 'info': response };
         for (let i = 0; i < balances.length; i++) {
             const balance = balances[i];
@@ -449,7 +458,7 @@ module.exports = class globitex extends Exchange {
         await this.loadAccounts ();
         const market = this.market (symbol);
         const request = {
-            'account': this.getAccountId (params),
+            'account': await this.getAccountId (params),
             'type': type,
             'side': side,
             'symbol': market['id'], // symbol here check this, BTCEUR
@@ -512,7 +521,7 @@ module.exports = class globitex extends Exchange {
         const market = this.market (symbol);
         const request = {
             'clientOrder_Id': id,
-            'account': this.getAccountId (params),
+            'account': await this.getAccountId (params),
         };
         const response = await this.privatePost1TradingCancelOrder (this.extend (request, params));
         // Normal order structure if everything is sucessfully
@@ -539,7 +548,7 @@ module.exports = class globitex extends Exchange {
         await this.loadMarkets ();
         await this.loadAccounts ();
         const request = {
-            'account': this.getAccountId (params),
+            'account': await this.getAccountId (params),
         };
         let market = undefined;
         if (symbol !== undefined) {
@@ -624,7 +633,7 @@ module.exports = class globitex extends Exchange {
         }
         const request = {
             'clientOrderId': clientOrderId,
-            'account': this.getAccountId (params),
+            'account': await this.getAccountId (params),
         };
         params = this.omit (params, ['clientOrderId', 'client_oid']);
         const market = this.market (symbol);
@@ -655,11 +664,11 @@ module.exports = class globitex extends Exchange {
         }
         // check if it is fiat tmp
         if (code === 'EUR' || code === 'USD') {
-            const bankRequest = this.getBankTransferRequest (request, params);
+            const bankRequest = await this.getBankTransferRequest (request, params);
             response = this.privatePost1PaymentPayoutBank (this.extend (bankRequest, params));
         } else {
             // else crypto transfer
-            const cryptoRequest = this.getCryptoTransferRequest (address, request, params);
+            const cryptoRequest = await this.getCryptoTransferRequest (address, request, params);
             response = await this.privatePost1PaymentPayoutCrypto (this.extend (cryptoRequest, params));
         }
         return {
@@ -668,9 +677,9 @@ module.exports = class globitex extends Exchange {
         };
     }
 
-    getCryptoTransferRequest (address, request, params = {}) {
+    async getCryptoTransferRequest (address, request, params = {}) {
         request['address'] = address;
-        const account = this.getAccountId (params);
+        const account = await this.getAccountId (params);
         // const account = ('account' in params);
         // if (!account) {
         //     throw new ArgumentsRequired (this.id + ' requires account parameter to withdraw ');
@@ -692,8 +701,8 @@ module.exports = class globitex extends Exchange {
         return request;
     }
 
-    getBankTransferRequest (request, params = {}) {
-        const accountFrom = this.getAccountId (params);
+    async getBankTransferRequest (request, params = {}) {
+        const accountFrom = await this.getAccountId (params);
         // const accountFrom = ('account' in params);
         // if (!accountFrom) {
         //     throw new ArgumentsRequired (this.id + ' requires accountFrom parameter to withdraw ');
@@ -742,7 +751,7 @@ module.exports = class globitex extends Exchange {
         await this.loadMarkets ();
         let market = undefined;
         const request = {
-            'account': this.getAccountId (params),
+            'account': await this.getAccountId (params),
         };
         // can be multiple values comma separated, default is all
         if (symbol !== undefined) {
@@ -795,7 +804,7 @@ module.exports = class globitex extends Exchange {
         await this.loadMarkets ();
         let market = undefined;
         const request = {
-            'account': this.getAccountId (params),
+            'account': await this.getAccountId (params),
         };
         // can be multiple values comma separated, default is all
         if (symbol !== undefined) {
