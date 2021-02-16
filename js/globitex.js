@@ -657,7 +657,6 @@ module.exports = class globitex extends Exchange {
         const request = {
             'currency': currency['id'],
             'quantity': amount.toFixed (10),
-            'account': address,
         };
         const requestTime = ('requestTime' in params);
         if (!requestTime) {
@@ -670,22 +669,12 @@ module.exports = class globitex extends Exchange {
         }
         // check if it is fiat tmp
         if (code === 'EUR' || code === 'USD') {
-            // missing signature etc
-            const bankRequest = this.getBankTransferRequest (params);
-            const finalRequest = this.extend (request, bankRequest);
-            response = this.privatePost1PaymentPayoutBank (this.extend (finalRequest, params));
+            const bankRequest = this.getBankTransferRequest (params, request);
+            response = this.privatePost1PaymentPayoutBank (this.extend (bankRequest, params));
         } else {
             // else crypto transfer
-            const commission = ('commission' in params);
-            if (!requestTime) {
-                throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
-            }
-            requestTime['commission'] = commission;
-            const feeId = ('feeId' in params);
-            if (feeId) {
-                request['feeId'] = feeId;
-            }
-            response = await this.privatePost1PaymentPayoutCrypto (this.extend (request, params));
+            const cryptoRequest = this.getCryptoTransferRequest (address, params, request);
+            response = await this.privatePost1PaymentPayoutCrypto (this.extend (cryptoRequest, params));
         }
         return {
             'info': response,
@@ -693,53 +682,81 @@ module.exports = class globitex extends Exchange {
         };
     }
 
-    getCryptoTransferRequest (params = {}) {
-
+    getCryptoTransferRequest (address, params = {}, request) {
+        request['address'] = address;
+        const account = ('account' in params);
+        if (!account) {
+            throw new ArgumentsRequired (this.id + ' requires account parameter to withdraw ');
+        }
+        request['account'] = account;
+        const commission = ('commission' in params);
+        if (!commission) {
+            throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
+        }
+        request['commission'] = commission;
+        const feeId = ('feeId' in params);
+        if (feeId) {
+            request['feeId'] = feeId;
+        }
+        // Create messageSigning
+        const message = 'requestTime=' + request['requestTime']
+                         + '&amount=' + request['amount']
+                         + '&currency=' + request['currency']
+                         + '&account=' + request['account']
+                         + '&address=' + request['address']
+                         + '&commission=' + request['commission'];
+        const transactionSignature = this.signMessage (message);
+        request['transactionSignature'] = transactionSignature;
+        return request;
     }
 
-    getBankTransferRequest (params = {}) {
-        const request = {};
-        // Bank tranfer only tmp
-        const requestTime = ('requestTime' in params);
-        if (!requestTime) {
-            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
+    getBankTransferRequest (params = {}, request) {
+        const accountFrom = ('account' in params);
+        if (!accountFrom) {
+            throw new ArgumentsRequired (this.id + ' requires accountFrom parameter to withdraw ');
         }
+        request['account'] = accountFrom;
         const paymentType = ('paymentType' in params);
         if (!paymentType) {
             throw new ArgumentsRequired (this.id + ' requires paymentType parameter to withdraw ');
         }
+        request['paymentType'] = paymentType;
         // IBAN ACCOUNT
         const beneficiaryAccount = ('beneficiaryAccount' in params);
         if (!beneficiaryAccount) {
             throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
         }
+        request['beneficiaryAccount'] = beneficiaryAccount;
         // IBAN ACCOUNT NAME
-        const beneficiaryBankName = ('beneficiaryBankName' in params);
-        if (!beneficiaryBankName) {
-            throw new ArgumentsRequired (this.id + ' requires beneficiaryBankName parameter to withdraw ');
+        const beneficiaryName = ('beneficiaryName' in params);
+        if (!beneficiaryName) {
+            throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw ');
         }
+        request['beneficiaryName'] = beneficiaryName;
         if (paymentType === 'internacional') {
             const beneficiarySwiftCode = ('beneficiarySwiftCode' in params);
             if (!beneficiarySwiftCode) {
                 throw new ArgumentsRequired (this.id + ' requires beneficiarySwiftCode parameter to withdraw for International transfers');
             }
+            request['beneficiarySwiftCode'] = beneficiarySwiftCode;
         }
         const commissionSource = ('commissionSource' in params);
         if (commissionSource) {
             request['commissionSource'] = commissionSource;
         }
-        const clientTransId = ('clientTransId' in params);
-        if (clientTransId) {
-            request['clientTransId'] = clientTransId;
-        }
         const beneficiaryAccountType = ('beneficiaryAccountType' in params);
         if (beneficiaryAccountType) {
             request['beneficiaryAccountType'] = beneficiaryAccountType;
         }
-        const myClientTransId = ('clientTransId' in params);
-        if (myClientTransId) {
-            request['clientTransId'] = myClientTransId;
-        }
+        // Create messageSigning
+        const message = 'requestTime=' + request['requestTime']
+                        + 'accountFrom=' + request['account']
+                        + '&amount=' + request['ammount']
+                        + '&currency=' + request['currency']
+                        + '&beneficiaryName=' + request['beneficiaryName']
+                        + '&beneficiaryAccount=' + request['beneficiaryAccount'];
+        const transactionSignature = this.signMessage (message);
+        request['transactionSignature'] = transactionSignature;
         return request;
     }
 
@@ -860,10 +877,14 @@ module.exports = class globitex extends Exchange {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-API-Key': this.apiKey,
                 'X-Nonce': nonce,
-                'X-Signature': this.hmac (this.encode (message), this.encode (this.secret), 'sha512'), // convert to hex and lower_case
+                'X-Signature': this.signMessage (message),
             };
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
+    }
+
+    signMessage (message) {
+        return this.hmac (this.encode (message), this.encode (this.secret), 'sha512');
     }
 
     async request (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
