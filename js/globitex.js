@@ -363,6 +363,15 @@ module.exports = class globitex extends Exchange {
         return this.parseTicker (response, market);
     }
 
+    parsePublicTrade (trade) {
+        return {
+            'id': this.safeValue (trade, 'tid'),
+            'price': this.parseFloat (trade, 'price'),
+            'amount': this.parseFloat (trade, 'amount'),
+            'timestamp': this.safeValue (trade, 'date'),
+        };
+    }
+
     parseTicker (ticker, market = undefined) {
         let symbol = undefined;
         if (market) {
@@ -453,16 +462,6 @@ module.exports = class globitex extends Exchange {
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
-        // {
-        //     "trades": [
-        //       timestamp, price, amount, id;
-        //       [1393492619000,"575.64","0.02","3814483"],
-        //       [1393492619001,"574.30","0.12","3814482"],
-        //       [1393492619002,"573.67","3.80","3814481"],
-        //       [1393492619003,"571.00","0.01","3814479"],
-        //       ...
-        //     ]
-        //   }
         // OR IF ITS FORMATTED
         // [
         //     {"date":1393492619000,"price":"575.64","amount":"0.02","tid":"3814483"},
@@ -482,18 +481,11 @@ module.exports = class globitex extends Exchange {
         };
         const response = await this.publicGetTradesSymbol (this.extend (request, params));
         const trades = this.safeValue (response, 'trades', []);
-        const convertedTrades = [];
+        const result = [];
         for (let i = 0; i < trades.length; i++) {
-            const newTrade = {
-                'id': trades[i]['tid'],
-                'price': trades[i]['price'],
-                'amount': trades[i]['amount'],
-                'timestamp': trades[i]['date'],
-
-            };
-            convertedTrades[i] = newTrade;
+            result[i] = this.parsePublicTrade (trades[i]);
         }
-        return this.parseTrades (convertedTrades, market, since, limit);
+        return result;
     }
 
     async fetchBalance (params = {}) {
