@@ -2,9 +2,8 @@
 
 //  ---------------------------------------------------------------------------
 
-const { AuthenticationError } = require ('./base/errors');
 const Exchange = require ('./base/Exchange');
-const { ExchangeError, ArgumentsRequired, InvalidOrder } = require ('./base/errors');
+const { ExchangeError, ArgumentsRequired, InvalidOrder, BadRequest, PermissionDenied, OrderNotFound } = require ('./base/errors');
 
 //  ---------------------------------------------------------------------------
 
@@ -93,22 +92,35 @@ module.exports = class globitex extends Exchange {
             },
             'fees': {
                 'trading': {
-                    'percentage': true,
-                    'tierBased': false,
-                    'maker': 0.04 / 100,
-                    'taker': 0.04 / 100,
+                    'percentage': false,
                 },
             },
             'requiredCredentials': {
                 'apiKey': true,
-                'secret': false,
+                'secret': true,
             },
-            'exceptions': {
-                'broad': {
-                    'Missing signature': AuthenticationError,
-                },
-                'exact': {
-                },
+            'httpExceptions': {
+                '400': BadRequest,
+                '403': PermissionDenied,
+                '404': OrderNotFound,
+                '500': ExchangeError,
+            },
+            'errorMessages': {
+                'Missing signature': 'Missing API key',
+                '20': 'Missing nonce',
+                '30': 'Missing signature',
+                '40': 'Invalid API key',
+                '50': 'Nonce is not monotonous',
+                '60': 'Nonce is not valid',
+                '70': 'Wrong signature',
+                '80': 'No permissions',
+                '90': 'API key is not enabled',
+                '100': 'API key locked',
+                '110': 'Invalid client state',
+                '120': 'Invalid API key state',
+                '130': 'Trading suspended',
+                '140': 'REST API suspended',
+                '200': 'Mandatory parameter missing',
             },
             'options': {
                 'createMarketBuyOrderRequiresPrice': true,
@@ -204,12 +216,10 @@ module.exports = class globitex extends Exchange {
         if (codes === undefined) {
             codes = Object.keys (this.currencies);
         }
-        // commented to test
-        // const amount = ('amount' in params);
-        // if (!amount) {
-        //     throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
-        // }
-        const amount = 100;
+        const amount = ('amount' in params);
+        if (!amount) {
+            throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
+        }
         const account = await this.getAccountId (params);
         for (let i = 0; i < codes.length; i++) {
             const code = codes[i];
