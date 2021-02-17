@@ -77,6 +77,7 @@ module.exports = class globitex extends Exchange {
                         '1/gbx-utilization/list',
                         '1/payment/accounts',
                         '1/payment/payout/fee/crypto',
+                        '1/payment/payout/fee/fiat',
                     ],
                     'post': [
                         '1/trading/new_order',
@@ -203,6 +204,7 @@ module.exports = class globitex extends Exchange {
         if (codes === undefined) {
             codes = Object.keys (this.currencies);
         }
+        // commented to test
         // const amount = ('amount' in params);
         // if (!amount) {
         //     throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
@@ -214,17 +216,30 @@ module.exports = class globitex extends Exchange {
             const currency = this.currency (code);
             const request = {
                 'currency': currency['id'],
-                'account': account,
                 'amount': amount,
+                'account': account,
             };
-            const withdrawResponse = await this.privateGet1PaymentPayoutFeeCrypto (request);
-            withdrawFees[code] = {
-                'recomended': parseFloat (withdrawResponse['recomended']),
-                'minimum': parseFloat (withdrawResponse['minimum']),
-                'maximum': parseFloat (withdrawResponse['maxmimum']),
-                'feeExpireTime': (withdrawResponse['feeExpireTime']),
-                'feeId': withdrawResponse['feeId'],
-            };
+            let withdrawResponse = {};
+            if (this.isFiatSymbol (code)) {
+                withdrawResponse = await this.privateGet1PaymentPayoutFeeFiat (request);
+                withdrawFees[code] = {
+                    'unknown': this.safeValue (withdrawResponse, 'unknown'),
+                    'currency': this.safeSymbol (withdrawResponse, 'currency'),
+                    'amount': parseFloat (withdrawResponse, 'amount'),
+                    'minimum': parseFloat (withdrawResponse, 'minimum'),
+                    'maximum': parseFloat (withdrawResponse, 'maximum'),
+                    'percentage': parseFloat (withdrawResponse, 'percentage'),
+                };
+            } else {
+                withdrawResponse = await this.privateGet1PaymentPayoutFeeCrypto (request);
+                withdrawFees[code] = {
+                    'recomended': parseFloat (withdrawResponse['recomended']),
+                    'minimum': parseFloat (withdrawResponse['minimum']),
+                    'maximum': parseFloat (withdrawResponse['maxmimum']),
+                    'feeExpireTime': (withdrawResponse['feeExpireTime']),
+                    'feeId': withdrawResponse['feeId'],
+                };
+            }
             info[code] = {
                 'withdraw': withdrawResponse,
             };
@@ -705,7 +720,7 @@ module.exports = class globitex extends Exchange {
             request['clientTransId'] = myClientTransId;
         }
         // check if it is fiat tmp
-        if (code === 'EUR' || code === 'USD') {
+        if (this.isFiatSymbol (code)) {
             const bankRequest = await this.getBankTransferRequest (request, params);
             response = this.privatePost1PaymentPayoutBank (this.extend (bankRequest, params));
         } else {
@@ -761,10 +776,14 @@ module.exports = class globitex extends Exchange {
             throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
         }
         request['beneficiaryAccount'] = beneficiaryAccount;
+        const beneficiaryAccountType = ('beneficiaryAccountType' in params);
+        if (beneficiaryAccountType) {
+            request['beneficiaryAccountType'] = beneficiaryAccountType;
+        }
         // IBAN ACCOUNT NAME
         const beneficiaryName = ('beneficiaryName' in params);
-        if (!beneficiaryName) {
-            throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw ');
+        if (!beneficiaryName && beneficiaryAccountType === 'other') {
+            throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw when beneficiaryAccountType is other');
         }
         request['beneficiaryName'] = beneficiaryName;
         if (paymentType === 'internacional') {
@@ -778,9 +797,18 @@ module.exports = class globitex extends Exchange {
         if (commissionSource) {
             request['commissionSource'] = commissionSource;
         }
-        const beneficiaryAccountType = ('beneficiaryAccountType' in params);
-        if (beneficiaryAccountType) {
-            request['beneficiaryAccountType'] = beneficiaryAccountType;
+        // both or none
+        const intermediaryAccount = ('intermediaryAccount' in params);
+        const intermediarySwiftCode = ('intermediarySwiftCode' in params);
+        if (intermediaryAccount || intermediarySwiftCode) {
+            if (!intermediaryAccount) {
+                throw new ArgumentsRequired (this.id + ' requires intermediaryAccount parameter to withdraw when intermediarySwiftCode exists');
+            }
+            if (!intermediarySwiftCode) {
+                throw new ArgumentsRequired (this.id + ' requires intermediarySwiftCode parameter to withdraw when intermediaryAccount exists');
+            }
+            request['intermediaryAccount'] = intermediaryAccount;
+            request['intermediarySwiftCode'] = intermediarySwiftCode;
         }
         // Create messageSigning
         const message = 'requestTime=' + request['requestTime'] + 'accountFrom=' + request['account'] + '&amount=' + request['ammount'] + '&currency=' + request['currency'] + '&beneficiaryName=' + request['beneficiaryName'] + '&beneficiaryAccount=' + request['beneficiaryAccount'];
@@ -872,23 +900,19 @@ module.exports = class globitex extends Exchange {
         return defaultAccountId;
     }
 
-    ordersToTrades (orders) {
-        const result = [];
-        for (let i = 0; i < orders.length; i++) {
-            const trades = this.safeValue (orders[i], 'trades', []);
-            for (let y = 0; y < trades.length; y++) {
-                result.push (trades[y]);
-            }
-        }
-        return result;
+    isFiatSymbol (symb) {
+        return symb === 'EUR' || symb === 'USD';
+    }
+
+    signMessage (message) {
+        return this.hmac (this.encode (message), this.encode (this.secret), 'sha512');
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api'][api]; // + '/';
-        const myUrl = new URL (url);
         const uri = this.implodeParams (path, params);
         const query = this.omit (params, this.extractParams (path));
-        const privateUrl = myUrl.pathname + uri;
+        const privateUrl = url.split ('.com')[1] + uri; // not pretty but url.pathname not supported in python
         let request = '';
         if (Object.keys (query).length) {
             request = '?' + this.urlencode (query);
@@ -909,10 +933,6 @@ module.exports = class globitex extends Exchange {
             };
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
-    }
-
-    signMessage (message) {
-        return this.hmac (this.encode (message), this.encode (this.secret), 'sha512');
     }
 
     async request (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
