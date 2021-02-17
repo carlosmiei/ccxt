@@ -20,23 +20,24 @@ module.exports = class globitex extends Exchange {
                 'createMarketOrder': false,
                 'cancelAllOrders': false,
                 'createOrder': false,
-                'fetchAccounts': true, // tested
-                'fetchBalance': true, // tested
-                'fetchMarkets': true,
-                'fetchMyTrades': true,
+                'fetchAccounts': false, // tested
+                'fetchBalance': false, // tested
+                'fetchMarkets': false, // tested
+                'fetchMyTrades': false, // partial tested (request is well formed but respons empty)
                 'fetchOHLCV': false,
                 'fetchOpenOrders': false,
                 'fetchOrder': false,
-                'fetchOrderBook': false,
-                'fetchOrderBooks': false,
+                'fetchOrderBook': false, // tested
+                'fetchOrderBooks': false, // not possible
                 'fetchClosedOrders': false,
-                'fetchFundingFees': true,
+                'fetchFundingFees': false, // partial tested request is well formed but No permissions
                 'fetchTradingFees': false,
                 'fetchOrders': false,
-                'fetchTicker': false,
-                'fetchTickers': false,
-                'fetchTrades': false,
-                'withdraw': true,
+                'fetchTicker': false, // tested
+                'fetchTickers': false, // tested
+                'fetchTrades': true,
+                'fetchTime': true, // tested
+                'withdraw': false,
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/', // fill the image later
@@ -347,7 +348,7 @@ module.exports = class globitex extends Exchange {
             const marketId = this.safeString (response[i], 'symbol');
             const market = this.safeMarket (marketId);
             const symbol = market['symbol'];
-            result[symbol] = this.parseTicker (response[marketId], market);
+            result[symbol] = this.parseTicker (response[i], market);
         }
         return this.filterByArray (result, 'symbol', symbols);
     }
@@ -375,7 +376,7 @@ module.exports = class globitex extends Exchange {
             'datetime': this.iso8601 (timestamp),
             'high': this.safeFloat (ticker, 'high'),
             'low': this.safeFloat (ticker, 'low'),
-            'bid': this.safeFloat (ticker, 'buy'),
+            'bid': this.safeFloat (ticker, 'bid'),
             'bidVolume': undefined,
             'ask': this.safeFloat (ticker, 'ask'),
             'askVolume': undefined,
@@ -474,13 +475,25 @@ module.exports = class globitex extends Exchange {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' fetchTrades () requires a symbol argument');
         }
-        let market = undefined;
-        market = this.market (symbol);
-        const request = {};
-        request['symbol'] = market['id'];
+        const market = this.market (symbol);
+        const request = {
+            'symbol': market['id'],
+            'formatItem': 'object', // safer to parse
+        };
         const response = await this.publicGetTradesSymbol (this.extend (request, params));
         const trades = this.safeValue (response, 'trades', []);
-        return this.parseTrades (trades, market, since, limit);
+        const convertedTrades = [];
+        for (let i = 0; i < trades.length; i++) {
+            const newTrade = {
+                'id': trades[i]['tid'],
+                'price': trades[i]['price'],
+                'amount': trades[i]['amount'],
+                'timestamp': trades[i]['date'],
+
+            };
+            convertedTrades[i] = newTrade;
+        }
+        return this.parseTrades (convertedTrades, market, since, limit);
     }
 
     async fetchBalance (params = {}) {
@@ -891,6 +904,21 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
+        let by = ('by' in params);
+        if (!by) {
+            by = 'ts';
+        }
+        request['by'] = by;
+        let startIndex = ('startIndex' in params);
+        if (!startIndex) {
+            startIndex = 0;
+        }
+        request['startIndex'] = startIndex;
+        let maxResults = ('maxResults' in params);
+        if (!maxResults) {
+            maxResults = 1000;
+        }
+        request['maxResults'] = maxResults;
         const response = await this.privateGet1TradingTrades (this.extend (request, params));
         const orders = this.safeValue (response, 'trades', []);
         return this.parseTrades (orders, market, since, limit);
