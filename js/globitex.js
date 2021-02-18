@@ -19,11 +19,11 @@ module.exports = class globitex extends Exchange {
                 'CORS': false,
                 'createMarketOrder': false,
                 'cancelAllOrders': false,
-                'createOrder': false,
+                'createOrder': true,
                 'fetchAccounts': false, // tested
                 'fetchBalance': false, // tested
                 'fetchMarkets': false, // tested
-                'fetchMyTrades': false, // partial tested (request is well formed but respons empty)
+                'fetchMyTrades': false, // partial tested: (request is well formed and mocked the response
                 'fetchOHLCV': false,
                 'fetchOpenOrders': false,
                 'fetchOrder': false,
@@ -35,8 +35,8 @@ module.exports = class globitex extends Exchange {
                 'fetchOrders': false,
                 'fetchTicker': false, // tested
                 'fetchTickers': false, // tested
-                'fetchTrades': true,
-                'fetchTime': true, // tested
+                'fetchTrades': false, // tested
+                'fetchTime': false, // tested
                 'withdraw': false,
             },
             'urls': {
@@ -536,12 +536,12 @@ module.exports = class globitex extends Exchange {
             'symbol': market['id'], // symbol here check this, BTCEUR
             'quantity': this.amountToPrecision (symbol, amount),
         };
-        // ExpireTime
         const expireTime = this.safeValue (params, 'expireTime');
-        if (expireTime !== undefined) {
+        if (expireTime) {
             request['expireTime'] = expireTime;
-        } else {
-            throw new InvalidOrder (this.id + ' createOrder method requires a expireTime or expireIn param for a ' + type + ' order, you can also set the expireIn exchange-wide option');
+        }
+        if (!expireTime && type === 'GTD') {
+            throw new InvalidOrder (this.id + ' createOrder method requires a expireTime or expireIn param for a ' + type);
         }
         const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
         if (clientOrderId !== undefined) {
@@ -559,24 +559,11 @@ module.exports = class globitex extends Exchange {
             params = this.omit (params, [ 'timeInForce', 'time_in_force' ]);
         }
         if (type === 'limit') {
-            request['price'] = this.priceToPrecision (symbol, price);
-            // request['size'] = this.amountToPrecision (symbol, amount);
-        }
-        if (type === 'market') {
-            let cost = this.safeFloat2 (params, 'cost', 'funds');
-            if (cost === undefined) {
-                if (price !== undefined) {
-                    cost = amount * price;
-                }
-            } else {
-                params = this.omit (params, [ 'cost', 'funds' ]);
+            if (!price) {
+                throw new InvalidOrder (this.id + ' price is required in Limit orders');
             }
-            // if (cost !== undefined) {
-            //     request['funds'] = this.costToPrecision (symbol, cost);
-            // } else {
-            //     request['size'] = this.amountToPrecision (symbol, amount);
-            // }
         }
+        request['price'] = this.priceToPrecision (symbol, price);
         const response = await this.privatePostTradingNewOrder (this.extend (request, params));
         return this.parseOrder (response, market);
     }
