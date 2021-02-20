@@ -17,22 +17,22 @@ module.exports = class globitex extends Exchange {
             'has': {
                 'cancelOrder': false, // partial rested: request is well formed and mocked response
                 'CORS': false,
-                'createMarketOrder': false,
+                'createMarketOrder': false, // not supported
                 'cancelAllOrders': false, // partial rested: request is well formed and mocked response
                 'createOrder': true, // partial rested: request is well formed and mocked response
                 'fetchAccounts': true, // tested
                 'fetchBalance': false, // tested
                 'fetchMarkets': false, // tested
                 'fetchMyTrades': false, // partial tested: (request is well formed and mocked the response
-                'fetchOHLCV': false,
-                'fetchOpenOrders': false,
-                'fetchOrder': false,
+                'fetchOHLCV': false, // not Supported
+                'fetchOpenOrders': false, // partial tested: (request is well formed and mocked the response
+                'fetchOrder': false, // partial tested: (request is well formed and mocked the response
                 'fetchOrderBook': false, // tested
                 'fetchOrderBooks': false, // not possible
-                'fetchClosedOrders': false,
+                'fetchClosedOrders': 'emulated', // partial tested: (request is well formed and mocked the response
                 'fetchFundingFees': false, // partial tested request is well formed but No permissions
-                'fetchTradingFees': false,
-                'fetchOrders': false,
+                'fetchTradingFees': false, // notSupported
+                'fetchOrders': false, // partial tested: (request is well formed and mocked the response
                 'fetchTicker': true, // tested
                 'fetchTickers': false, // tested
                 'fetchTrades': false, // tested
@@ -343,7 +343,6 @@ module.exports = class globitex extends Exchange {
         let response = await this.publicGetTicker (params);
         response = this.safeValue (response, 'instruments', []);
         const result = {};
-        // const ids = Object.keys (response);
         for (let i = 0; i < response.length; i++) {
             const marketId = this.safeString (response[i], 'symbol');
             const market = this.safeMarket (marketId);
@@ -355,6 +354,8 @@ module.exports = class globitex extends Exchange {
 
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
+        // tmp teste
+        this.fetchClosedOrders ();
         const market = this.market (symbol);
         const request = {
             'symbol': market['id'],
@@ -643,19 +644,13 @@ module.exports = class globitex extends Exchange {
         market = this.safeMarket (marketId, market);
         const timestamp = this.safeTimestamp (order, 'lastTimestamp');
         const clientOrderId = this.safeString (order, 'clientOrderId');
-        const price = this.safeFloat (order, 'orderPrice'); // check price
+        const price = this.safeFloat (order, 'orderPrice');
         const average = this.safeFloat (order, 'avgPrice');
-        const amount = this.safeFloat (order, 'quantity');
+        const amount = this.safeFloat (order, 'orderQuantity');
         const filled = this.safeFloat (order, 'execQuantity');
         const timeInForce = this.safeString (order, 'timeInForce');
-        const remaining = amount - filled;
+        const remaining = this.safeValue (order, 'quantityLeaves');
         const cost = filled * average;
-        // const lastTradeTimestamp = this.safeTimestamp (order, 'updated_timestamp');
-        // const rawTrades = this.safeValue (order, 'operations', []);
-        // const trades = this.parseTrades (rawTrades, market, undefined, undefined, {
-        //     'side': side,
-        //     'order': id,
-        // });
         const res = {
             'info': order,
             'id': id,
@@ -749,6 +744,7 @@ module.exports = class globitex extends Exchange {
         await this.loadAccounts ();
         const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
         if (clientOrderId === undefined) {
+            // client-generated id required not orderId
             throw new ArgumentsRequired (this.id + ' fetchOrder () requires a client order if argument');
         }
         const request = {
@@ -757,9 +753,10 @@ module.exports = class globitex extends Exchange {
         };
         params = this.omit (params, ['clientOrderId', 'client_oid']);
         const market = this.market (symbol);
-        const response = await this.privateGetTradingOrder (this.extend (request, params));
-        const responseData = this.safeValue (response, 'orders', []);
-        const order = responseData[0]; // protect this value
+        const response = await this.privateGet1TradingOrder (this.extend (request, params));
+        const mockedResponse = { 'orders': [{ 'orderId': 425817975, 'orderStatus': 'filled', 'lastTimestamp': 1446740176886, 'orderPrice': '729', 'orderQuantity': '10', 'avgPrice': '729', 'quantityLeaves': '0', 'type': 'market', 'timeInForce': 'FOK', 'cumQuantity': '10', 'clientOrderId': 'afe8b9901b0e4914991291a49175a380', 'symbol': 'BTCEUR', 'side': 'sell', 'execQuantity': '10', 'orderSource': 'WEB', 'account': 'ADE922A21' }] };
+        const responseData = this.safeValue (mockedResponse, 'orders', []);
+        const order = this.safeValue (responseData, 0, {});
         return this.parseOrder (order, market);
     }
 
@@ -886,10 +883,13 @@ module.exports = class globitex extends Exchange {
         const request = {
             'account': await this.getAccountId (params),
         };
-        // can be multiple values comma separated, default is all
         if (symbol !== undefined) {
             market = this.market (symbol);
             request['symbols'] = market['id'];
+        }
+        const maxResults = ('maxResults' in params);
+        if (!maxResults) {
+            request['maxResults'] = 1000;
         }
         const response = await this.privateGet1TradingOrdersRecent (this.extend (request, params));
         const orders = this.safeValue (response, 'orders', []);
@@ -899,9 +899,10 @@ module.exports = class globitex extends Exchange {
     async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
         await this.loadAccounts ();
-        const request = {};
+        const request = {
+            'account': await this.getAccountId (params),
+        };
         let market = undefined;
-        // can be multiple values comma separated, default is all
         if (symbol !== undefined) {
             market = this.market (symbol);
             request['symbols'] = market['id'];
@@ -913,27 +914,13 @@ module.exports = class globitex extends Exchange {
 
     async fetchClosedOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         const request = {
-            'statuses': 'canceled,expired,suspended',
+            'statuses': 'filled,canceled,expired,suspended',
         };
         const orders = await this.fetchOrders (symbol, since, limit, this.extend (request, params));
         return this.filterBy (orders, 'status', 'closed');
     }
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        //     {
-        //       "tradeId": 39,
-        //       "symbol": "BTCEUR",
-        //       "side": "sell",
-        //       "originalOrderId": "114",
-        //       "clientOrderId": "FTO18jd4ou41--25",
-        //       "execQuantity": "10",
-        //       "execPrice": "150",
-        //       "timestamp": 1395231854030,
-        //       "fee": "0.03",
-        //       "isLiqProvided": false,
-        //       "feeCurrency": "EUR",
-        //       "account": "ADE922A21"
-        //     },
         await this.loadMarkets ();
         let market = undefined;
         const request = {
