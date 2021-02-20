@@ -17,26 +17,26 @@ module.exports = class globitex extends Exchange {
                 'cancelOrder': false, // partial rested: request is well formed and mocked response
                 'CORS': false,
                 'createMarketOrder': false, // not supported
-                'cancelAllOrders': false, // partial rested: request is well formed and mocked response
+                'cancelAllOrders': true, // partial rested: request is well formed and mocked response
                 'createOrder': true, // partial rested: request is well formed and mocked response
                 'fetchAccounts': true, // tested
-                'fetchBalance': false, // tested
-                'fetchMarkets': false, // tested
-                'fetchMyTrades': false, // partial tested: (request is well formed and mocked the response
+                'fetchBalance': true, // tested
+                'fetchMarkets': true, // tested
+                'fetchMyTrades': true, // partial tested: (request is well formed and mocked the response
                 'fetchOHLCV': false, // not Supported
-                'fetchOpenOrders': false, // partial tested: (request is well formed and mocked the response
-                'fetchOrder': false, // partial tested: (request is well formed and mocked the response
-                'fetchOrderBook': false, // tested
+                'fetchOpenOrders': true, // partial tested: (request is well formed and mocked the response
+                'fetchOrder': true, // partial tested: (request is well formed and mocked the response
+                'fetchOrderBook': true, // tested
                 'fetchOrderBooks': false, // not possible
                 'fetchClosedOrders': 'emulated', // partial tested: (request is well formed and mocked the response
-                'fetchFundingFees': false, // partial tested request is well formed but No permissions
+                'fetchFundingFees': true, // partial tested request is well formed but No permissions
                 'fetchTradingFees': false, // notSupported
-                'fetchOrders': false, // partial tested: (request is well formed and mocked the response
+                'fetchOrders': true, // partial tested: (request is well formed and mocked the response
                 'fetchTicker': true, // tested
-                'fetchTickers': false, // tested
-                'fetchTrades': false, // tested
+                'fetchTickers': true, // tested
+                'fetchTrades': true, // tested
                 'fetchTime': true, // tested
-                'withdraw': false, // partial tested: (request is well formed and mocked the response
+                'withdraw': true, // partial tested: (request is well formed and mocked the response
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/', // fill the image later
@@ -225,7 +225,7 @@ module.exports = class globitex extends Exchange {
             const currency = this.currency (code);
             const request = {
                 'currency': currency['id'],
-                'amount': amount,
+                'amount': amount.toString (),
                 'account': await this.getAccountId (params),
             };
             let withdrawResponse = {};
@@ -352,12 +352,446 @@ module.exports = class globitex extends Exchange {
 
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
+        this.createOrder ();
         const market = this.market (symbol);
         const request = {
             'symbol': market['id'],
         };
         const response = await this.publicGetTickerSymbol (this.extend (request, params));
         return this.parseTicker (response, market);
+    }
+
+    async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
+        // OR IF ITS FORMATTED
+        // [
+        //     {"date":1393492619000,"price":"575.64","amount":"0.02","tid":"3814483"},
+        //     {"date":1393492619001,"price":"574.30","amount":"0.12","tid":"3814482"},
+        //     {"date":1393492619002,"price":"573.67","amount":"3.80","tid":"3814481"},
+        //     {"date":1393492619003,"price":"571.00","amount":"0.01","tid":"3814479"},
+        //     ...
+        //   ]
+        await this.loadMarkets ();
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchTrades () requires a symbol argument');
+        }
+        const market = this.market (symbol);
+        const request = {
+            'symbol': market['id'],
+            'formatItem': 'object', // safer to parse
+        };
+        const response = await this.publicGetTradesSymbol (this.extend (request, params));
+        const trades = this.safeValue (response, 'trades', []);
+        const result = [];
+        for (let i = 0; i < trades.length; i++) {
+            result[i] = this.parsePublicTrade (trades[i]);
+        }
+        return result;
+    }
+
+    async fetchBalance (params = {}) {
+        // {
+        //     "accounts": [
+        //      {"account":"AFN561A01","main":true,"balance": [
+        //        {"currency":"EUR","available":"100.0","reserved":"0.0"},
+        //        {"currency":"BTC","available":"1.00000002","reserved":"0.0"}
+        //     ]},
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const account = await this.getAccountId (params);
+        const response = await this.privateGet1PaymentAccounts (params);
+        const allAccounts = this.safeValue (response, 'accounts', {});
+        let selectedAccount = {};
+        for (let i = 0; i < allAccounts.length; i++) {
+            if (this.safeString (allAccounts[i], 'account') === account) {
+                selectedAccount = allAccounts[i];
+                break;
+            }
+        }
+        const balances = this.safeValue (selectedAccount, 'balance', []);
+        const result = { 'info': response };
+        for (let i = 0; i < balances.length; i++) {
+            const balance = balances[i];
+            const currencyId = this.safeString (balance, 'currency');
+            const code = this.safeCurrencyCode (currencyId);
+            const account = this.account ();
+            const reserved = this.safeFloat (balance, 'reserved');
+            const available = this.safeFloat (balance, 'available');
+            account['total'] = reserved + available;
+            account['free'] = available;
+            account['used'] = reserved;
+            result[code] = account;
+        }
+        return this.parseBalance (result);
+    }
+
+    async fetchOrder (id, symbol = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
+        if (clientOrderId === undefined) {
+            // client-generated id required not orderId
+            throw new ArgumentsRequired (this.id + ' fetchOrder () requires a client order if argument');
+        }
+        const request = {
+            'clientOrderId': clientOrderId,
+            'account': await this.getAccountId (params),
+        };
+        params = this.omit (params, ['clientOrderId', 'client_oid']);
+        const market = this.market (symbol);
+        const response = await this.privateGet1TradingOrder (this.extend (request, params));
+        const responseData = this.safeValue (response, 'orders', []);
+        const order = this.safeValue (responseData, 0, {});
+        return this.parseOrder (order, market);
+    }
+
+    async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const market = this.market (symbol);
+        const request = {
+            'account': await this.getAccountId (params),
+            'type': type,
+            'side': side,
+            'symbol': market['id'],
+            'quantity': this.amountToPrecision (symbol, amount).toString (),
+        };
+        const expireTime = this.safeValue (params, 'expireTime');
+        if (expireTime) {
+            request['expireTime'] = expireTime;
+        }
+        if (!expireTime && type === 'GTD') {
+            throw new InvalidOrder (this.id + ' createOrder method requires a expireTime or expireIn param for a ' + type);
+        }
+        const stopPrice = this.safeFloat2 (params, 'stopPrice', 'stop_price');
+        if (stopPrice !== undefined && (type === 'stop' || type === 'stopLimit')) {
+            request['stopPrice'] = this.priceToPrecision (symbol, stopPrice).toString ();
+            params = this.omit (params, [ 'stopPrice', 'stop_price' ]);
+        }
+        if (type === 'limit') {
+            if (!price) {
+                throw new InvalidOrder (this.id + ' price is required in Limit orders');
+            }
+        }
+        request['price'] = this.priceToPrecision (symbol, price).toString ();
+        const response = await this.privatePost1TradingNewOrder (this.extend (request, params));
+        const order = this.safeValue (response, 'ExecutionReport', {});
+        return this.parseExecutedOrder (order, market);
+    }
+
+    async cancelOrder (id, symbol = undefined, params = {}) {
+        if (id === undefined) {
+            throw new ArgumentsRequired (this.id + ' cancelOrder () requires a clientOrderId argument');
+        }
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const market = this.market (symbol);
+        const request = {
+            'clientOrder_Id': id,
+            'account': await this.getAccountId (params),
+        };
+        const response = await this.privatePost2TradingCancelOrder (this.extend (request, params));
+        const responseData = this.safeValue (response, 'ExecutionReport', {});
+        if (responseData) {
+            return this.parseExcecutedOrder (responseData, market);
+        }
+        const errorResponse = this.safeValue (response, 'CancelReject');
+        const reason = this.safeString (errorResponse, 'rejectReasonCode');
+        // FAILED TO CANCEL
+        throw new ArgumentsRequired ('Order with id' + id + ' Failed due to:' + reason);
+    }
+
+    async cancelAllOrders (symbol = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const request = {
+            'account': await this.getAccountId (params),
+        };
+        let market = undefined;
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['symbol']; // the request will be more performant if you include it
+        }
+        return await this.privatePost1TradingCancelOrders (this.extend (request, params));
+    }
+
+    async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = undefined;
+        const request = {
+            'account': await this.getAccountId (params),
+        };
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['id'];
+        }
+        const maxResults = params['maxResults'];
+        if (!maxResults) {
+            request['maxResults'] = 1000;
+        }
+        const response = await this.privateGet1TradingOrdersRecent (this.extend (request, params));
+        const orders = this.safeValue (response, 'orders', []);
+        return this.parseOrders (orders, market, since, limit);
+    }
+
+    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.loadAccounts ();
+        const request = {
+            'account': await this.getAccountId (params),
+        };
+        let market = undefined;
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['id'];
+        }
+        const response = await this.privateGet2TradingActive (this.extend (request, params));
+        const orders = this.safeValue (response, 'orders', []);
+        return this.parseOrders (orders, market, since, limit);
+    }
+
+    async fetchClosedOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        const request = {
+            'statuses': 'filled,canceled,expired,suspended',
+        };
+        const orders = await this.fetchOrders (symbol, since, limit, this.extend (request, params));
+        return this.filterBy (orders, 'status', 'closed');
+    }
+
+    async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = undefined;
+        const request = {
+            'account': await this.getAccountId (params),
+        };
+        // can be multiple values comma separated, default is all
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['symbols'] = market['id'];
+        }
+        const by = params['by'];
+        if (!by) {
+            request['by'] = 'ts';
+        }
+        const startIndex = params['startIndex'];
+        if (!startIndex) {
+            request['startIndex'] = 0;
+        }
+        const maxResults = params['maxResults'];
+        if (!maxResults) {
+            request['maxResults'] = 1000;
+        }
+        const response = await this.privateGet1TradingTrades (this.extend (request, params));
+        const orders = this.safeValue (response, 'trades', []);
+        return this.parseTrades (orders, market, since, limit);
+    }
+
+    async withdraw (code, amount, address, tag = undefined, params = {}) {
+        let response = {};
+        this.checkAddress (address);
+        await this.loadMarkets ();
+        const currency = this.currency (code);
+        // Common parameters
+        let request = {
+            'currency': currency['id'],
+            'amount': amount.toString (),
+        };
+        request = this.extend (request, params);
+        const requestTime = request['requestTime'];
+        if (!requestTime) {
+            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
+        }
+        // check if it is fiat tmp
+        if (this.isFiatSymbol (code)) {
+            const bankRequest = await this.getBankTransferRequest (request);
+            response = await this.privatePost1PaymentPayoutBank (bankRequest);
+        } else {
+            // else crypto transfer
+            const cryptoRequest = await this.getCryptoTransferRequest (address, request, params);
+            response = await this.privatePost1PaymentPayoutCrypto (cryptoRequest);
+        }
+        return {
+            'info': response,
+            'id': response['transactionCode'],
+        };
+    }
+
+    async getCryptoTransferRequest (address, request) {
+        request['address'] = address;
+        const account = await this.getAccountId (request);
+        request['account'] = account;
+        const commission = request['commission'];
+        if (!commission) {
+            throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
+        }
+        request['commission'] = commission;
+        // Create messageSigning
+        const message = 'requestTime=' + request['requestTime'] + '&amount=' + request['amount'] + '&currency=' + request['currency'] + '&account=' + request['account'] + '&address=' + request['address'] + '&commission=' + request['commission'];
+        const transactionSignature = this.signMessage (message);
+        request['transactionSignature'] = transactionSignature;
+        return request;
+    }
+
+    async getBankTransferRequest (request) {
+        const accountFrom = await this.getAccountId (request);
+        request['account'] = accountFrom;
+        const paymentType = request['paymentType'];
+        if (!paymentType) {
+            throw new ArgumentsRequired (this.id + ' requires paymentType parameter to withdraw ');
+        }
+        // IBAN ACCOUNT
+        const beneficiaryAccount = request['beneficiaryAccount'];
+        if (!beneficiaryAccount) {
+            throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
+        }
+        const beneficiaryAccountType = request['beneficiaryAccountType'];
+        // IBAN ACCOUNT NAME
+        const beneficiaryName = request['beneficiaryName'];
+        if (!beneficiaryName && beneficiaryAccountType === 'other') {
+            throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw when beneficiaryAccountType is other');
+        }
+        if (paymentType === 'internacional') {
+            const beneficiarySwiftCode = request['beneficiarySwiftCode'];
+            if (!beneficiarySwiftCode) {
+                throw new ArgumentsRequired (this.id + ' requires beneficiarySwiftCode parameter to withdraw for International transfers');
+            }
+        }
+        // both or none
+        const intermediaryAccount = request['intermediaryAccount'];
+        const intermediarySwiftCode = request['intermediarySwiftCode'];
+        if (intermediaryAccount || intermediarySwiftCode) {
+            if (!intermediaryAccount) {
+                throw new ArgumentsRequired (this.id + ' requires intermediaryAccount parameter to withdraw when intermediarySwiftCode exists');
+            }
+            if (!intermediarySwiftCode) {
+                throw new ArgumentsRequired (this.id + ' requires intermediarySwiftCode parameter to withdraw when intermediaryAccount exists');
+            }
+        }
+        // Create messageSigning
+        const message = 'requestTime=' + request['requestTime'] + 'accountFrom=' + request['account'] + '&amount=' + request['ammount'] + '&currency=' + request['currency'] + '&beneficiaryName=' + request['beneficiaryName'] + '&beneficiaryAccount=' + request['beneficiaryAccount'];
+        const transactionSignature = this.signMessage (message);
+        request['transactionSignature'] = transactionSignature;
+        return request;
+    }
+
+    parseOrder (order, market = undefined) {
+        //     {
+        //      "orderId": "1",
+        //      "orderStatus": "partiallyFilled",
+        //      "lastTimestamp": 1395659434845,
+        //      "orderPrice": "800",
+        //      "orderQuantity": "1.01",
+        //      "avgPrice": "800",
+        //      "quantityLeaves": "0.01", what is this?????
+        //      "type": "limit",
+        //      "timeInForce": "GTC",
+        //      "cumQuantity": "1",
+        //      "clientOrderId": "111111111111111111111111",
+        //      "symbol": "BTCEUR",
+        //      "side": "buy",
+        //      "execQuantity": "0.2",
+        //      "orderSource": "WEB",
+        //      "account": "ADE922A21"
+        //     },
+        const id = this.safeString (order, 'orderId');
+        const side = this.safeString (order, 'side');
+        const status = this.safeString (order, 'orderStatus'); // this.parseOrderStatus (this.safeString (order, 'status'));
+        const marketId = this.safeString (order, 'symbol');
+        market = this.safeMarket (marketId, market);
+        const timestamp = this.safeTimestamp (order, 'lastTimestamp');
+        const clientOrderId = this.safeString (order, 'clientOrderId');
+        const price = this.safeFloat (order, 'orderPrice');
+        const average = this.safeFloat (order, 'avgPrice');
+        const amount = this.safeFloat (order, 'orderQuantity');
+        const filled = this.safeFloat (order, 'execQuantity');
+        const timeInForce = this.safeString (order, 'timeInForce');
+        const remaining = this.safeValue (order, 'quantityLeaves');
+        const cost = filled * average;
+        const res = {
+            'info': order,
+            'id': id,
+            'clientOrderId': clientOrderId,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'lastTradeTimestamp': undefined,
+            'symbol': market['symbol'],
+            'type': 'limit',
+            'timeInForce': timeInForce,
+            'postOnly': undefined,
+            'side': side,
+            'price': price,
+            'stopPrice': undefined,
+            'cost': cost,
+            'average': average,
+            'amount': amount,
+            'filled': filled,
+            'remaining': remaining,
+            'status': status,
+            'trades': undefined,
+        };
+        return res;
+    }
+
+    parseExecutedOrder (order, market = undefined) {
+        //     {
+        //     "orderId":"58521038",
+        //     "clientOrderId":"fe02900d762ad2458a942ce5d126c7b2",
+        //     "orderStatus":"new",
+        //     "symbol":"BTCEUR",
+        //     "side":"sell",
+        //     "price":"553.08",
+        //     "quantity":"0.00030",
+        //     "type":"limit",
+        //     "timeInForce":"GTC",
+        //     "lastQuantity":"0.00000",
+        //     "lastPrice":"",
+        //     "leavesQuantity":"0.00030",
+        //     "cumQuantity":"0.00000",
+        //     "averagePrice":"0",
+        //     "created":1480067768415,
+        //     "execReportType":"new",
+        //     "timestamp":1480067768415,
+        //     "account":"VER564A02",
+        //     "orderSource": "REST"
+        //     }
+        // }
+        const id = this.safeString (order, 'orderId');
+        const side = this.safeString (order, 'side');
+        const status = this.safeString (order, 'orderStatus');
+        const marketId = this.safeString (order, 'symbol');
+        market = this.safeMarket (marketId, market);
+        const timestamp = this.safeTimestamp (order, 'timestamp');
+        const clientOrderId = this.safeString (order, 'clientOrderId');
+        const price = this.safeFloat (order, 'price');
+        const average = this.safeFloat (order, 'averagePrice');
+        const amount = this.safeFloat (order, 'quantity');
+        const filled = this.safeFloat (order, 'cumQuantity');
+        const type = this.safeValue (order, 'type');
+        const timeInForce = this.safeString (order, 'timeInForce');
+        const remaining = this.safeFloat (order, 'leavesQuantity');
+        const cost = filled * average;
+        const res = {
+            'info': order,
+            'id': id,
+            'clientOrderId': clientOrderId,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'lastTradeTimestamp': undefined,
+            'symbol': market['symbol'],
+            'timeInForce': timeInForce,
+            'postOnly': undefined,
+            'side': side,
+            'price': price,
+            'stopPrice': undefined,
+            'cost': cost,
+            'average': average,
+            'amount': amount,
+            'filled': filled,
+            'remaining': remaining,
+            'status': status,
+            'type': type,
+            'trades': undefined,
+        };
+        return res;
     }
 
     parsePublicTrade (trade) {
@@ -456,462 +890,6 @@ module.exports = class globitex extends Exchange {
             'cost': cost,
             'fee': fee,
         };
-    }
-
-    async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
-        // OR IF ITS FORMATTED
-        // [
-        //     {"date":1393492619000,"price":"575.64","amount":"0.02","tid":"3814483"},
-        //     {"date":1393492619001,"price":"574.30","amount":"0.12","tid":"3814482"},
-        //     {"date":1393492619002,"price":"573.67","amount":"3.80","tid":"3814481"},
-        //     {"date":1393492619003,"price":"571.00","amount":"0.01","tid":"3814479"},
-        //     ...
-        //   ]
-        await this.loadMarkets ();
-        if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' fetchTrades () requires a symbol argument');
-        }
-        const market = this.market (symbol);
-        const request = {
-            'symbol': market['id'],
-            'formatItem': 'object', // safer to parse
-        };
-        const response = await this.publicGetTradesSymbol (this.extend (request, params));
-        const trades = this.safeValue (response, 'trades', []);
-        const result = [];
-        for (let i = 0; i < trades.length; i++) {
-            result[i] = this.parsePublicTrade (trades[i]);
-        }
-        return result;
-    }
-
-    async fetchBalance (params = {}) {
-        // {
-        //     "accounts": [
-        //      {"account":"AFN561A01","main":true,"balance": [
-        //        {"currency":"EUR","available":"100.0","reserved":"0.0"},
-        //        {"currency":"BTC","available":"1.00000002","reserved":"0.0"}
-        //     ]},
-        await this.loadMarkets ();
-        await this.loadAccounts ();
-        const account = await this.getAccountId (params);
-        const response = await this.privateGet1PaymentAccounts (params);
-        const allAccounts = this.safeValue (response, 'accounts', {});
-        let selectedAccount = {};
-        // do not support maps/filter
-        for (let i = 0; i < allAccounts.length; i++) {
-            if (this.safeString (allAccounts[i], 'account') === account) {
-                selectedAccount = allAccounts[i];
-                break;
-            }
-        }
-        const balances = this.safeValue (selectedAccount, 'balance', []);
-        const result = { 'info': response };
-        for (let i = 0; i < balances.length; i++) {
-            const balance = balances[i];
-            const currencyId = this.safeString (balance, 'currency');
-            const code = this.safeCurrencyCode (currencyId);
-            const account = this.account ();
-            const reserved = this.safeFloat (balance, 'reserved');
-            const available = this.safeFloat (balance, 'available');
-            account['total'] = reserved + available;
-            account['free'] = available;
-            account['used'] = reserved;
-            result[code] = account;
-        }
-        return this.parseBalance (result);
-    }
-
-    async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
-        await this.loadMarkets ();
-        await this.loadAccounts ();
-        const market = this.market (symbol);
-        const request = {
-            'account': await this.getAccountId (params),
-            'type': type,
-            'side': side,
-            'symbol': market['id'], // symbol here check this, BTCEUR
-            'quantity': this.amountToPrecision (symbol, amount),
-        };
-        const expireTime = this.safeValue (params, 'expireTime');
-        if (expireTime) {
-            request['expireTime'] = expireTime;
-        }
-        if (!expireTime && type === 'GTD') {
-            throw new InvalidOrder (this.id + ' createOrder method requires a expireTime or expireIn param for a ' + type);
-        }
-        const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
-        if (clientOrderId !== undefined) {
-            request['clientOrderId'] = clientOrderId;
-            params = this.omit (params, [ 'clientOrderId', 'client_oid' ]);
-        }
-        const stopPrice = this.safeFloat2 (params, 'stopPrice', 'stop_price');
-        if (stopPrice !== undefined && (type === 'stop' || type === 'stopLimit')) {
-            request['stopPrice'] = this.priceToPrecision (symbol, stopPrice);
-            params = this.omit (params, [ 'stopPrice', 'stop_price' ]);
-        }
-        const timeInForce = this.safeString2 (params, 'timeInForce', 'time_in_force');
-        if (timeInForce !== undefined) {
-            request['timeInForce'] = timeInForce;
-            params = this.omit (params, [ 'timeInForce', 'time_in_force' ]);
-        }
-        if (type === 'limit') {
-            if (!price) {
-                throw new InvalidOrder (this.id + ' price is required in Limit orders');
-            }
-        }
-        request['price'] = this.priceToPrecision (symbol, price);
-        const response = await this.privatePost1TradingNewOrder (this.extend (request, params));
-        const order = this.safeValue (response, 'ExecutionReport', {});
-        return this.parseExecutedOrder (order, market);
-    }
-
-    async cancelOrder (id, symbol = undefined, params = {}) {
-        if (id === undefined) {
-            throw new ArgumentsRequired (this.id + ' cancelOrder () requires a clientOrderId argument');
-        }
-        await this.loadMarkets ();
-        await this.loadAccounts ();
-        const market = this.market (symbol);
-        const request = {
-            'clientOrder_Id': id,
-            'account': await this.getAccountId (params),
-        };
-        const response = await this.privatePost2TradingCancelOrder (this.extend (request, params));
-        // Normal order structure if everything is sucessfully
-        // OR IF IT FAILS
-        // { "CancelReject": {
-        //     "clientOrderId": "11111112",
-        //     "cancelRequestClientOrderId": "011111112",
-        //     "rejectReasonCode": "orderNotFound",
-        //     "account": "VER564A02"
-        //     }
-        //   }
-        const responseData = this.safeValue (response, 'ExecutionReport', {});
-        if (responseData) {
-            return this.parseExcecutedOrder (responseData, market);
-        }
-        const errorResponse = this.safeValue (response, 'CancelReject');
-        const reason = this.safeString (errorResponse, 'rejectReasonCode');
-        // FAILED TO CANCEL
-        throw new ArgumentsRequired ('Order with id' + id + ' Failed due to:' + reason);
-    }
-
-    async cancelAllOrders (symbol = undefined, params = {}) {
-        await this.loadMarkets ();
-        await this.loadAccounts ();
-        const request = {
-            'account': await this.getAccountId (params),
-        };
-        let market = undefined;
-        if (symbol !== undefined) {
-            market = this.market (symbol);
-            request['symbols'] = market['symbol']; // the request will be more performant if you include it
-        }
-        // if (side !== undefined) {
-        //     request['side'] = side;
-        // }
-        return await this.privatePost1TradingCancelOrders (this.extend (request, params));
-    }
-
-    parseOrder (order, market = undefined) {
-        //     {
-        //      "orderId": "1",
-        //      "orderStatus": "partiallyFilled",
-        //      "lastTimestamp": 1395659434845,
-        //      "orderPrice": "800",
-        //      "orderQuantity": "1.01",
-        //      "avgPrice": "800",
-        //      "quantityLeaves": "0.01", what is this?????
-        //      "type": "limit",
-        //      "timeInForce": "GTC",
-        //      "cumQuantity": "1",
-        //      "clientOrderId": "111111111111111111111111",
-        //      "symbol": "BTCEUR",
-        //      "side": "buy",
-        //      "execQuantity": "0.2",
-        //      "orderSource": "WEB",
-        //      "account": "ADE922A21"
-        //     },
-        const id = this.safeString (order, 'orderId');
-        const side = this.safeString (order, 'side');
-        const status = this.safeString (order, 'orderStatus'); // this.parseOrderStatus (this.safeString (order, 'status'));
-        const marketId = this.safeString (order, 'symbol');
-        market = this.safeMarket (marketId, market);
-        const timestamp = this.safeTimestamp (order, 'lastTimestamp');
-        const clientOrderId = this.safeString (order, 'clientOrderId');
-        const price = this.safeFloat (order, 'orderPrice');
-        const average = this.safeFloat (order, 'avgPrice');
-        const amount = this.safeFloat (order, 'orderQuantity');
-        const filled = this.safeFloat (order, 'execQuantity');
-        const timeInForce = this.safeString (order, 'timeInForce');
-        const remaining = this.safeValue (order, 'quantityLeaves');
-        const cost = filled * average;
-        const res = {
-            'info': order,
-            'id': id,
-            'clientOrderId': clientOrderId,
-            'timestamp': timestamp,
-            'datetime': this.iso8601 (timestamp),
-            'lastTradeTimestamp': undefined,
-            'symbol': market['symbol'],
-            'type': 'limit',
-            'timeInForce': timeInForce,
-            'postOnly': undefined,
-            'side': side,
-            'price': price,
-            'stopPrice': undefined,
-            'cost': cost,
-            'average': average,
-            'amount': amount,
-            'filled': filled,
-            'remaining': remaining,
-            'status': status,
-            'trades': undefined,
-        };
-        return res;
-    }
-
-    parseExecutedOrder (order, market = undefined) {
-        //     {
-        //     "orderId":"58521038",
-        //     "clientOrderId":"fe02900d762ad2458a942ce5d126c7b2",
-        //     "orderStatus":"new",
-        //     "symbol":"BTCEUR",
-        //     "side":"sell",
-        //     "price":"553.08",
-        //     "quantity":"0.00030",
-        //     "type":"limit",
-        //     "timeInForce":"GTC",
-        //     "lastQuantity":"0.00000",
-        //     "lastPrice":"",
-        //     "leavesQuantity":"0.00030",
-        //     "cumQuantity":"0.00000",
-        //     "averagePrice":"0",
-        //     "created":1480067768415,
-        //     "execReportType":"new",
-        //     "timestamp":1480067768415,
-        //     "account":"VER564A02",
-        //     "orderSource": "REST"
-        //     }
-        // }
-        const id = this.safeString (order, 'orderId');
-        const side = this.safeString (order, 'side');
-        const status = this.safeString (order, 'orderStatus'); // this.parseOrderStatus (this.safeString (order, 'status'));
-        const marketId = this.safeString (order, 'symbol');
-        market = this.safeMarket (marketId, market);
-        const timestamp = this.safeTimestamp (order, 'timestamp');
-        const clientOrderId = this.safeString (order, 'clientOrderId');
-        const price = this.safeFloat (order, 'price'); // check price
-        const average = this.safeFloat (order, 'averagePrice');
-        const amount = this.safeFloat (order, 'quantity');
-        const filled = this.safeFloat (order, 'cumQuantity');
-        const type = this.safeValue (order, 'type');
-        const timeInForce = this.safeString (order, 'timeInForce');
-        const remaining = this.safeFloat (order, 'leavesQuantity');
-        const cost = filled * average;
-        const res = {
-            'info': order,
-            'id': id,
-            'clientOrderId': clientOrderId,
-            'timestamp': timestamp,
-            'datetime': this.iso8601 (timestamp),
-            'lastTradeTimestamp': undefined,
-            'symbol': market['symbol'],
-            'timeInForce': timeInForce,
-            'postOnly': undefined,
-            'side': side,
-            'price': price,
-            'stopPrice': undefined,
-            'cost': cost,
-            'average': average,
-            'amount': amount,
-            'filled': filled,
-            'remaining': remaining,
-            'status': status,
-            'type': type,
-            'trades': undefined,
-        };
-        return res;
-    }
-
-    async fetchOrder (id, symbol = undefined, params = {}) {
-        await this.loadMarkets ();
-        await this.loadAccounts ();
-        const clientOrderId = this.safeString2 (params, 'clientOrderId', 'client_oid');
-        if (clientOrderId === undefined) {
-            // client-generated id required not orderId
-            throw new ArgumentsRequired (this.id + ' fetchOrder () requires a client order if argument');
-        }
-        const request = {
-            'clientOrderId': clientOrderId,
-            'account': await this.getAccountId (params),
-        };
-        params = this.omit (params, ['clientOrderId', 'client_oid']);
-        const market = this.market (symbol);
-        const response = await this.privateGet1TradingOrder (this.extend (request, params));
-        const responseData = this.safeValue (response, 'orders', []);
-        const order = this.safeValue (responseData, 0, {});
-        return this.parseOrder (order, market);
-    }
-
-    async withdraw (code, amount, address, tag = undefined, params = {}) {
-        let response = {};
-        this.checkAddress (address);
-        await this.loadMarkets ();
-        const currency = this.currency (code);
-        // Common parameters
-        let request = {
-            'currency': currency['id'],
-            'amount': amount,
-        };
-        request = this.extend (request, params);
-        const requestTime = request['requestTime'];
-        if (!requestTime) {
-            throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
-        }
-        // check if it is fiat tmp
-        if (this.isFiatSymbol (code)) {
-            const bankRequest = await this.getBankTransferRequest (request);
-            response = await this.privatePost1PaymentPayoutBank (bankRequest);
-        } else {
-            // else crypto transfer
-            const cryptoRequest = await this.getCryptoTransferRequest (address, request, params);
-            response = await this.privatePost1PaymentPayoutCrypto (cryptoRequest);
-        }
-        return {
-            'info': response,
-            'id': response['transactionCode'],
-        };
-    }
-
-    async getCryptoTransferRequest (address, request) {
-        request['address'] = address;
-        const account = await this.getAccountId (request);
-        request['account'] = account;
-        const commission = request['commission'];
-        if (!commission) {
-            throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
-        }
-        request['commission'] = commission;
-        // Create messageSigning
-        const message = 'requestTime=' + request['requestTime'] + '&amount=' + request['amount'] + '&currency=' + request['currency'] + '&account=' + request['account'] + '&address=' + request['address'] + '&commission=' + request['commission'];
-        const transactionSignature = this.signMessage (message);
-        request['transactionSignature'] = transactionSignature;
-        return request;
-    }
-
-    async getBankTransferRequest (request) {
-        const accountFrom = await this.getAccountId (request);
-        request['account'] = accountFrom;
-        const paymentType = request['paymentType'];
-        if (!paymentType) {
-            throw new ArgumentsRequired (this.id + ' requires paymentType parameter to withdraw ');
-        }
-        // IBAN ACCOUNT
-        const beneficiaryAccount = request['beneficiaryAccount'];
-        if (!beneficiaryAccount) {
-            throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
-        }
-        const beneficiaryAccountType = request['beneficiaryAccountType'];
-        // IBAN ACCOUNT NAME
-        const beneficiaryName = request['beneficiaryName'];
-        if (!beneficiaryName && beneficiaryAccountType === 'other') {
-            throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw when beneficiaryAccountType is other');
-        }
-        if (paymentType === 'internacional') {
-            const beneficiarySwiftCode = request['beneficiarySwiftCode'];
-            if (!beneficiarySwiftCode) {
-                throw new ArgumentsRequired (this.id + ' requires beneficiarySwiftCode parameter to withdraw for International transfers');
-            }
-        }
-        // both or none
-        const intermediaryAccount = request['intermediaryAccount'];
-        const intermediarySwiftCode = request['intermediarySwiftCode'];
-        if (intermediaryAccount || intermediarySwiftCode) {
-            if (!intermediaryAccount) {
-                throw new ArgumentsRequired (this.id + ' requires intermediaryAccount parameter to withdraw when intermediarySwiftCode exists');
-            }
-            if (!intermediarySwiftCode) {
-                throw new ArgumentsRequired (this.id + ' requires intermediarySwiftCode parameter to withdraw when intermediaryAccount exists');
-            }
-        }
-        // Create messageSigning
-        const message = 'requestTime=' + request['requestTime'] + 'accountFrom=' + request['account'] + '&amount=' + request['ammount'] + '&currency=' + request['currency'] + '&beneficiaryName=' + request['beneficiaryName'] + '&beneficiaryAccount=' + request['beneficiaryAccount'];
-        const transactionSignature = this.signMessage (message);
-        request['transactionSignature'] = transactionSignature;
-        return request;
-    }
-
-    async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets ();
-        let market = undefined;
-        const request = {
-            'account': await this.getAccountId (params),
-        };
-        if (symbol !== undefined) {
-            market = this.market (symbol);
-            request['symbols'] = market['id'];
-        }
-        const maxResults = params['maxResults'];
-        if (!maxResults) {
-            request['maxResults'] = 1000;
-        }
-        const response = await this.privateGet1TradingOrdersRecent (this.extend (request, params));
-        const orders = this.safeValue (response, 'orders', []);
-        return this.parseOrders (orders, market, since, limit);
-    }
-
-    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets ();
-        await this.loadAccounts ();
-        const request = {
-            'account': await this.getAccountId (params),
-        };
-        let market = undefined;
-        if (symbol !== undefined) {
-            market = this.market (symbol);
-            request['symbols'] = market['id'];
-        }
-        const response = await this.privateGet2TradingActive (this.extend (request, params));
-        const orders = this.safeValue (response, 'orders', []);
-        return this.parseOrders (orders, market, since, limit);
-    }
-
-    async fetchClosedOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        const request = {
-            'statuses': 'filled,canceled,expired,suspended',
-        };
-        const orders = await this.fetchOrders (symbol, since, limit, this.extend (request, params));
-        return this.filterBy (orders, 'status', 'closed');
-    }
-
-    async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets ();
-        let market = undefined;
-        const request = {
-            'account': await this.getAccountId (params),
-        };
-        // can be multiple values comma separated, default is all
-        if (symbol !== undefined) {
-            market = this.market (symbol);
-            request['symbols'] = market['id'];
-        }
-        const by = params['by'];
-        if (!by) {
-            request['by'] = 'ts';
-        }
-        const startIndex = params['startIndex'];
-        if (!startIndex) {
-            request['startIndex'] = 0;
-        }
-        const maxResults = params['maxResults'];
-        if (!maxResults) {
-            request['maxResults'] = 1000;
-        }
-        const response = await this.privateGet1TradingTrades (this.extend (request, params));
-        const orders = this.safeValue (response, 'trades', []);
-        return this.parseTrades (orders, market, since, limit);
     }
 
     async getAccountId (params) {
