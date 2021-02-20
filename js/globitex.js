@@ -19,7 +19,7 @@ module.exports = class globitex extends Exchange {
                 'createMarketOrder': false, // not supported
                 'cancelAllOrders': true, // partial rested: request is well formed and mocked response
                 'createOrder': true, // partial rested: request is well formed and mocked response
-                'fetchAccounts': true, // tested
+                'fetchAccounts': 'emulated', // tested
                 'fetchBalance': true, // tested
                 'fetchMarkets': true, // tested
                 'fetchMyTrades': true, // partial tested: (request is well formed and mocked the response
@@ -282,19 +282,13 @@ module.exports = class globitex extends Exchange {
             const currency = response[i];
             const id = this.safeString (currency, 'symbol');
             const code = this.safeCurrencyCode (id);
-            // const name = this.safeString (currency, 'name');
-            // const fee = this.safeFloat (currency, 'withdrawalFee');
-            // const precision = this.safeFloat (currency, 'scale');
             const askPrice = this.safeFloat (currency, 'ask');
             const bidPrice = this.safeFloat (currency, 'bid');
             result[code] = {
                 'id': id,
                 'info': currency,
                 'code': code,
-                //  'name': name,
                 'active': true,
-                // 'fee': fee,
-                // 'precision': precision,
                 'limits': {
                     'amount': {
                         'min': undefined,
@@ -600,12 +594,13 @@ module.exports = class globitex extends Exchange {
         if (!requestTime) {
             throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
         }
-        // check if it is fiat tmp
+        // check if it is fiat
         if (this.isFiatSymbol (code)) {
+            // bank transfer
             const bankRequest = await this.getBankTransferRequest (request);
             response = await this.privatePost1PaymentPayoutBank (bankRequest);
         } else {
-            // else crypto transfer
+            // crypto transfer
             const cryptoRequest = await this.getCryptoTransferRequest (address, request, params);
             response = await this.privatePost1PaymentPayoutCrypto (cryptoRequest);
         }
