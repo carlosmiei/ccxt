@@ -13,7 +13,6 @@ module.exports = class globitex extends Exchange {
             'id': 'globitex',
             'name': 'Globitex',
             'countries': ['fr', 'de', 'pt'], // Europe fill the remaining later
-            'rateLimit': 1000,
             'has': {
                 'cancelOrder': false, // partial rested: request is well formed and mocked response
                 'CORS': false,
@@ -37,7 +36,7 @@ module.exports = class globitex extends Exchange {
                 'fetchTickers': false, // tested
                 'fetchTrades': false, // tested
                 'fetchTime': true, // tested
-                'withdraw': false,
+                'withdraw': false, // partial tested: (request is well formed and mocked the response
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/', // fill the image later
@@ -217,18 +216,17 @@ module.exports = class globitex extends Exchange {
         if (codes === undefined) {
             codes = Object.keys (this.currencies);
         }
-        const amount = ('amount' in params);
+        const amount = params['amount'];
         if (!amount) {
             throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
         }
-        const account = await this.getAccountId (params);
         for (let i = 0; i < codes.length; i++) {
             const code = codes[i];
             const currency = this.currency (code);
             const request = {
                 'currency': currency['id'],
                 'amount': amount,
-                'account': account,
+                'account': await this.getAccountId (params),
             };
             let withdrawResponse = {};
             if (this.isFiatSymbol (code)) {
@@ -354,8 +352,6 @@ module.exports = class globitex extends Exchange {
 
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
-        // tmp teste
-        this.fetchClosedOrders ();
         const market = this.market (symbol);
         const request = {
             'symbol': market['id'],
@@ -754,8 +750,7 @@ module.exports = class globitex extends Exchange {
         params = this.omit (params, ['clientOrderId', 'client_oid']);
         const market = this.market (symbol);
         const response = await this.privateGet1TradingOrder (this.extend (request, params));
-        const mockedResponse = { 'orders': [{ 'orderId': 425817975, 'orderStatus': 'filled', 'lastTimestamp': 1446740176886, 'orderPrice': '729', 'orderQuantity': '10', 'avgPrice': '729', 'quantityLeaves': '0', 'type': 'market', 'timeInForce': 'FOK', 'cumQuantity': '10', 'clientOrderId': 'afe8b9901b0e4914991291a49175a380', 'symbol': 'BTCEUR', 'side': 'sell', 'execQuantity': '10', 'orderSource': 'WEB', 'account': 'ADE922A21' }] };
-        const responseData = this.safeValue (mockedResponse, 'orders', []);
+        const responseData = this.safeValue (response, 'orders', []);
         const order = this.safeValue (responseData, 0, {});
         return this.parseOrder (order, market);
     }
@@ -766,27 +761,23 @@ module.exports = class globitex extends Exchange {
         await this.loadMarkets ();
         const currency = this.currency (code);
         // Common parameters
-        const request = {
+        let request = {
             'currency': currency['id'],
-            'quantity': amount.toFixed (10),
+            'amount': amount,
         };
-        const requestTime = ('requestTime' in params);
+        request = this.extend (request, params);
+        const requestTime = request['requestTime'];
         if (!requestTime) {
             throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
         }
-        request['requestTime'] = requestTime;
-        const myClientTransId = ('clientTransId' in params);
-        if (myClientTransId) {
-            request['clientTransId'] = myClientTransId;
-        }
         // check if it is fiat tmp
         if (this.isFiatSymbol (code)) {
-            const bankRequest = await this.getBankTransferRequest (request, params);
-            response = this.privatePost1PaymentPayoutBank (this.extend (bankRequest, params));
+            const bankRequest = await this.getBankTransferRequest (request);
+            response = await this.privatePost1PaymentPayoutBank (bankRequest);
         } else {
             // else crypto transfer
             const cryptoRequest = await this.getCryptoTransferRequest (address, request, params);
-            response = await this.privatePost1PaymentPayoutCrypto (this.extend (cryptoRequest, params));
+            response = await this.privatePost1PaymentPayoutCrypto (cryptoRequest);
         }
         return {
             'info': response,
@@ -794,23 +785,15 @@ module.exports = class globitex extends Exchange {
         };
     }
 
-    async getCryptoTransferRequest (address, request, params = {}) {
+    async getCryptoTransferRequest (address, request) {
         request['address'] = address;
-        const account = await this.getAccountId (params);
-        // const account = ('account' in params);
-        // if (!account) {
-        //     throw new ArgumentsRequired (this.id + ' requires account parameter to withdraw ');
-        // }
+        const account = await this.getAccountId (request);
         request['account'] = account;
-        const commission = ('commission' in params);
+        const commission = request['commission'];
         if (!commission) {
             throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
         }
         request['commission'] = commission;
-        const feeId = ('feeId' in params);
-        if (feeId) {
-            request['feeId'] = feeId;
-        }
         // Create messageSigning
         const message = 'requestTime=' + request['requestTime'] + '&amount=' + request['amount'] + '&currency=' + request['currency'] + '&account=' + request['account'] + '&address=' + request['address'] + '&commission=' + request['commission'];
         const transactionSignature = this.signMessage (message);
@@ -818,48 +801,33 @@ module.exports = class globitex extends Exchange {
         return request;
     }
 
-    async getBankTransferRequest (request, params = {}) {
-        const accountFrom = await this.getAccountId (params);
-        // const accountFrom = ('account' in params);
-        // if (!accountFrom) {
-        //     throw new ArgumentsRequired (this.id + ' requires accountFrom parameter to withdraw ');
-        // }
+    async getBankTransferRequest (request) {
+        const accountFrom = await this.getAccountId (request);
         request['account'] = accountFrom;
-        const paymentType = ('paymentType' in params);
+        const paymentType = request['paymentType'];
         if (!paymentType) {
             throw new ArgumentsRequired (this.id + ' requires paymentType parameter to withdraw ');
         }
-        request['paymentType'] = paymentType;
         // IBAN ACCOUNT
-        const beneficiaryAccount = ('beneficiaryAccount' in params);
+        const beneficiaryAccount = request['beneficiaryAccount'];
         if (!beneficiaryAccount) {
             throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
         }
-        request['beneficiaryAccount'] = beneficiaryAccount;
-        const beneficiaryAccountType = ('beneficiaryAccountType' in params);
-        if (beneficiaryAccountType) {
-            request['beneficiaryAccountType'] = beneficiaryAccountType;
-        }
+        const beneficiaryAccountType = request['beneficiaryAccountType'];
         // IBAN ACCOUNT NAME
-        const beneficiaryName = ('beneficiaryName' in params);
+        const beneficiaryName = request['beneficiaryName'];
         if (!beneficiaryName && beneficiaryAccountType === 'other') {
             throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw when beneficiaryAccountType is other');
         }
-        request['beneficiaryName'] = beneficiaryName;
         if (paymentType === 'internacional') {
-            const beneficiarySwiftCode = ('beneficiarySwiftCode' in params);
+            const beneficiarySwiftCode = request['beneficiarySwiftCode'];
             if (!beneficiarySwiftCode) {
                 throw new ArgumentsRequired (this.id + ' requires beneficiarySwiftCode parameter to withdraw for International transfers');
             }
-            request['beneficiarySwiftCode'] = beneficiarySwiftCode;
-        }
-        const commissionSource = ('commissionSource' in params);
-        if (commissionSource) {
-            request['commissionSource'] = commissionSource;
         }
         // both or none
-        const intermediaryAccount = ('intermediaryAccount' in params);
-        const intermediarySwiftCode = ('intermediarySwiftCode' in params);
+        const intermediaryAccount = request['intermediaryAccount'];
+        const intermediarySwiftCode = request['intermediarySwiftCode'];
         if (intermediaryAccount || intermediarySwiftCode) {
             if (!intermediaryAccount) {
                 throw new ArgumentsRequired (this.id + ' requires intermediaryAccount parameter to withdraw when intermediarySwiftCode exists');
@@ -867,8 +835,6 @@ module.exports = class globitex extends Exchange {
             if (!intermediarySwiftCode) {
                 throw new ArgumentsRequired (this.id + ' requires intermediarySwiftCode parameter to withdraw when intermediaryAccount exists');
             }
-            request['intermediaryAccount'] = intermediaryAccount;
-            request['intermediarySwiftCode'] = intermediarySwiftCode;
         }
         // Create messageSigning
         const message = 'requestTime=' + request['requestTime'] + 'accountFrom=' + request['account'] + '&amount=' + request['ammount'] + '&currency=' + request['currency'] + '&beneficiaryName=' + request['beneficiaryName'] + '&beneficiaryAccount=' + request['beneficiaryAccount'];
@@ -887,7 +853,7 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        const maxResults = ('maxResults' in params);
+        const maxResults = params['maxResults'];
         if (!maxResults) {
             request['maxResults'] = 1000;
         }
@@ -931,28 +897,25 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        let by = ('by' in params);
+        const by = params['by'];
         if (!by) {
-            by = 'ts';
+            request['by'] = 'ts';
         }
-        request['by'] = by;
-        let startIndex = ('startIndex' in params);
+        const startIndex = params['startIndex'];
         if (!startIndex) {
-            startIndex = 0;
+            request['startIndex'] = 0;
         }
-        request['startIndex'] = startIndex;
-        let maxResults = ('maxResults' in params);
+        const maxResults = params['maxResults'];
         if (!maxResults) {
-            maxResults = 1000;
+            request['maxResults'] = 1000;
         }
-        request['maxResults'] = maxResults;
         const response = await this.privateGet1TradingTrades (this.extend (request, params));
         const orders = this.safeValue (response, 'trades', []);
         return this.parseTrades (orders, market, since, limit);
     }
 
     async getAccountId (params) {
-        const requestAccount = ('account' in params);
+        const requestAccount = params['account'];
         if (requestAccount) {
             return requestAccount;
         }
