@@ -15,12 +15,12 @@ module.exports = class globitex extends Exchange {
             'countries': ['fr', 'de', 'pt'], // Europe fill the remaining later
             'rateLimit': 1000,
             'has': {
-                'cancelOrder': false,
+                'cancelOrder': false, // partial rested: request is well formed and mocked response
                 'CORS': false,
                 'createMarketOrder': false,
-                'cancelAllOrders': false,
-                'createOrder': true,
-                'fetchAccounts': false, // tested
+                'cancelAllOrders': false, // partial rested: request is well formed and mocked response
+                'createOrder': true, // partial rested: request is well formed and mocked response
+                'fetchAccounts': true, // tested
                 'fetchBalance': false, // tested
                 'fetchMarkets': false, // tested
                 'fetchMyTrades': false, // partial tested: (request is well formed and mocked the response
@@ -33,10 +33,10 @@ module.exports = class globitex extends Exchange {
                 'fetchFundingFees': false, // partial tested request is well formed but No permissions
                 'fetchTradingFees': false,
                 'fetchOrders': false,
-                'fetchTicker': false, // tested
+                'fetchTicker': true, // tested
                 'fetchTickers': false, // tested
                 'fetchTrades': false, // tested
-                'fetchTime': false, // tested
+                'fetchTime': true, // tested
                 'withdraw': false,
             },
             'urls': {
@@ -564,14 +564,12 @@ module.exports = class globitex extends Exchange {
             }
         }
         request['price'] = this.priceToPrecision (symbol, price);
-        const response = await this.privatePostTradingNewOrder (this.extend (request, params));
-        return this.parseOrder (response, market);
+        const response = await this.privatePost1TradingNewOrder (this.extend (request, params));
+        const order = this.safeValue (response, 'ExecutionReport', {});
+        return this.parseExecutedOrder (order, market);
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
-        if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' cancelOrder () requires a symbol argument');
-        }
         if (id === undefined) {
             throw new ArgumentsRequired (this.id + ' cancelOrder () requires a clientOrderId argument');
         }
@@ -582,7 +580,7 @@ module.exports = class globitex extends Exchange {
             'clientOrder_Id': id,
             'account': await this.getAccountId (params),
         };
-        const response = await this.privatePost1TradingCancelOrder (this.extend (request, params));
+        const response = await this.privatePost2TradingCancelOrder (this.extend (request, params));
         // Normal order structure if everything is sucessfully
         // OR IF IT FAILS
         // { "CancelReject": {
@@ -594,8 +592,7 @@ module.exports = class globitex extends Exchange {
         //   }
         const responseData = this.safeValue (response, 'ExecutionReport', {});
         if (responseData) {
-            const order = this.safeValue (responseData, 'order', {});
-            return this.parseOrder (order, market);
+            return this.parseExcecutedOrder (responseData, market);
         }
         const errorResponse = this.safeValue (response, 'CancelReject');
         const reason = this.safeString (errorResponse, 'rejectReasonCode');
@@ -659,7 +656,7 @@ module.exports = class globitex extends Exchange {
         //     'side': side,
         //     'order': id,
         // });
-        return {
+        const res = {
             'info': order,
             'id': id,
             'clientOrderId': clientOrderId,
@@ -681,6 +678,70 @@ module.exports = class globitex extends Exchange {
             'status': status,
             'trades': undefined,
         };
+        return res;
+    }
+
+    parseExecutedOrder (order, market = undefined) {
+        //     {
+        //     "orderId":"58521038",
+        //     "clientOrderId":"fe02900d762ad2458a942ce5d126c7b2",
+        //     "orderStatus":"new",
+        //     "symbol":"BTCEUR",
+        //     "side":"sell",
+        //     "price":"553.08",
+        //     "quantity":"0.00030",
+        //     "type":"limit",
+        //     "timeInForce":"GTC",
+        //     "lastQuantity":"0.00000",
+        //     "lastPrice":"",
+        //     "leavesQuantity":"0.00030",
+        //     "cumQuantity":"0.00000",
+        //     "averagePrice":"0",
+        //     "created":1480067768415,
+        //     "execReportType":"new",
+        //     "timestamp":1480067768415,
+        //     "account":"VER564A02",
+        //     "orderSource": "REST"
+        //     }
+        // }
+        const id = this.safeString (order, 'orderId');
+        const side = this.safeString (order, 'side');
+        const status = this.safeString (order, 'orderStatus'); // this.parseOrderStatus (this.safeString (order, 'status'));
+        const marketId = this.safeString (order, 'symbol');
+        market = this.safeMarket (marketId, market);
+        const timestamp = this.safeTimestamp (order, 'timestamp');
+        const clientOrderId = this.safeString (order, 'clientOrderId');
+        const price = this.safeFloat (order, 'price'); // check price
+        const average = this.safeFloat (order, 'averagePrice');
+        const amount = this.safeFloat (order, 'quantity');
+        const filled = this.safeFloat (order, 'cumQuantity');
+        const type = this.safeValue (order, 'type');
+        const timeInForce = this.safeString (order, 'timeInForce');
+        const remaining = this.safeFloat (order, 'leavesQuantity');
+        const cost = filled * average;
+        const res = {
+            'info': order,
+            'id': id,
+            'clientOrderId': clientOrderId,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'lastTradeTimestamp': undefined,
+            'symbol': market['symbol'],
+            'timeInForce': timeInForce,
+            'postOnly': undefined,
+            'side': side,
+            'price': price,
+            'stopPrice': undefined,
+            'cost': cost,
+            'average': average,
+            'amount': amount,
+            'filled': filled,
+            'remaining': remaining,
+            'status': status,
+            'type': type,
+            'trades': undefined,
+        };
+        return res;
     }
 
     async fetchOrder (id, symbol = undefined, params = {}) {
