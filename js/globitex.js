@@ -218,7 +218,7 @@ module.exports = class globitex extends Exchange {
         }
         const amount = params['amount'];
         if (!amount) {
-            throw new ArgumentsRequired (this.id + ' requires amount parameter to withdraw ');
+            throw new ArgumentsRequired (this.id + ' requires amount parameter to fetchFundingFees');
         }
         for (let i = 0; i < codes.length; i++) {
             const code = codes[i];
