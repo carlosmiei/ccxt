@@ -29,14 +29,14 @@ module.exports = class globitex extends Exchange {
                 'fetchOrderBook': true, // tested
                 'fetchOrderBooks': false, // not possible
                 'fetchClosedOrders': 'emulated', // partial tested: (request is well formed and mocked the response
-                'fetchFundingFees': true, // partial tested request is well formed but No permissions
+                'fetchFundingFees': true, // If true fails the text bc the test don't pass amount-> partial tested request is well formed but No permissions
                 'fetchTradingFees': false, // notSupported
                 'fetchOrders': true, // partial tested: (request is well formed and mocked the response
                 'fetchTicker': true, // tested
                 'fetchTickers': true, // tested
                 'fetchTrades': true, // tested
                 'fetchTime': true, // tested
-                'withdraw': true, // partial tested: (request is well formed and mocked the response
+                'withdraw': true, // If true fails the text bc the test don't pass amount -> partial tested: (request is well formed and mocked the response
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/', // fill the image later
@@ -63,7 +63,7 @@ module.exports = class globitex extends Exchange {
                 },
                 'private': {
                     'get': [
-                        '2/trading/active',
+                        '2/trading/orders/active',
                         '1/trading/recent',
                         '1/trading/orders/recent',
                         '1/trading/order',
@@ -346,7 +346,6 @@ module.exports = class globitex extends Exchange {
 
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
-        this.createOrder ();
         const market = this.market (symbol);
         const request = {
             'symbol': market['id'],
@@ -377,7 +376,7 @@ module.exports = class globitex extends Exchange {
         const trades = this.safeValue (response, 'trades', []);
         const result = [];
         for (let i = 0; i < trades.length; i++) {
-            result[i] = this.parsePublicTrade (trades[i]);
+            result[i] = this.parsePublicTrade (trades[i], symbol);
         }
         return result;
     }
@@ -538,7 +537,7 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        const response = await this.privateGet2TradingActive (this.extend (request, params));
+        const response = await this.privateGet2TradingOrdersActive (this.extend (request, params));
         const orders = this.safeValue (response, 'orders', []);
         return this.parseOrders (orders, market, since, limit);
     }
@@ -789,15 +788,6 @@ module.exports = class globitex extends Exchange {
         return res;
     }
 
-    parsePublicTrade (trade) {
-        return {
-            'id': this.safeValue (trade, 'tid'),
-            'price': this.parseFloat (trade, 'price'),
-            'amount': this.parseFloat (trade, 'amount'),
-            'timestamp': this.safeValue (trade, 'date'),
-        };
-    }
-
     parseTicker (ticker, market = undefined) {
         let symbol = undefined;
         if (market) {
@@ -826,6 +816,34 @@ module.exports = class globitex extends Exchange {
             'baseVolume': this.safeFloat (ticker, 'volume'),
             'quoteVolume': undefined,
             'info': ticker,
+        };
+    }
+
+    parsePublicTrade (trade, symbol = undefined) {
+        const timestamp = this.safeValue (trade, 'timestamp');
+        const amount = this.safeFloat (trade, 'amount');
+        const price = this.safeFloat (trade, 'price');
+        const side = this.safeString (trade, 'side');
+        let cost = undefined;
+        if (price !== undefined) {
+            if (amount !== undefined) {
+                cost = price * amount;
+            }
+        }
+        return {
+            'id': this.safeValue (trade, 'tid'),
+            'price': price,
+            'amount': amount,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'info': trade,
+            'side': side,
+            'cost': cost,
+            'fee': undefined,
+            'takerOrMaker': undefined,
+            'order': undefined,
+            'symbol': symbol,
+            'type': undefined,
         };
     }
 
@@ -876,7 +894,7 @@ module.exports = class globitex extends Exchange {
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'symbol': symbol,
-            'order': originalOrderId, // verificar se este id estºa correto
+            'order': originalOrderId,
             'type': type,
             'side': side,
             'takerOrMaker': undefined,
