@@ -942,7 +942,7 @@ module.exports = class globitex extends Exchange {
         }
         if (api === 'private') {
             this.checkRequiredCredentials ();
-            const nonce = this.nonce ();
+            const nonce = this.nonce ().toString ();
             const message = this.apiKey + '&' + nonce + privateUrl + request;
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
