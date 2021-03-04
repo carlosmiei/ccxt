@@ -216,7 +216,7 @@ module.exports = class globitex extends Exchange {
         if (codes === undefined) {
             codes = Object.keys (this.currencies);
         }
-        const amount = params['amount'];
+        const amount = this.safeValue (params, 'amount');
         if (!amount) {
             throw new ArgumentsRequired (this.id + ' requires amount parameter to fetchFundingFees');
         }
@@ -242,11 +242,11 @@ module.exports = class globitex extends Exchange {
             } else {
                 withdrawResponse = await this.privateGet1PaymentPayoutFeeCrypto (request);
                 withdrawFees[code] = {
-                    'recomended': parseFloat (withdrawResponse['recomended']),
-                    'minimum': parseFloat (withdrawResponse['minimum']),
-                    'maximum': parseFloat (withdrawResponse['maxmimum']),
-                    'feeExpireTime': (withdrawResponse['feeExpireTime']),
-                    'feeId': withdrawResponse['feeId'],
+                    'recomended': parseFloat (this.safeValue (withdrawResponse, 'recomended')),
+                    'minimum': parseFloat (this.safeValue (withdrawResponse, 'minimum')),
+                    'maximum': parseFloat (this.safeValue (withdrawResponse, 'maxmimum')),
+                    'feeExpireTime': (this.safeValue (withdrawResponse, 'feeExpireTime')),
+                    'feeId': this.safeValue (withdrawResponse, 'feeId'),
                 };
             }
             info[code] = {
@@ -517,7 +517,7 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        const maxResults = params['maxResults'];
+        const maxResults = this.safeValue (params, 'maxResults');
         if (!maxResults) {
             request['maxResults'] = 1000;
         }
@@ -561,15 +561,15 @@ module.exports = class globitex extends Exchange {
             market = this.market (symbol);
             request['symbols'] = market['id'];
         }
-        const by = params['by'];
+        const by = this.safeValue (params, 'by');
         if (!by) {
             request['by'] = 'ts';
         }
-        const startIndex = params['startIndex'];
+        const startIndex = this.safeValue (params, 'startIndex');
         if (!startIndex) {
             request['startIndex'] = 0;
         }
-        const maxResults = params['maxResults'];
+        const maxResults = this.safeValue (params, 'maxResults');
         if (!maxResults) {
             request['maxResults'] = 1000;
         }
@@ -589,7 +589,7 @@ module.exports = class globitex extends Exchange {
             'amount': amount.toString (),
         };
         request = this.extend (request, params);
-        const requestTime = request['requestTime'];
+        const requestTime = this.safeValue (request, 'requestTime');
         if (!requestTime) {
             throw new ArgumentsRequired (this.id + ' requires requestTime parameter to withdraw ');
         }
@@ -605,7 +605,7 @@ module.exports = class globitex extends Exchange {
         }
         return {
             'info': response,
-            'id': response['transactionCode'],
+            'id': this.safeValue (response, 'transactionCode'),
         };
     }
 
@@ -613,13 +613,13 @@ module.exports = class globitex extends Exchange {
         request['address'] = address;
         const account = await this.getAccountId (request);
         request['account'] = account;
-        const commission = request['commission'];
+        const commission = this.safeValue (request, 'commission');
         if (!commission) {
             throw new ArgumentsRequired (this.id + ' requires commission parameter to withdraw ');
         }
         request['commission'] = commission;
         // Create messageSigning
-        const message = 'requestTime=' + request['requestTime'] + '&amount=' + request['amount'] + '&currency=' + request['currency'] + '&account=' + request['account'] + '&address=' + request['address'] + '&commission=' + request['commission'];
+        const message = 'requestTime=' + this.safeValue (request, 'requestTime') + '&amount=' + this.safeValue (request, 'amount') + '&currency=' + this.safeValue (request, 'currency') + '&account=' + this.safeValue (request, 'account') + '&address=' + this.safeValue (request, 'address') + '&commission=' + this.safeValue (request, 'commission');
         const transactionSignature = this.signMessage (message);
         request['transactionSignature'] = transactionSignature;
         return request;
@@ -628,30 +628,30 @@ module.exports = class globitex extends Exchange {
     async getBankTransferRequest (request) {
         const accountFrom = await this.getAccountId (request);
         request['account'] = accountFrom;
-        const paymentType = request['paymentType'];
+        const paymentType = this.safeValue (request, 'paymentType');
         if (!paymentType) {
             throw new ArgumentsRequired (this.id + ' requires paymentType parameter to withdraw ');
         }
         // IBAN ACCOUNT
-        const beneficiaryAccount = request['beneficiaryAccount'];
+        const beneficiaryAccount = this.safeValue (request, 'beneficiaryAccount');
         if (!beneficiaryAccount) {
             throw new ArgumentsRequired (this.id + ' requires beneficiaryAccount parameter to withdraw ');
         }
-        const beneficiaryAccountType = request['beneficiaryAccountType'];
+        const beneficiaryAccountType = this.safeValue (request, 'beneficiaryAccountType');
         // IBAN ACCOUNT NAME
-        const beneficiaryName = request['beneficiaryName'];
+        const beneficiaryName = this.safeValue (request, 'beneficiaryName');
         if (!beneficiaryName && beneficiaryAccountType === 'other') {
             throw new ArgumentsRequired (this.id + ' requires beneficiaryName parameter to withdraw when beneficiaryAccountType is other');
         }
         if (paymentType === 'internacional') {
-            const beneficiarySwiftCode = request['beneficiarySwiftCode'];
+            const beneficiarySwiftCode = this.safeValue (request, 'beneficiarySwiftCode');
             if (!beneficiarySwiftCode) {
                 throw new ArgumentsRequired (this.id + ' requires beneficiarySwiftCode parameter to withdraw for International transfers');
             }
         }
         // both or none
-        const intermediaryAccount = request['intermediaryAccount'];
-        const intermediarySwiftCode = request['intermediarySwiftCode'];
+        const intermediaryAccount = this.safeValue (request, 'intermediaryAccount');
+        const intermediarySwiftCode = this.safeValue (request, 'intermediarySwiftCode');
         if (intermediaryAccount || intermediarySwiftCode) {
             if (!intermediaryAccount) {
                 throw new ArgumentsRequired (this.id + ' requires intermediaryAccount parameter to withdraw when intermediarySwiftCode exists');
@@ -661,7 +661,7 @@ module.exports = class globitex extends Exchange {
             }
         }
         // Create messageSigning
-        const message = 'requestTime=' + request['requestTime'] + 'accountFrom=' + request['account'] + '&amount=' + request['ammount'] + '&currency=' + request['currency'] + '&beneficiaryName=' + request['beneficiaryName'] + '&beneficiaryAccount=' + request['beneficiaryAccount'];
+        const message = 'requestTime=' + this.safeValue (request, 'requestTime') + 'accountFrom=' + this.safeValue (request, 'account') + '&amount=' + this.safeValue (request, 'ammount') + '&currency=' + this.safeValue (request, 'currency') + '&beneficiaryName=' + this.safeValue (request, 'beneficiaryName') + '&beneficiaryAccount=' + this.safeValue (request, 'beneficiaryAccount');
         const transactionSignature = this.signMessage (message);
         request['transactionSignature'] = transactionSignature;
         return request;
@@ -906,7 +906,7 @@ module.exports = class globitex extends Exchange {
     }
 
     async getAccountId (params) {
-        const requestAccount = params['account'];
+        const requestAccount = this.safeValue (params, 'account');
         if (requestAccount) {
             return requestAccount;
         }
