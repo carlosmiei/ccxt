@@ -17,26 +17,26 @@ module.exports = class globitex extends Exchange {
                 'cancelOrder': false, // partial rested: request is well formed and mocked response
                 'CORS': false,
                 'createMarketOrder': false, // not supported
-                'cancelAllOrders': true, // partial rested: request is well formed and mocked response
-                'createOrder': true, // partial rested: request is well formed and mocked response
+                'cancelAllOrders': false, // partial rested: request is well formed and mocked response
+                'createOrder': false, // partial rested: request is well formed and mocked response
                 'fetchAccounts': 'emulated', // tested
                 'fetchBalance': true, // tested
-                'fetchMarkets': true, // tested
-                'fetchMyTrades': true, // partial tested: (request is well formed and mocked the response
+                'fetchMarkets': false, // tested
+                'fetchMyTrades': false, // partial tested: (request is well formed and mocked the response
                 'fetchOHLCV': false, // not Supported
                 'fetchOpenOrders': true, // partial tested: (request is well formed and mocked the response
-                'fetchOrder': true, // partial tested: (request is well formed and mocked the response
-                'fetchOrderBook': true, // tested
+                'fetchOrder': false, // partial tested: (request is well formed and mocked the response
+                'fetchOrderBook': false, // tested
                 'fetchOrderBooks': false, // not possible
                 'fetchClosedOrders': 'emulated', // partial tested: (request is well formed and mocked the response
-                'fetchFundingFees': true, // If true fails the text bc the test don't pass amount-> partial tested request is well formed but No permissions
+                'fetchFundingFees': false, // If true fails the text bc the test don't pass amount-> partial tested request is well formed but No permissions
                 'fetchTradingFees': false, // notSupported
-                'fetchOrders': true, // partial tested: (request is well formed and mocked the response
-                'fetchTicker': true, // tested
-                'fetchTickers': true, // tested
-                'fetchTrades': true, // tested
-                'fetchTime': true, // tested
-                'withdraw': true, // If true fails the text bc the test don't pass amount -> partial tested: (request is well formed and mocked the response
+                'fetchOrders': false, // partial tested: (request is well formed and mocked the response
+                'fetchTicker': false, // tested
+                'fetchTickers': false, // tested
+                'fetchTrades': false, // tested
+                'fetchTime': false, // tested
+                'withdraw': false, // If true fails the text bc the test don't pass amount -> partial tested: (request is well formed and mocked the response
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/', // fill the image later
@@ -186,7 +186,8 @@ module.exports = class globitex extends Exchange {
             const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
             const sizeMin = this.safeFloat (market, 'sizeMin');
-            const precision = this.safeFloat (market, 'sizeIncrement'); // Not sure if sizeIncrement or priceIncrement
+            const precision = this.safeFloat (market, 'sizeIncrement');
+            const priceIncrement = this.safeFloat (market, 'priceIncrement');
             result.push ({
                 'id': id,
                 'info': market,
@@ -201,6 +202,10 @@ module.exports = class globitex extends Exchange {
                 'limits': {
                     'amount': {
                         'min': sizeMin,
+                        'max': undefined,
+                    },
+                    'price': {
+                        'min': priceIncrement,
                         'max': undefined,
                     },
                 },
