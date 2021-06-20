@@ -26,7 +26,7 @@ module.exports = class globitex extends Exchange {
                 'fetchOHLCV': false, // not Supported
                 'fetchOpenOrders': true, // partial tested: (request is well formed and mocked the response
                 'fetchOrder': false, // partial tested: (request is well formed and mocked the response
-                'fetchOrderBook': false, // tested
+                'fetchOrderBook': true, // tested
                 'fetchOrderBooks': false, // not possible
                 'fetchClosedOrders': 'emulated', // partial tested: (request is well formed and mocked the response
                 'fetchFundingFees': false, // If true fails the text bc the test don't pass amount-> partial tested request is well formed but No permissions
@@ -331,7 +331,7 @@ module.exports = class globitex extends Exchange {
             'symbol': market['id'],
         };
         const response = await this.publicGetOrderbookSymbol (this.extend (request, params));
-        const final = this.parseOrderBook (response, undefined, 'bids', 'asks');
+        const final = this.parseOrderBook (response, symbol, undefined, 'bids', 'asks');
         return final;
     }
 
