@@ -632,7 +632,7 @@ class Transpiler {
         return 'class ' + className + '(' + baseClass + '):'
     }
 
-    createPythonHeader () {
+    createCommonHeaderPython () {
         return [
             pythonCodingUtf8,
             "",
@@ -762,7 +762,7 @@ class Transpiler {
 
     createPythonCommonFile(className, body, async = false) {
 
-        let header = this.createPythonHeader ()
+        let header = this.createCommonHeaderPython ()
 
         let pythonFile = body.join ('\n')
 
@@ -845,7 +845,7 @@ class Transpiler {
         return 'trait ' + className + ' {'
     }
 
-    createPHPClassHeader (className, baseClass, bodyAsString, namespace) {
+    createCommonHeaderPhp (className, baseClass, bodyAsString, namespace) {
         return [
             "<?php",
             "",
@@ -862,7 +862,7 @@ class Transpiler {
 
         let bodyAsString = body.join ("\n")
 
-        let header = this.createPHPClassHeader (className, baseClass, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
+        let header = this.createCommonHeaderPhp (className, baseClass, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
 
         const {
             errorImports,
@@ -919,7 +919,7 @@ class Transpiler {
 
         let bodyAsString = body.join ("\n")
 
-        let header = this.createPHPClassHeader (className, undefined, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
+        let header = this.createCommonHeaderPhp (className, undefined, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
 
         const {
             errorImports,
@@ -1143,6 +1143,10 @@ class Transpiler {
         return contents.match (/^module\.exports\s*=\s*class\s+([\S]+)\s+extends\s+([\S]+)\s+{([\s\S]+?)^};*/m)
     }
 
+    getPlainClassDeclarationMatches (contents) {
+        return contents.match (/^module\.exports\s*=\s*class\s+([\S]+)\s+{([\s\S]+?)^};*/m)
+    }
+
     // ------------------------------------------------------------------------
 
     transpileDerivedExchangeClass (contents) {
@@ -1321,7 +1325,8 @@ class Transpiler {
             [ /module\.exports = {[^\}]+};\n*/gm, '' ],
         ])
 
-        let methods = contents.trim ().split (/\n\s*\n/)
+        const [ _, className_, methodMatches ] = this.getPlainClassDeclarationMatches (contents)
+        const methods = methodMatches.trim ().split (/\n\s*\n/)
        
         const {
             python2,
@@ -1329,7 +1334,7 @@ class Transpiler {
             php,
             phpAsync,
             methodNames
-        } = this.transpileMethodsToAllLanguages(className, methods, true, true)
+        } = this.transpileMethodsToAllLanguages(className, methods, true, false)
 
         log.cyan ('Transpiling common Exchange methods')
 
@@ -1366,10 +1371,9 @@ class Transpiler {
 
         for (let i = 0; i < methods.length; i++) {
             // parse the method signature
-            let part = methods[i].trim ()
+            let part = methods[i]//.trim ()
             let lines = part.split ("\n")
             let signature = lines[0].trim ()
-            signature = signature.replace('function ', '')
             let methodSignatureRegex = /(async |)([\S]+)\s\(([^)]*)\)\s*{/ // signature line
             let matches = methodSignatureRegex.exec (signature)
 
@@ -1379,7 +1383,7 @@ class Transpiler {
             }
 
             // async or not
-            let keyword = matches[1]
+            let asyncKeyword = matches[1]
 
             // method name
             let method = matches[2]
@@ -1427,14 +1431,11 @@ class Transpiler {
 
             // compile signature + body for Python async
             python3.push ('');
-            python3.push (identation + keyword + pythonString);
+            python3.push (identation + asyncKeyword + pythonString);
             python3.push (python3Body);
 
             // compile signature + body for PHP
             if (phpIdentBody) {
-                // while transpiling exchange common methos
-                // we need to add identation because they were 
-                // not inside a class
                 const bodyIdent = '    '
                 const phpParts = phpBody.split ('\n')
                 const phpIdented = phpParts.map(line => bodyIdent + line)
