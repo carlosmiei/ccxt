@@ -9,6 +9,8 @@ const commonExchangeFunctions = {};
 const commonExchangeClassInstance = new commonExchangeClass();
 Object.getOwnPropertyNames(commonExchangeClass.prototype).forEach(m=> commonExchangeFunctions[m] = commonExchangeClassInstance[m]);
 
+const combinedFunctions = Object.assign(commonExchangeFunctions, functions);
+
 const {
     isNode
     , keys
@@ -244,8 +246,7 @@ module.exports = class Exchange {
     } // describe ()
 
     constructor (userConfig = {}) {
-        Object.assign (this, functions)
-        Object.assign (this, commonExchangeFunctions)
+        Object.assign (this, combinedFunctions)
         // if (isNode) {
         //     this.nodeVersion = process.version.match (/\d+\.\d+\.\d+/)[0]
         //     this.userAgent = {
