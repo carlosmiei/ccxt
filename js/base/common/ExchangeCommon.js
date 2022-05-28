@@ -2,7 +2,7 @@
 
 // This file contains all methods part of the Exchange instance that do not have an
 // exchange-specific implementation, thus can be transpiled to the other languages. Since they are part
-// of the Exchange instance (at runtime), they can make use of the 'this' and access everything that is 
+// of the Exchange instance (at runtime), they can make use of the 'this' and access everything that is
 // defined in the Exchange class (options, methods, etc).
 
 const { ArgumentsRequired, BadSymbol, NotSupported, NullResponse, InvalidOrder, ExchangeError } = require ('../errors');
@@ -286,4 +286,4 @@ module.exports = class ExchangeCommon {
         const symbol = this.safeString (market, 'symbol');
         return this.filterBySymbolSinceLimit (sorted, symbol, since, limit);
     }
-}
+};
