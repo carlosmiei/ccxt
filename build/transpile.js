@@ -841,6 +841,10 @@ class Transpiler {
         return 'class ' + className + ' extends ' + baseClass + ' {'
     }
 
+    createPHPTraitDeclaration (className) {
+        return 'trait ' + className + ' {'
+    }
+
     createPHPClassHeader (className, baseClass, bodyAsString, namespace) {
         return [
             "<?php",
@@ -934,7 +938,7 @@ class Transpiler {
                 })
         }
 
-        header.push ("\n" + 'trait ' + className + ' {')
+        header.push ("\n" + this.createPHPTraitDeclaration (className))
 
         const footer = [
             "}\n",
