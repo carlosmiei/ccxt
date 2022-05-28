@@ -911,7 +911,7 @@ class Transpiler {
         }
     }
 
-    createCommonExchangeFileForPhp (className, body, methods, async = false) {
+    createPHPTrait (className, body, methods, async = false) {
 
         let bodyAsString = body.join ("\n")
 
@@ -1341,8 +1341,8 @@ class Transpiler {
 
         const python2File = this.createPythonCommonFile (className, python2, false)
         const python3File = this.createPythonCommonFile (className, python3, true)
-        const phpFile = this.createCommonExchangeFileForPhp (extensionLessFilename, php, methodNames)
-        const phpAsyncFile = this.createCommonExchangeFileForPhp (extensionLessFilename, phpAsync, methodNames, true)
+        const phpFile = this.createPHPTrait (extensionLessFilename, php, methodNames)
+        const phpAsyncFile = this.createPHPTrait (extensionLessFilename, phpAsync, methodNames, true)
 
         ;[
             [ python2FolderBase, pythonFilename, python2File ],
