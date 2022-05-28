@@ -632,7 +632,7 @@ class Transpiler {
         return 'class ' + className + '(' + baseClass + '):'
     }
 
-    createCommonHeaderPython () {
+    createPythonHeader () {
         return [
             pythonCodingUtf8,
             "",
@@ -760,9 +760,9 @@ class Transpiler {
         }
     }
 
-    createCommonExchangeFileForPython(className, body, async = false) {
+    createPythonCommonFile(className, body, async = false) {
 
-        let header = this.createCommonHeaderPython ()
+        let header = this.createPythonHeader ()
 
         let pythonFile = body.join ('\n')
 
@@ -1339,8 +1339,8 @@ class Transpiler {
         const pythonFilename = snakeFilename + '.py'
         const phpFilename = extensionLessFilename + '.php'
 
-        const python2File = this.createCommonExchangeFileForPython (className, python2, false)
-        const python3File = this.createCommonExchangeFileForPython (className, python3, true)
+        const python2File = this.createPythonCommonFile (className, python2, false)
+        const python3File = this.createPythonCommonFile (className, python3, true)
         const phpFile = this.createCommonExchangeFileForPhp (extensionLessFilename, php, methodNames)
         const phpAsyncFile = this.createCommonExchangeFileForPhp (extensionLessFilename, phpAsync, methodNames, true)
 
