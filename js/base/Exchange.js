@@ -245,7 +245,7 @@ module.exports = class Exchange {
         const commonFuncs = {};
         const commonExchangeClassInstance = new commonExchangeClass();
         Object.getOwnPropertyNames(commonExchangeClass.prototype).forEach(m=> commonFuncs[m] = commonExchangeClassInstance[m]);
-        Object.assign (this, funcs)
+        Object.assign (this, commonFuncs)
         // if (isNode) {
         //     this.nodeVersion = process.version.match (/\d+\.\d+\.\d+/)[0]
         //     this.userAgent = {
