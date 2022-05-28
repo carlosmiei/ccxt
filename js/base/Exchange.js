@@ -5,6 +5,9 @@
 const functions = require ('./functions')
 
 const commonExchangeClass = require('./common/ExchangeCommon')
+const commonExchangeFunctions = {};
+const commonExchangeClassInstance = new commonExchangeClass();
+Object.getOwnPropertyNames(commonExchangeClass.prototype).forEach(m=> commonExchangeFunctions[m] = commonExchangeClassInstance[m]);
 
 const {
     isNode
@@ -242,10 +245,7 @@ module.exports = class Exchange {
 
     constructor (userConfig = {}) {
         Object.assign (this, functions)
-        const commonFuncs = {};
-        const commonExchangeClassInstance = new commonExchangeClass();
-        Object.getOwnPropertyNames(commonExchangeClass.prototype).forEach(m=> commonFuncs[m] = commonExchangeClassInstance[m]);
-        Object.assign (this, commonFuncs)
+        Object.assign (this, commonExchangeFunctions)
         // if (isNode) {
         //     this.nodeVersion = process.version.match (/\d+\.\d+\.\d+/)[0]
         //     this.userAgent = {

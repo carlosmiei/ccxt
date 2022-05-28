@@ -760,7 +760,7 @@ class Transpiler {
         }
     }
 
-    createPythonCommonFile(className, body, async = false) {
+    createCommonExchangeFileForPython(className, body, async = false) {
 
         let header = this.createCommonHeaderPython ()
 
@@ -841,10 +841,6 @@ class Transpiler {
         return 'class ' + className + ' extends ' + baseClass + ' {'
     }
 
-    createPHPTraitDeclaration (className) {
-        return 'trait ' + className + ' {'
-    }
-
     createCommonHeaderPhp (className, baseClass, bodyAsString, namespace) {
         return [
             "<?php",
@@ -915,7 +911,7 @@ class Transpiler {
         }
     }
 
-    createPHPTrait (className, body, methods, async = false) {
+    createCommonExchangeFileForPhp (className, body, methods, async = false) {
 
         let bodyAsString = body.join ("\n")
 
@@ -938,7 +934,7 @@ class Transpiler {
                 })
         }
 
-        header.push ("\n" + this.createPHPTraitDeclaration (className))
+        header.push ("\n" + 'trait ' + className + ' {')
 
         const footer = [
             "}\n",
@@ -1143,7 +1139,7 @@ class Transpiler {
         return contents.match (/^module\.exports\s*=\s*class\s+([\S]+)\s+extends\s+([\S]+)\s+{([\s\S]+?)^};*/m)
     }
 
-    getPlainClassDeclarationMatches (contents) {
+    getUnderivedClassDeclarationMatches (contents) {
         return contents.match (/^module\.exports\s*=\s*class\s+([\S]+)\s+{([\s\S]+?)^};*/m)
     }
 
@@ -1325,7 +1321,7 @@ class Transpiler {
             [ /module\.exports = {[^\}]+};\n*/gm, '' ],
         ])
 
-        const [ _, className_, methodMatches ] = this.getPlainClassDeclarationMatches (contents)
+        const [ _, className_, methodMatches ] = this.getUnderivedClassDeclarationMatches (contents)
         const methods = methodMatches.trim ().split (/\n\s*\n/)
        
         const {
@@ -1343,10 +1339,10 @@ class Transpiler {
         const pythonFilename = snakeFilename + '.py'
         const phpFilename = extensionLessFilename + '.php'
 
-        const python2File = this.createPythonCommonFile (className, python2, false)
-        const python3File = this.createPythonCommonFile (className, python3, true)
-        const phpFile = this.createPHPTrait (extensionLessFilename, php, methodNames)
-        const phpAsyncFile = this.createPHPTrait (extensionLessFilename, phpAsync, methodNames, true)
+        const python2File = this.createCommonExchangeFileForPython (className, python2, false)
+        const python3File = this.createCommonExchangeFileForPython (className, python3, true)
+        const phpFile = this.createCommonExchangeFileForPhp (extensionLessFilename, php, methodNames)
+        const phpAsyncFile = this.createCommonExchangeFileForPhp (extensionLessFilename, phpAsync, methodNames, true)
 
         ;[
             [ python2FolderBase, pythonFilename, python2File ],
