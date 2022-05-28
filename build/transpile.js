@@ -1371,7 +1371,7 @@ class Transpiler {
 
         for (let i = 0; i < methods.length; i++) {
             // parse the method signature
-            let part = methods[i]//.trim ()
+            let part = methods[i].trim ()
             let lines = part.split ("\n")
             let signature = lines[0].trim ()
             let methodSignatureRegex = /(async |)([\S]+)\s\(([^)]*)\)\s*{/ // signature line
