@@ -841,7 +841,7 @@ class Transpiler {
         return 'class ' + className + ' extends ' + baseClass + ' {'
     }
 
-    createCommonHeaderPhp (className, baseClass, bodyAsString, namespace) {
+    createPHPClassHeader (className, baseClass, bodyAsString, namespace) {
         return [
             "<?php",
             "",
@@ -858,7 +858,7 @@ class Transpiler {
 
         let bodyAsString = body.join ("\n")
 
-        let header = this.createCommonHeaderPhp (className, baseClass, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
+        let header = this.createPHPClassHeader (className, baseClass, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
 
         const {
             errorImports,
@@ -915,7 +915,7 @@ class Transpiler {
 
         let bodyAsString = body.join ("\n")
 
-        let header = this.createCommonHeaderPhp (className, undefined, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
+        let header = this.createPHPClassHeader (className, undefined, bodyAsString, async ? 'ccxt\\async' : 'ccxt')
 
         const {
             errorImports,
