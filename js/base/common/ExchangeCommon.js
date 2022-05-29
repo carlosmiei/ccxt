@@ -154,6 +154,7 @@ module.exports = class ExchangeCommon {
          * @param {dict} params extra parameters specific to the exchange api endpoint
          * @returns {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
          */
+        // Derived exchanges might just set `.has['fetchMarkOHLCV'] = true` and then skip implementing `fetchMarkOHLCV` method, because the callback will be this base-class method, which re-routes the call with additional unified `price` param to `fetchOHLCV`, so you only handle `price` param in implemented `fetchOHLCV` method to prepare the exchange-sepcific request for MARK candles (and there omit the `price` param too). The same applies to other `fetch..OHLCV` methods.
         if (this.has['fetchMarkOHLCV']) {
             const request = {
                 'price': 'mark',
@@ -174,6 +175,7 @@ module.exports = class ExchangeCommon {
          * @param {dict} params extra parameters specific to the exchange api endpoint
          * @returns {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
          */
+        // Please read the comment under `fetchMarkOHLV` method to understad why this emulated call happens.
         if (this.has['fetchIndexOHLCV']) {
             const request = {
                 'price': 'index',
@@ -194,6 +196,7 @@ module.exports = class ExchangeCommon {
          * @param {dict} params extra parameters specific to the exchange api endpoint
          * @return {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
          */
+        // Please read the comment under `fetchMarkOHLV` method to understad why this emulated call happens.
         if (this.has['fetchPremiumIndexOHLCV']) {
             const request = {
                 'price': 'premiumIndex',
