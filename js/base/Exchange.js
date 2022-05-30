@@ -7,9 +7,9 @@ const functions = require ('./functions')
 const commonExchangeClass = require('./common/ExchangeCommon')
 const commonExchangeFunctions = {};
 const commonExchangeClassInstance = new commonExchangeClass();
-Object.getOwnPropertyNames(commonExchangeClass.prototype).forEach(m=> commonExchangeFunctions[m] = commonExchangeClassInstance[m]);
+Object.getOwnPropertyNames (commonExchangeClass.prototype).forEach (m=> commonExchangeFunctions[m] = commonExchangeClassInstance[m]);
 
-const combinedFunctions = Object.assign(commonExchangeFunctions, functions);
+const combinedFunctions = Object.assign ({}, commonExchangeFunctions, functions);
 
 const {
     isNode
