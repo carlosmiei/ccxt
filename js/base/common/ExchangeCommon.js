@@ -43,48 +43,45 @@ function handleWithdrawTagAndParams (tag, params) {
     return [ tag, params ];
 }
 
-async function editLimitBuyOrder (id, symbol, amount, price, params = {}) {
-    return await this.editLimitOrder (id, symbol, 'buy', amount, price, params);
+function editLimitBuyOrder (id, symbol, ...args) {
+    return this.editLimitOrder (id, symbol, 'buy', ...args);
 }
 
-async function editLimitSellOrder (id, symbol, amount, price, params = {}) {
-    return await this.editLimitOrder (id, symbol, 'sell', amount, price, params);
+function editLimitSellOrder (id, symbol, ...args) {
+    return this.editLimitOrder (id, symbol, 'sell', ...args);
 }
 
-async function editLimitOrder (id, symbol, amount, price, params = {}) {
-    return this.editOrder (id, symbol, 'limit', amount, price, params);
+function editLimitOrder (id, symbol, ...args) {
+    return this.editOrder (id, symbol, 'limit', ...args);
 }
 
-async function editOrder (id, symbol, type, side, amount, price, params = {}) {
-    if (!this.enableRateLimit) {
-        throw new ExchangeError (this.id + ' editOrder() requires enableRateLimit = true');
-    }
+async function editOrder (id, symbol, ...args) {
     await this.cancelOrder (id, symbol);
-    return await this.createOrder (symbol, type, side, amount, price, params);
+    return this.createOrder (symbol, ...args);
 }
 
-async function createLimitOrder (symbol, side, amount, price, params = {}) {
-    return await this.createOrder (symbol, 'limit', side, amount, price, params);
+function createLimitOrder (symbol, side, amount, price, params = {}) {
+    return this.createOrder (symbol, 'limit', side, amount, price, params);
 }
 
-async function createMarketOrder (symbol, side, amount, price = undefined, params = {}) {
-    return await this.createOrder (symbol, 'market', side, amount, price, params);
+function createMarketOrder (symbol, side, amount, price, params = {}) {
+    return this.createOrder (symbol, 'market', side, amount, price, params);
 }
 
-async function createLimitBuyOrder (symbol, amount, price, params = {}) {
-    return await this.createOrder (symbol, 'limit', 'buy', amount, price, params);
+function createLimitBuyOrder (symbol, amount, price, params = {}) {
+    return this.createOrder (symbol, 'limit', 'buy', amount, price, params);
 }
 
-async function createLimitSellOrder (symbol, amount, price, params = {}) {
-    return await this.createOrder (symbol, 'limit', 'sell', amount, price, params);
+function createLimitSellOrder (symbol, amount, price, params = {}) {
+    return this.createOrder (symbol, 'limit', 'sell', amount, price, params);
 }
 
-async function createMarketBuyOrder (symbol, amount, params = {}) {
-    return await this.createOrder (symbol, 'market', 'buy', amount, undefined, params);
+function createMarketBuyOrder (symbol, amount, params = {}) {
+    return this.createOrder (symbol, 'market', 'buy', amount, undefined, params);
 }
 
-async function createMarketSellOrder (symbol, amount, params = {}) {
-    return await this.createOrder (symbol, 'market', 'sell', amount, undefined, params);
+function createMarketSellOrder (symbol, amount, params = {}) {
+    return this.createOrder (symbol, 'market', 'sell', amount, undefined, params);
 }
 
 async function createPostOnlyOrder (symbol, type, side, amount, price, params = {}) {
@@ -150,6 +147,8 @@ async function fetchFundingRate (symbol, params = {}) {
 
 async function fetchMarkOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
     /**
+     * @method
+     * @name exchange#fetchMarkOHLCV
      * @description fetches historical mark price candlestick data containing the open, high, low, and close price of a market
      * @param {str} symbol unified symbol of the market to fetch OHLCV data for
      * @param {str} timeframe the length of time each candle represents
@@ -170,6 +169,8 @@ async function fetchMarkOHLCV (symbol, timeframe = '1m', since = undefined, limi
 
 async function fetchIndexOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
     /**
+     * @method
+     * @name exchange#fetchIndexOHLCV
      * @description fetches historical index price candlestick data containing the open, high, low, and close price of a market
      * @param {str} symbol unified symbol of the market to fetch OHLCV data for
      * @param {str} timeframe the length of time each candle represents
@@ -190,13 +191,15 @@ async function fetchIndexOHLCV (symbol, timeframe = '1m', since = undefined, lim
 
 async function fetchPremiumIndexOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
     /**
+     * @method
+     * @name exchange#fetchPremiumIndexOHLCV
      * @description fetches historical premium index price candlestick data containing the open, high, low, and close price of a market
      * @param {str} symbol unified symbol of the market to fetch OHLCV data for
      * @param {str} timeframe the length of time each candle represents
      * @param {int|undefined} since timestamp in ms of the earliest candle to fetch
      * @param {int|undefined} limit the maximum amount of candles to fetch
      * @param {dict} params extra parameters specific to the exchange api endpoint
-     * @return {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
+     * @returns {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
      */
     if (this.has['fetchPremiumIndexOHLCV']) {
         const request = {
