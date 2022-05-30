@@ -39,48 +39,45 @@ module.exports = class ExchangeCommon {
         return [ tag, params ];
     }
 
-    async editLimitBuyOrder (id, symbol, amount, price, params = {}) {
-        return await this.editLimitOrder (id, symbol, 'buy', amount, price, params);
+    editLimitBuyOrder (id, symbol, ...args) {
+        return this.editLimitOrder (id, symbol, 'buy', ...args);
     }
 
-    async editLimitSellOrder (id, symbol, amount, price, params = {}) {
-        return await this.editLimitOrder (id, symbol, 'sell', amount, price, params);
+    editLimitSellOrder (id, symbol, ...args) {
+        return this.editLimitOrder (id, symbol, 'sell', ...args);
     }
 
-    async editLimitOrder (id, symbol, amount, price, params = {}) {
-        return this.editOrder (id, symbol, 'limit', amount, price, params);
+    editLimitOrder (id, symbol, ...args) {
+        return this.editOrder (id, symbol, 'limit', ...args);
     }
 
-    async editOrder (id, symbol, type, side, amount, price, params = {}) {
-        if (!this.enableRateLimit) {
-            throw new ExchangeError (this.id + ' editOrder() requires enableRateLimit = true');
-        }
+    async editOrder (id, symbol, ...args) {
         await this.cancelOrder (id, symbol);
-        return await this.createOrder (symbol, type, side, amount, price, params);
+        return this.createOrder (symbol, ...args);
     }
 
-    async createLimitOrder (symbol, side, amount, price, params = {}) {
-        return await this.createOrder (symbol, 'limit', side, amount, price, params);
+    createLimitOrder (symbol, side, amount, price, params = {}) {
+        return this.createOrder (symbol, 'limit', side, amount, price, params);
     }
 
-    async createMarketOrder (symbol, side, amount, price = undefined, params = {}) {
-        return await this.createOrder (symbol, 'market', side, amount, price, params);
+    createMarketOrder (symbol, side, amount, price, params = {}) {
+        return this.createOrder (symbol, 'market', side, amount, price, params);
     }
 
-    async createLimitBuyOrder (symbol, amount, price, params = {}) {
-        return await this.createOrder (symbol, 'limit', 'buy', amount, price, params);
+    createLimitBuyOrder (symbol, amount, price, params = {}) {
+        return this.createOrder (symbol, 'limit', 'buy', amount, price, params);
     }
 
-    async createLimitSellOrder (symbol, amount, price, params = {}) {
-        return await this.createOrder (symbol, 'limit', 'sell', amount, price, params);
+    createLimitSellOrder (symbol, amount, price, params = {}) {
+        return this.createOrder (symbol, 'limit', 'sell', amount, price, params);
     }
 
-    async createMarketBuyOrder (symbol, amount, params = {}) {
-        return await this.createOrder (symbol, 'market', 'buy', amount, undefined, params);
+    createMarketBuyOrder (symbol, amount, params = {}) {
+        return this.createOrder (symbol, 'market', 'buy', amount, undefined, params);
     }
 
-    async createMarketSellOrder (symbol, amount, params = {}) {
-        return await this.createOrder (symbol, 'market', 'sell', amount, undefined, params);
+    createMarketSellOrder (symbol, amount, params = {}) {
+        return this.createOrder (symbol, 'market', 'sell', amount, undefined, params);
     }
 
     async createPostOnlyOrder (symbol, type, side, amount, price, params = {}) {
@@ -146,6 +143,8 @@ module.exports = class ExchangeCommon {
 
     async fetchMarkOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
         /**
+         * @method
+         * @name exchange#fetchMarkOHLCV
          * @description fetches historical mark price candlestick data containing the open, high, low, and close price of a market
          * @param {str} symbol unified symbol of the market to fetch OHLCV data for
          * @param {str} timeframe the length of time each candle represents
@@ -154,7 +153,6 @@ module.exports = class ExchangeCommon {
          * @param {dict} params extra parameters specific to the exchange api endpoint
          * @returns {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
          */
-        // Derived exchanges might just set `.has['fetchMarkOHLCV'] = true` and then skip implementing `fetchMarkOHLCV` method, because the callback will be this base-class method, which re-routes the call with additional unified `price` param to `fetchOHLCV`, so you only handle `price` param in implemented `fetchOHLCV` method to prepare the exchange-sepcific request for MARK candles (and there omit the `price` param too). The same applies to other `fetch..OHLCV` methods.
         if (this.has['fetchMarkOHLCV']) {
             const request = {
                 'price': 'mark',
@@ -167,6 +165,8 @@ module.exports = class ExchangeCommon {
 
     async fetchIndexOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
         /**
+         * @method
+         * @name exchange#fetchIndexOHLCV
          * @description fetches historical index price candlestick data containing the open, high, low, and close price of a market
          * @param {str} symbol unified symbol of the market to fetch OHLCV data for
          * @param {str} timeframe the length of time each candle represents
@@ -175,7 +175,6 @@ module.exports = class ExchangeCommon {
          * @param {dict} params extra parameters specific to the exchange api endpoint
          * @returns {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
          */
-        // Please read the comment under `fetchMarkOHLV` method to understad why this emulated call happens.
         if (this.has['fetchIndexOHLCV']) {
             const request = {
                 'price': 'index',
@@ -188,15 +187,16 @@ module.exports = class ExchangeCommon {
 
     async fetchPremiumIndexOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
         /**
+         * @method
+         * @name exchange#fetchPremiumIndexOHLCV
          * @description fetches historical premium index price candlestick data containing the open, high, low, and close price of a market
          * @param {str} symbol unified symbol of the market to fetch OHLCV data for
          * @param {str} timeframe the length of time each candle represents
          * @param {int|undefined} since timestamp in ms of the earliest candle to fetch
          * @param {int|undefined} limit the maximum amount of candles to fetch
          * @param {dict} params extra parameters specific to the exchange api endpoint
-         * @return {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
+         * @returns {[[int|float]]} A list of candles ordered as timestamp, open, high, low, close, undefined
          */
-        // Please read the comment under `fetchMarkOHLV` method to understad why this emulated call happens.
         if (this.has['fetchPremiumIndexOHLCV']) {
             const request = {
                 'price': 'premiumIndex',
