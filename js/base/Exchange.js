@@ -2768,9 +2768,12 @@ module.exports = class Exchange {
         //     ]
         //
         const results = [];
+        symbols = this.marketSymbols (symbols);
         if (Array.isArray (tickers)) {
             for (let i = 0; i < tickers.length; i++) {
-                const ticker = this.extend (this.parseTicker (tickers[i]), params);
+                const symbol = this.safeString (symbols, i);
+                const market = (symbol !== undefined) ? this.market (symbol) : undefined;
+                const ticker = this.extend (this.parseTicker (tickers[i], market), params);
                 results.push (ticker);
             }
         } else {
@@ -2782,7 +2785,6 @@ module.exports = class Exchange {
                 results.push (ticker);
             }
         }
-        symbols = this.marketSymbols (symbols);
         return this.filterByArray (results, 'symbol', symbols);
     }
 
