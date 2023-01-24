@@ -6066,9 +6066,15 @@ module.exports = class binance extends Exchange {
          * @returns {object} a dictionary of [leverage tiers structures]{@link https://docs.ccxt.com/en/latest/manual.html#leverage-tiers-structure}, indexed by market symbols
          */
         await this.loadMarkets ();
-        const [ type, query ] = this.handleMarketTypeAndParams ('fetchLeverageTiers', undefined, params);
+        let market = undefined;
+        if (symbols !== undefined) {
+            symbols = this.marketSymbols (symbols);
+            const first = this.safeString (symbols, 0);
+            market = this.market (first);
+        }
+        const [ type, query ] = this.handleMarketTypeAndParams ('fetchLeverageTiers', market, params);
         let subType = undefined;
-        [ subType, params ] = this.handleSubTypeAndParams ('fetchLeverageTiers', undefined, params, 'linear');
+        [ subType, params ] = this.handleSubTypeAndParams ('fetchLeverageTiers', market, params, 'linear');
         let method = undefined;
         if (this.isLinear (type, subType)) {
             method = 'fapiPrivateGetLeverageBracket';
