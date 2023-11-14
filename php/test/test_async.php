@@ -28,6 +28,13 @@ $exchangeSymbol = null; // todo: this should be different than JS
 
 // non-transpiled part, but shared names among langs
 
+define ('is_synchronous', stripos(__FILE__, '_async') === false);
+
+define('rootDirForSkips', __DIR__ . '/../../');
+define('envVars', $_ENV);
+define('LOG_CHARS_LENGTH', 10000);
+define('ext', 'php');
+
 class baseMainTestClass {
     public $lang = 'PHP';
     public $testFiles = [];
@@ -43,14 +50,12 @@ class baseMainTestClass {
     public $staticTests = false;
     public $staticTestsFailed = false;
     public $idTests = false;
+    public $root_dir = __DIR__ . '/../../';
+    public $rootDir = __DIR__ . '/../../';
+    public $root_dir_for_skips = __DIR__ . '/../../';
+    public $rootDirForSkips = __DIR__ . '/../../';
+    public $env_vars = envVars;
 }
-
-define ('is_synchronous', stripos(__FILE__, '_async') === false);
-
-define('rootDirForSkips', __DIR__ . '/../../');
-define('envVars', $_ENV);
-define('LOG_CHARS_LENGTH', 10000);
-define('ext', 'php');
 
 function dump(...$s) {
     $args = array_map(function ($arg) {
@@ -245,8 +250,8 @@ class testMainClass extends baseMainTestClass {
 
     public function expand_settings($exchange, $symbol) {
         $exchangeId = $exchange->id;
-        $keysGlobal = rootDir . 'keys.json';
-        $keysLocal = rootDir . 'keys.local.json';
+        $keysGlobal = $this->rootDir . 'keys.json';
+        $keysLocal = $this->rootDir . 'keys.local.json';
         $keysGlobalExists = io_file_exists ($keysGlobal);
         $keysLocalExists = io_file_exists ($keysLocal);
         $globalSettings = $keysGlobalExists ? io_file_read ($keysGlobal) : array();
@@ -285,7 +290,7 @@ class testMainClass extends baseMainTestClass {
             }
         }
         // skipped tests
-        $skippedFile = rootDirForSkips . 'skip-tests.json';
+        $skippedFile = $this->rootDirForSkips . 'skip-tests.json';
         $skippedSettings = io_file_read ($skippedFile);
         $skippedSettingsForExchange = $exchange->safe_value($skippedSettings, $exchangeId, array());
         // others
@@ -861,13 +866,13 @@ class testMainClass extends baseMainTestClass {
         // to make this test
         // and basically independent from the exchange
         // so we can run it offline
-        $filename = rootDir . './ts/src/test/static/markets/' . $id . '.json';
+        $filename = $this->rootDir . './ts/src/test/static/markets/' . $id . '.json';
         $content = io_file_read ($filename);
         return $content;
     }
 
     public function load_static_data(?string $targetExchange = null) {
-        $folder = rootDir . './ts/src/test/static/data/';
+        $folder = $this->rootDir . './ts/src/test/static/data/';
         $result = array();
         if ($targetExchange) {
             // read a single exchange

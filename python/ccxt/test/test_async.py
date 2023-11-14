@@ -89,13 +89,17 @@ class baseMainTestClass():
     checkedPublicTests = {}
     testFiles = {}
     publicTests = {}
+    root_dir = current_dir + '/../../../'
+    rootDir = current_dir + '/../../../'
+    root_dir_for_skips = current_dir + '/../../../'
+    rootDirForSkips = current_dir + '/../../../'
     pass
 
 
 is_synchronous = 'async' not in os.path.basename(__file__)
 
-rootDir = current_dir + '/../../../'
-rootDirForSkips = current_dir + '/../../../'
+# rootDir = current_dir + '/../../../'
+# rootDirForSkips = current_dir + '/../../../'
 envVars = os.environ
 LOG_CHARS_LENGTH = 10000
 ext = 'py'
@@ -257,8 +261,8 @@ class testMainClass(baseMainTestClass):
 
     def expand_settings(self, exchange, symbol):
         exchangeId = exchange.id
-        keysGlobal = rootDir + 'keys.json'
-        keysLocal = rootDir + 'keys.local.json'
+        keysGlobal = self.rootDir + 'keys.json'
+        keysLocal = self.rootDir + 'keys.local.json'
         keysGlobalExists = io_file_exists(keysGlobal)
         keysLocalExists = io_file_exists(keysLocal)
         globalSettings = io_file_read(keysGlobal) if keysGlobalExists else {}
@@ -290,7 +294,7 @@ class testMainClass(baseMainTestClass):
                 if credentialValue:
                     set_exchange_prop(exchange, credential, credentialValue)
         # skipped tests
-        skippedFile = rootDirForSkips + 'skip-tests.json'
+        skippedFile = self.rootDirForSkips + 'skip-tests.json'
         skippedSettings = io_file_read(skippedFile)
         skippedSettingsForExchange = exchange.safe_value(skippedSettings, exchangeId, {})
         # others
@@ -768,12 +772,12 @@ class testMainClass(baseMainTestClass):
         # to make self test
         # and basically independent from the exchange
         # so we can run it offline
-        filename = rootDir + './ts/src/test/static/markets/' + id + '.json'
+        filename = self.rootDir + './ts/src/test/static/markets/' + id + '.json'
         content = io_file_read(filename)
         return content
 
     def load_static_data(self, targetExchange: Optional[str] = None):
-        folder = rootDir + './ts/src/test/static/data/'
+        folder = self.rootDir + './ts/src/test/static/data/'
         result = {}
         if targetExchange:
             # read a single exchange

@@ -41,9 +41,11 @@ class baseMainTestClass {
     checkedPublicTests = {};
     testFiles = {};
     publicTests = {};
+    rootDirForSkips = DIR_NAME + '/../../../';
+    rootDir = DIR_NAME + '/../../../';
 }
-const rootDir = DIR_NAME + '/../../../';
-const rootDirForSkips = DIR_NAME + '/../../../';
+// const rootDir = DIR_NAME + '/../../../';
+// const rootDirForSkips = DIR_NAME + '/../../../';
 const envVars = process.env;
 const LOG_CHARS_LENGTH = 10000;
 const ext = import.meta.url.split ('.')[1];
@@ -192,8 +194,8 @@ export default class testMainClass extends baseMainTestClass {
 
     expandSettings (exchange, symbol) {
         const exchangeId = exchange.id;
-        const keysGlobal = rootDir + 'keys.json';
-        const keysLocal = rootDir + 'keys.local.json';
+        const keysGlobal = this.rootDir + 'keys.json';
+        const keysLocal = this.rootDir + 'keys.local.json';
         const keysGlobalExists = ioFileExists (keysGlobal);
         const keysLocalExists = ioFileExists (keysLocal);
         const globalSettings = keysGlobalExists ? ioFileRead (keysGlobal) : {};
@@ -232,7 +234,7 @@ export default class testMainClass extends baseMainTestClass {
             }
         }
         // skipped tests
-        const skippedFile = rootDirForSkips + 'skip-tests.json';
+        const skippedFile = this.rootDirForSkips + 'skip-tests.json';
         const skippedSettings = ioFileRead (skippedFile);
         const skippedSettingsForExchange = exchange.safeValue (skippedSettings, exchangeId, {});
         // others
@@ -794,13 +796,13 @@ export default class testMainClass extends baseMainTestClass {
         // to make this test as fast as possible
         // and basically independent from the exchange
         // so we can run it offline
-        const filename = rootDir + './ts/src/test/static/markets/' + id + '.json';
+        const filename = this.rootDir + './ts/src/test/static/markets/' + id + '.json';
         const content = ioFileRead (filename);
         return content;
     }
 
     loadStaticData (targetExchange: string = undefined) {
-        const folder = rootDir + './ts/src/test/static/data/';
+        const folder = this.rootDir + './ts/src/test/static/data/';
         const result = {};
         if (targetExchange) {
             // read a single exchange
