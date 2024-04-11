@@ -9659,7 +9659,7 @@ export default class binance extends Exchange {
         for (let j = 0; j < brackets.length; j++) {
             const bracket = brackets[j];
             tiers.push ({
-                'tier': this.safeNumber (bracket, 'bracket'),
+                'tier': this.safeInteger (bracket, 'bracket'),
                 'currency': market['quote'],
                 'minNotional': this.safeNumber2 (bracket, 'notionalFloor', 'qtyFloor'),
                 'maxNotional': this.safeNumber2 (bracket, 'notionalCap', 'qtyCap'),
