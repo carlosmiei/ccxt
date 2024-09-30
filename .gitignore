@@ -41,4 +41,6 @@ __pycache__
 bin/
 obj/
 
+# go
+go/cli/test
 .custom_gitignore
