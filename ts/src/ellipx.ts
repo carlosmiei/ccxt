@@ -346,7 +346,8 @@ export default class ellipx extends Exchange {
             const sec = this.secret;
             const remainder = this.calculateMod (sec.length, 4);
             const paddingLength = remainder ? 4 - remainder : 0;
-            let secretWithPadding = this.secret.replaceAll ('-', '+');
+            const secret = this.secret;
+            let secretWithPadding = secret.replaceAll ('-', '+');
             secretWithPadding = secretWithPadding.replaceAll ('_', '/');
             secretWithPadding = secretWithPadding.padEnd (this.secret.length + paddingLength, '=');
             const secretBytes = this.base64ToBinary (secretWithPadding);

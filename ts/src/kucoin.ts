@@ -4046,11 +4046,11 @@ export default class kucoin extends Exchange {
                 }
             }
         }
-        let returnType = result;
+        let balance = result;
         if (!isolated) {
-            returnType = this.safeBalance (result);
+            balance = this.safeBalance (result);
         }
-        return returnType as Balances;
+        return balance as Balances;
     }
 
     /**
