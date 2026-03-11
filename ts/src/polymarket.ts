@@ -158,73 +158,6 @@ export default class polymarket extends Exchange {
     // Market loading — each Polymarket outcome token becomes one CCXT market
     // -----------------------------------------------------------------------
 
-    shortenSlug (slug: string): string {
-        /**
-         * Shortens a hyphenated slug by applying phrase replacements
-         * and dropping common stop words, then uppercasing.
-         *
-         * e.g. "will-the-federal-reserve-increase-interest-rates-by-25-basis-points"
-         *   → "FED_HIKE_RATES_25BPS"
-         */
-        const replacements: Dict = {
-            // finance / prediction market phrases
-            'federal-reserve':    'fed',
-            'interest-rates':     'rates',
-            'interest-rate':      'rate',
-            'basis-points':       'bps',
-            'basis-point':        'bp',
-            'executive-order':    'eo',
-            'united-states':      'us',
-            'united-kingdom':     'uk',
-            'european-union':     'eu',
-            'artificial-intelligence': 'ai',
-            'republican-party':   'gop',
-            'democratic-party':   'dems',
-            'stock-market':       'market',
-            'price-target':       'pt',
-            'market-cap':         'mcap',
-            // actions
-            'increase':  'hike',
-            'decrease':  'cut',
-            'higher':    'up',
-            'lower':     'down',
-            'greater':   'gt',
-            'less':      'lt',
-            'above':     'above',
-            'below':     'below',
-            'million':   'M',
-            'billion':   'B',
-            'trillion':  'T',
-            'percent':   'pct',
-        };
-
-        const stopWords = new Set ([
-            'will', 'the', 'a', 'an', 'after', 'before', 'in', 'at', 'by',
-            'of', 'there', 'be', 'to', 'or', 'and', 'for', 'on', 'its',
-            'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were',
-        ]);
-
-        let s = (slug || '').toLowerCase ();
-
-        // Apply multi-word phrase replacements (slug uses hyphens)
-        for (const phrase of Object.keys (replacements)) {
-            s = s.split (phrase).join (replacements[phrase] as string);
-        }
-
-        // Drop stop words and empty tokens
-        const parts = s.split ('-').filter ((w) => w.length > 0 && !stopWords.has (w));
-
-        return parts.join ('_').toUpperCase ();
-    }
-
-    slugToMarketId (eventSlug: Str, marketSlug: Str, outcome: Str): string {
-        /**
-         * Builds a compound market ID: EVENT_SLUG:MARKET_SLUG:OUTCOME
-         * e.g. "US_ELECTION_2028:TRUMP:YES"
-         */
-        return this.shortenSlug (eventSlug as string) + ':' + this.shortenSlug (marketSlug as string) + ':' + (outcome as string).toUpperCase ();
-    }
-
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
         /**
          * Fetches all active Polymarket events → markets → outcomes,
@@ -788,70 +721,72 @@ export default class polymarket extends Exchange {
     // Returns raw Polymarket events (with nested markets and outcomes).
     // -----------------------------------------------------------------------
 
-    async fetchEvents (params: Dict = {}): Promise<any> {
+    async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<any> {
         /**
-         * Returns events dict keyed by normalised event slug:
-         *   {
-         *     "US_ELECTION_2028": {
-         *       id, slug, title, ...,
-         *       markets: {
-         *         "US_ELECTION_2028:TRUMP:YES": { ...CCXT market... },
-         *       }
-         *     }
-         *   }
+         * Fetches events matching the given search terms and merges them into
+         * this.events and this.markets. With no queries, fetches all active
+         * events via loadMarkets().
          *
-         * For single-event fetches (id / slug / query params) the result
-         * contains only the matching events. For the no-params case it
-         * delegates to loadMarkets() and returns this.events.
+         *   await exchange.fetchEvents (['Trump', 'BTC', 'Fed'])
+         *
+         * Returns the full this.events dict (all cached events, not just the
+         * newly fetched ones).
          *
          * Params:
-         *   - id     (str) : fetch single event by numeric ID
-         *   - slug   (str) : fetch single event by slug
-         *   - query  (str) : text search via /public-search
-         *   - status (str) : 'active' | 'closed' | 'all'  (default: 'active')
-         *   - limit  (int) : max search results (default: 50)
+         *   - limit (int) : max results per search term (default: 50)
          */
-        const id    = this.safeString (params, 'id');
-        const slug  = this.safeString (params, 'slug');
-        const query = this.safeString (params, 'query');
-        const rest  = this.omit (params, ['id', 'slug', 'query', 'status']);
-
-        if (!id && !slug && !query) {
+        if (!queries || queries.length === 0) {
             await this.loadMarkets ();
-            return this['events'] as Dict;
+            return this.events;
         }
 
-        let rawEvents: any[] = [];
+        const limit = this.safeInteger (params, 'limit', 50);
+        const rest  = this.omit (params, ['limit']);
 
-        if (id) {
-            const response = await this.gammaPublicGetEventsId (this.extend ({ 'id': id }, rest));
-            rawEvents = [response];
-        } else if (slug) {
-            const response = await this.gammaPublicGetEventsSlugSlug (this.extend ({ 'slug': slug }, rest));
-            rawEvents = [response];
-        } else if (query) {
+        // Collect raw events, deduplicating by event id
+        const seen: Dict = {};
+        const rawEvents: any[] = [];
+
+        for (const q of queries) {
             const response = await this.gammaPublicGetPublicSearch (this.extend ({
-                'q':              query,
-                'limit_per_type': this.safeInteger (params, 'limit', 50),
+                'q':              q,
+                'limit_per_type': limit,
             }, rest));
-            rawEvents = (this.safeList (response, 'events', []) || []) as any[];
+            const found = (this.safeList (response, 'events', []) || []) as any[];
+            for (const rawEvent of found) {
+                const eventId = this.safeString (rawEvent, 'id');
+                if (eventId && !seen[eventId]) {
+                    seen[eventId] = true;
+                    rawEvents.push (rawEvent);
+                }
+            }
         }
 
-        const eventsDict: Dict = {};
+        // Parse and merge into class-level caches
+        if (!this.events) {
+            this.events = {};
+        }
+        if (!this.markets) {
+            this.markets = {};
+        }
+
         for (const rawEvent of rawEvents) {
             const ccxtMarkets = this.parseEventToMarkets (rawEvent);
             const marketsById: Dict = {};
             for (const m of ccxtMarkets) {
-                marketsById[m['symbol'] as string] = m;
+                const sym = m['symbol'] as string;
+                marketsById[sym] = m;
+                this.markets[sym] = m;
             }
             const parsedEvent = this.parseEvent (rawEvent, marketsById);
             const eventSlug = this.safeString (rawEvent, 'slug');
             if (eventSlug) {
                 const eventKey = this.shortenSlug (eventSlug as string);
-                eventsDict[eventKey] = parsedEvent;
+                this.events[eventKey] = parsedEvent;
             }
         }
-        return eventsDict;
+
+        return this.events;
     }
 
     parseEvent (rawEvent: Dict, marketsById: Dict = undefined): Dict {

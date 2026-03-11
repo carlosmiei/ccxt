@@ -124,7 +124,8 @@ export default class Myriad extends Exchange {
     // -----------------------------------------------------------------------
 
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
-        const markets: Market[] = [];
+        const flatMarkets: Market[] = [];
+        const eventsDict: Dict = {};
         let page = 1;
         const limit = this.safeInteger (this.options, 'defaultFetchMarketsLimit', 50);
         const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultMarketStatus', 'open'));
@@ -143,9 +144,23 @@ export default class Myriad extends Exchange {
             }
 
             for (const raw of rawMarkets) {
-                const parsed = this.parseMarketOutcomes (raw);
+                const networkId = this.safeString (raw, 'networkId');
+                const eventKey  = networkId ? this.shortenSlug (networkId) : undefined;
+                const parsed    = this.parseMarketOutcomes (raw);
+
                 for (const m of parsed) {
-                    markets.push (m);
+                    flatMarkets.push (m);
+                    if (eventKey) {
+                        if (!eventsDict[eventKey]) {
+                            eventsDict[eventKey] = {
+                                'id':      networkId,
+                                'slug':    networkId,
+                                'title':   (this.options as Dict)['networks'] ? ((this.options as Dict)['networks'] as Dict)[networkId] || networkId : networkId,
+                                'markets': {},
+                            };
+                        }
+                        (eventsDict[eventKey] as Dict)['markets'][m['symbol'] as string] = m;
+                    }
                 }
             }
 
@@ -154,10 +169,12 @@ export default class Myriad extends Exchange {
             }
             page++;
         }
-        return markets;
+
+        this.events = eventsDict;
+        return flatMarkets;
     }
 
-    parseMarketOutcomes (raw: Dict): Market[] {
+    parseMarketOutcomes (raw: Dict, eventSlug: string = undefined): Market[] {
         const networkId  = this.safeString (raw, 'networkId');
         const marketId   = this.safeString (raw, 'id');
         const slug       = this.safeString (raw, 'slug', marketId);
@@ -175,8 +192,8 @@ export default class Myriad extends Exchange {
 
             // id: {networkId}:{marketId}/{outcomeId}
             const id     = networkId + ':' + marketId + '/' + outcomeId;
-            // symbol: {networkId}:{marketId}/{outcomeLabel}:USDC
-            const symbol = networkId + ':' + marketId + '/' + outcomeLabel + ':USDC';
+            // symbol: EVENT_SLUG:MARKET_SLUG:OUTCOME
+            const symbol = this.slugToMarketId (eventSlug || networkId, slug, outcomeLabel);
 
             result.push ({
                 'id':             id,
@@ -377,35 +394,71 @@ export default class Myriad extends Exchange {
     // Events (questions)
     // -----------------------------------------------------------------------
 
-    async fetchEvents (params: Dict = {}): Promise<any[]> {
-        const id    = this.safeString (params, 'id');
-        const query = this.safeString (params, 'query');
-        const rest  = this.omit (params, ['id', 'query']);
-
-        let rawEvents: any[] = [];
-
-        if (id) {
-            const response = await this.myriadPublicGetQuestionsId (this.extend ({ 'id': id }, rest));
-            rawEvents = [response];
-        } else {
-            const limit = this.safeInteger (params, 'limit', this.safeInteger (this.options, 'defaultFetchEventsLimit', 50));
-            const request: Dict = this.extend ({ 'limit': limit }, rest);
-            if (query) {
-                request['keyword'] = query;
-            }
-            const response = await this.myriadPublicGetQuestions (request);
-            rawEvents = (this.safeList (response, 'data', response as any) || []) as any[];
+    async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<any> {
+        /**
+         * Fetches events (questions) matching the given search terms and merges
+         * them into this.events and this.markets.
+         *
+         *   await exchange.fetchEvents (['Trump', 'BTC'])
+         *
+         * With no queries, fetches all questions and returns this.events.
+         */
+        if (!queries || queries.length === 0) {
+            await this.loadMarkets ();
+            return this.events;
         }
 
-        return this.parseEvents (rawEvents);
+        const limit = this.safeInteger (params, 'limit', this.safeInteger (this.options, 'defaultFetchEventsLimit', 50));
+        const rest  = this.omit (params, ['limit']);
+
+        const seen: Dict = {};
+        const rawEvents: any[] = [];
+
+        for (const q of queries) {
+            const response = await this.myriadPublicGetQuestions (this.extend ({
+                'keyword': q,
+                'limit':   limit,
+            }, rest));
+            const found = (this.safeList (response, 'data', response as any) || []) as any[];
+            for (const rawEvent of found) {
+                const eventId = this.safeString (rawEvent, 'id');
+                if (eventId && !seen[eventId]) {
+                    seen[eventId] = true;
+                    rawEvents.push (rawEvent);
+                }
+            }
+        }
+
+        if (!this.events) {
+            this.events = {};
+        }
+        if (!this.markets) {
+            this.markets = {};
+        }
+
+        for (const rawEvent of rawEvents) {
+            const questionSlug = this.safeString (rawEvent, 'slug', this.safeString (rawEvent, 'id'));
+            const eventKey     = questionSlug ? this.shortenSlug (questionSlug) : undefined;
+            const parsedEvent  = this.parseEvent (rawEvent);
+
+            if (eventKey) {
+                (this.events as Dict)[eventKey] = parsedEvent;
+                for (const sym of Object.keys ((parsedEvent['markets'] || {}) as Dict)) {
+                    this.markets[sym] = (parsedEvent['markets'] as Dict)[sym];
+                }
+            }
+        }
+
+        return this.events;
     }
 
     parseEvent (rawEvent: Dict): Dict {
-        const rawMarkets = (this.safeList (rawEvent, 'markets', []) || []) as any[];
+        const questionSlug = this.safeString (rawEvent, 'slug', this.safeString (rawEvent, 'id'));
+        const rawMarkets   = (this.safeList (rawEvent, 'markets', []) || []) as any[];
         const marketsDict: Dict = {};
 
         for (const rawMarket of rawMarkets) {
-            const outcomes = this.parseMarketOutcomes (rawMarket);
+            const outcomes = this.parseMarketOutcomes (rawMarket, questionSlug);
             for (const m of outcomes) {
                 const sym = this.safeString (m, 'symbol');
                 if (sym) {
@@ -416,18 +469,10 @@ export default class Myriad extends Exchange {
 
         return this.extend (rawEvent, {
             'id':      this.safeString (rawEvent, 'id'),
-            'slug':    this.safeString (rawEvent, 'slug'),
+            'slug':    questionSlug,
             'title':   this.safeString (rawEvent, 'title'),
             'markets': marketsDict,
         });
-    }
-
-    parseEvents (rawEvents: any[]): any[] {
-        const result: any[] = [];
-        for (const raw of rawEvents) {
-            result.push (this.parseEvent (raw));
-        }
-        return result;
     }
 
     // -----------------------------------------------------------------------

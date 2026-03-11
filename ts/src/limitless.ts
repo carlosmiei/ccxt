@@ -128,7 +128,8 @@ export default class Limitless extends Exchange {
     // -----------------------------------------------------------------------
 
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
-        const markets: Market[] = [];
+        const flatMarkets: Market[] = [];
+        const eventsDict: Dict = {};
         let page = 1;
         const pageSize = this.safeInteger (this.options, 'marketsPageSize', 25);
 
@@ -144,9 +145,23 @@ export default class Limitless extends Exchange {
             }
 
             for (const raw of rawMarkets) {
-                const parsed = this.parseMarketToOutcomes (raw);
+                const groupId  = this.safeString (raw, 'groupId', this.safeString (raw, 'slug'));
+                const eventKey = groupId ? this.shortenSlug (groupId) : undefined;
+                const parsed   = this.parseMarketToOutcomes (raw);
+
                 for (const m of parsed) {
-                    markets.push (m);
+                    flatMarkets.push (m);
+                    if (eventKey) {
+                        if (!eventsDict[eventKey]) {
+                            eventsDict[eventKey] = {
+                                'id':      groupId,
+                                'slug':    groupId,
+                                'title':   this.safeString (raw, 'title', groupId),
+                                'markets': {},
+                            };
+                        }
+                        (eventsDict[eventKey] as Dict)['markets'][m['symbol'] as string] = m;
+                    }
                 }
             }
 
@@ -155,12 +170,15 @@ export default class Limitless extends Exchange {
             }
             page++;
         }
-        return markets;
+
+        this.events = eventsDict;
+        return flatMarkets;
     }
 
     parseMarketToOutcomes (raw: Dict): Market[] {
         const slug      = this.safeString (raw, 'slug');
         const address   = this.safeString (raw, 'address', slug);
+        const groupId   = this.safeString (raw, 'groupId', slug);
         const tokens    = this.safeValue  (raw, 'tokens', {});
         const active    = this.safeBool   (raw, 'active', true);
         const endDate   = this.safeString (raw, 'deadline', this.safeString (raw, 'expiresAt'));
@@ -172,7 +190,7 @@ export default class Limitless extends Exchange {
         for (const outcomeLabel of tokenEntries) {
             const tokenData  = tokens[outcomeLabel];
             const tokenId    = this.safeString (tokenData, 'token_id', slug + '/' + outcomeLabel);
-            const symbol     = slug + '/' + outcomeLabel + ':USDC';
+            const symbol     = this.slugToMarketId (groupId, slug, outcomeLabel);
 
             result.push ({
                 'id':             tokenId,
@@ -499,43 +517,70 @@ export default class Limitless extends Exchange {
     // Events (group markets act as events; child markets as CCXT markets)
     // -----------------------------------------------------------------------
 
-    async fetchEvents (params: Dict = {}): Promise<any[]> {
-        const query = this.safeString (params, 'query');
-        const rest  = this.omit (params, ['query']);
-        let rawMarkets: any[] = [];
+    async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<any> {
+        /**
+         * Fetches events matching the given search terms and merges them into
+         * this.events and this.markets. With no queries, fetches all active
+         * markets via loadMarkets().
+         *
+         *   await exchange.fetchEvents (['Trump', 'BTC'])
+         */
+        if (!queries || queries.length === 0) {
+            await this.loadMarkets ();
+            return this.events;
+        }
 
-        if (query) {
+        const limit = this.safeInteger (params, 'limit', 50);
+        const rest  = this.omit (params, ['limit']);
+
+        const seen: Dict = {};
+        const rawMarkets: any[] = [];
+
+        for (const q of queries) {
             const response = await this.limitlessPublicGetMarketsSearch (this.extend ({
-                'term': query,
+                'term': q,
+                'limit': limit,
             }, rest));
-            rawMarkets = (this.safeList (response, 'data', []) || []) as any[];
-        } else {
-            rawMarkets = await this.fetchMarkets (params) as any[];
+            const found = (this.safeList (response, 'data', []) || []) as any[];
+            for (const raw of found) {
+                const rawSlug = this.safeString (raw, 'slug');
+                if (rawSlug && !seen[rawSlug]) {
+                    seen[rawSlug] = true;
+                    rawMarkets.push (raw);
+                }
+            }
         }
 
-        // Group child markets under their group (parent) as events
-        const eventsMap: Dict = {};
+        if (!this.events) {
+            this.events = {};
+        }
+        if (!this.markets) {
+            this.markets = {};
+        }
+
         for (const raw of rawMarkets) {
-            const groupId = this.safeString (raw, 'groupId', this.safeString (raw, 'slug'));
-            if (!eventsMap[groupId]) {
-                eventsMap[groupId] = this.extend (raw, {
-                    'id':      groupId,
-                    'slug':    groupId,
-                    'title':   this.safeString (raw, 'title', this.safeString (raw, 'slug')),
-                    'markets': {},
-                });
-            }
-            const symbol = this.safeString (raw, 'symbol');
-            if (symbol) {
-                eventsMap[groupId]['markets'][symbol] = raw;
+            const groupId  = this.safeString (raw, 'groupId', this.safeString (raw, 'slug'));
+            const eventKey = groupId ? this.shortenSlug (groupId) : undefined;
+            const parsed   = this.parseMarketToOutcomes (raw);
+
+            for (const m of parsed) {
+                const sym = m['symbol'] as string;
+                this.markets[sym] = m;
+                if (eventKey) {
+                    if (!(this.events as Dict)[eventKey]) {
+                        (this.events as Dict)[eventKey] = {
+                            'id':      groupId,
+                            'slug':    groupId,
+                            'title':   this.safeString (raw, 'title', groupId),
+                            'markets': {},
+                        };
+                    }
+                    ((this.events as Dict)[eventKey] as Dict)['markets'][sym] = m;
+                }
             }
         }
 
-        const result: any[] = [];
-        for (const key of Object.keys (eventsMap)) {
-            result.push (eventsMap[key]);
-        }
-        return result;
+        return this.events;
     }
 
     // -----------------------------------------------------------------------

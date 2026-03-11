@@ -2420,6 +2420,66 @@ export default class Exchange {
         return result;
     }
 
+    shortenSlug (slug: string): string {
+        /**
+         * Shortens a hyphenated slug by applying phrase replacements
+         * and dropping common stop words, then uppercasing.
+         *
+         * e.g. "will-the-federal-reserve-increase-interest-rates-by-25-basis-points"
+         *   → "FED_HIKE_RATES_25BPS"
+         */
+        const replacements = {
+            // finance / prediction market phrases
+            'federal-reserve':         'fed',
+            'interest-rates':          'rates',
+            'interest-rate':           'rate',
+            'basis-points':            'bps',
+            'basis-point':             'bp',
+            'executive-order':         'eo',
+            'united-states':           'us',
+            'united-kingdom':          'uk',
+            'european-union':          'eu',
+            'artificial-intelligence': 'ai',
+            'republican-party':        'gop',
+            'democratic-party':        'dems',
+            'stock-market':            'market',
+            'price-target':            'pt',
+            'market-cap':              'mcap',
+            // actions
+            'increase': 'hike',
+            'decrease': 'cut',
+            'higher':   'up',
+            'lower':    'down',
+            'greater':  'gt',
+            'less':     'lt',
+            'million':  'M',
+            'billion':  'B',
+            'trillion': 'T',
+            'percent':  'pct',
+        };
+
+        const stopWords = new Set ([
+            'will', 'the', 'a', 'an', 'after', 'before', 'in', 'at', 'by',
+            'of', 'there', 'be', 'to', 'or', 'and', 'for', 'on', 'its',
+            'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were',
+        ]);
+
+        let s = (slug || '').toLowerCase ();
+        for (const phrase of Object.keys (replacements)) {
+            s = s.split (phrase).join (replacements[phrase]);
+        }
+        const parts = s.split ('-').filter ((w) => w.length > 0 && !stopWords.has (w));
+        return parts.join ('_').toUpperCase ();
+    }
+
+    slugToMarketId (eventSlug: string, marketSlug: string, outcome: string): string {
+        /**
+         * Builds a compound prediction-market ID: EVENT_SLUG:MARKET_SLUG:OUTCOME
+         * e.g. "US_ELECTION_2028:TRUMP:YES"
+         */
+        return this.shortenSlug (eventSlug) + ':' + this.shortenSlug (marketSlug) + ':' + outcome.toUpperCase ();
+    }
+
     parseTicker (ticker: Dict, market: Market = undefined): Ticker {
         throw new NotSupported (this.id + ' parseTicker() is not supported yet');
     }
