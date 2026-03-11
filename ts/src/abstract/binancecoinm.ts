@@ -6,7 +6,7 @@
 // -------------------------------------------------------------------------------
 
 import { implicitReturnType } from '../base/types.js';
-import _binance from '../binance.js';
+import _binance from '../polymarket.js';
 
 interface binance {
     sapiGetCopyTradingFuturesUserStatus (params?: {}): Promise<implicitReturnType>;

@@ -334,6 +334,12 @@ export default class Exchange {
     reloadingMarkets: boolean = undefined
     marketsLoading: Promise<Dictionary<any>> = undefined
 
+    // Prediction-market events: indexed by event ID, each entry contains nested markets
+    events: Dictionary<any> = undefined
+    events_by_slug: Dictionary<any> = undefined
+    reloadingEvents: boolean = undefined
+    eventsLoading: Promise<Dictionary<any>> = undefined
+
     accounts = undefined
     accountsById = undefined
 
@@ -1336,6 +1342,14 @@ export default class Exchange {
         return this.marketsLoading
     }
 
+    async loadMarketsAndEvents(reload = false, params = {}) {
+        const res = await Promise.all ([ this.loadMarkets (reload, params), this.loadEvents (reload, params) ])
+        return {
+            markets: res[0],
+            events: res[1],
+        }
+    }
+
     async fetchCurrencies (params = {}): Promise<Currencies> {
         // markets are returned as a list
         // currencies are returned as a dict
@@ -1366,6 +1380,59 @@ export default class Exchange {
         // this is for historical reasons
         // and may be changed for consistency later
         return new Promise ((resolve, reject) => resolve (Object.values (this.markets)))
+    }
+
+    // -------------------------------------------------------------------------
+    // Prediction-market events support
+    // -------------------------------------------------------------------------
+
+    async fetchEvents (params = {}): Promise<any[]> {
+        // Override in prediction-market exchange subclasses (e.g. Polymarket).
+        // Should return a list of raw event objects; each event must have:
+        //   id, slug, title, description, and a `markets` array of CCXT markets.
+        throw new NotSupported (this.id + ' fetchEvents() is not supported yet')
+    }
+
+    setEvents (events: any[]): Dictionary<any> {
+        // Build this.events (keyed by id) and this.events_by_slug (keyed by slug)
+        // from the list returned by fetchEvents().
+        // Each event already carries its nested `markets` array (CCXT market objects).
+        this.events = {}
+        this.events_by_slug = {}
+        for (let i = 0; i < events.length; i++) {
+            const event = events[i]
+            const id   = this.safeString (event, 'id')
+            const slug = this.safeString (event, 'slug')
+            if (id !== undefined) {
+                this.events[id] = event
+            }
+            if (slug !== undefined) {
+                this.events_by_slug[slug] = event
+            }
+        }
+        return this.events
+    }
+
+    async loadEventsHelper (reload = false, params = {}) {
+        if (!reload && this.events) {
+            return this.events
+        }
+        const events = await this.fetchEvents (params)
+        return this.setEvents (events)
+    }
+
+    async loadEvents (reload = false, params = {}): Promise<Dictionary<any>> {
+        if ((reload && !this.reloadingEvents) || !this.eventsLoading) {
+            this.reloadingEvents = true
+            this.eventsLoading = this.loadEventsHelper (reload, params).then ((resolved) => {
+                this.reloadingEvents = false
+                return resolved
+            }, (error) => {
+                this.reloadingEvents = false
+                throw error
+            })
+        }
+        return this.eventsLoading
     }
 
     checkRequiredDependencies () {

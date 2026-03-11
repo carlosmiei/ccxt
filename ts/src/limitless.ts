@@ -1,0 +1,577 @@
+/// <reference lib="es2015" />
+// ---------------------------------------------------------------------------
+//
+// Limitless CCXT Exchange adapter  (https://limitless.exchange)
+//
+// Hierarchy:  Group markets (events) → Child markets → YES/NO outcomes
+//
+// Each outcome token becomes one CCXT market:
+//   id:     token slug + "/" + outcome label   (e.g. "market-slug/YES")
+//   symbol: {slug}/{outcomeLabel}:USDC
+//
+// Sizes in the order book are in USDC micro-units (6 decimals) → ÷ 1_000_000.
+//
+// ---------------------------------------------------------------------------
+
+import Exchange from './abstract/limitless.js';
+import type {
+    Int, Str, Num, Dict,
+    Market, Ticker, OrderBook, Trade, OHLCV,
+    Order, Balances, Position,
+} from './base/types.js';
+
+// ---------------------------------------------------------------------------
+
+/**
+ * @class limitless
+ * @augments Exchange
+ */
+export default class Limitless extends Exchange {
+
+    describe () {
+        return this.deepExtend (super.describe (), {
+            'id': 'limitless',
+            'name': 'Limitless',
+            'countries': [],
+            'rateLimit': 200,
+            'certified': false,
+            'pro': false,
+            'has': {
+                'CORS': undefined,
+                'spot': false,
+                'margin': false,
+                'swap': false,
+                'future': false,
+                'option': false,
+                'prediction': true,
+                'fetchEvents': true,
+                'fetchMarkets': true,
+                'fetchTicker': true,
+                'fetchOrderBook': true,
+                'fetchOHLCV': true,
+                'fetchTrades': false,   // no public trades endpoint
+                'fetchBalance': false,
+                'fetchPositions': true,
+                'fetchOpenOrders': true,
+                'createOrder': true,
+                'cancelOrder': true,
+                'cancelAllOrders': true,
+                'fetchCurrencies': false,
+            },
+            'timeframes': {
+                '1m':  1,
+                '5m':  5,
+                '15m': 15,
+                '1h':  60,
+                '6h':  360,
+                '1d':  1440,
+            },
+            'urls': {
+                'logo': 'https://limitless.exchange/favicon.ico',
+                'api': {
+                    'limitless': 'https://api.limitless.exchange',
+                },
+                'www':  'https://limitless.exchange',
+                'doc':  ['https://docs.limitless.exchange'],
+            },
+            'api': {
+                'limitless': {
+                    'public': {
+                        'get': {
+                            'markets/active':                          1,
+                            'markets/{addressOrSlug}':                 1,
+                            'markets/search':                          1,
+                            'markets/{slug}/orderbook':                1,
+                            'markets/{slug}/historical-price':         1,
+                            'auth/signing-message':                    1,
+                        },
+                    },
+                    'private': {
+                        'get': {
+                            'markets/{slug}/user-orders':              1,
+                            'portfolio/positions':                     1,
+                            'portfolio/trades':                        1,
+                        },
+                        'post': {
+                            'auth/login':                              1,
+                            'orders':                                  1,
+                            'orders/cancel-batch':                     1,
+                        },
+                        'delete': {
+                            'orders/{order_id}':                       1,
+                        },
+                    },
+                },
+            },
+            'requiredCredentials': {
+                'apiKey':     true,   // Limitless API key
+                'privateKey': true,   // EVM private key for EIP-712 order signing
+            },
+            'fees': {
+                'trading': {
+                    'tierBased':  false,
+                    'percentage': true,
+                    'maker':      0.02,
+                    'taker':      0.02,
+                },
+            },
+            'options': {
+                'defaultFetchMarketsPages': 5,
+                'marketsPageSize':          25,
+                'usdcDecimals':             6,  // Limitless sizes are 6-decimal USDC
+            },
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Markets — group markets (events) + child markets → YES/NO outcomes
+    // -----------------------------------------------------------------------
+
+    async fetchMarkets (params: Dict = {}): Promise<Market[]> {
+        const markets: Market[] = [];
+        let page = 1;
+        const pageSize = this.safeInteger (this.options, 'marketsPageSize', 25);
+
+        while (true) {
+            const response = await this.limitlessPublicGetMarketsActive (this.extend ({
+                'page':  page,
+                'limit': pageSize,
+            }, params));
+
+            const rawMarkets = (this.safeList (response, 'data', response as any) || []) as any[];
+            if (!rawMarkets || rawMarkets.length === 0) {
+                break;
+            }
+
+            for (const raw of rawMarkets) {
+                const parsed = this.parseMarketToOutcomes (raw);
+                for (const m of parsed) {
+                    markets.push (m);
+                }
+            }
+
+            if (rawMarkets.length < pageSize) {
+                break;
+            }
+            page++;
+        }
+        return markets;
+    }
+
+    parseMarketToOutcomes (raw: Dict): Market[] {
+        const slug      = this.safeString (raw, 'slug');
+        const address   = this.safeString (raw, 'address', slug);
+        const tokens    = this.safeValue  (raw, 'tokens', {});
+        const active    = this.safeBool   (raw, 'active', true);
+        const endDate   = this.safeString (raw, 'deadline', this.safeString (raw, 'expiresAt'));
+        const volume24h = this.safeNumber (raw, 'volume24h');
+        const result: Market[] = [];
+
+        // Tokens object contains YES/NO entries with token_id and label
+        const tokenEntries = Object.keys (tokens);
+        for (const outcomeLabel of tokenEntries) {
+            const tokenData  = tokens[outcomeLabel];
+            const tokenId    = this.safeString (tokenData, 'token_id', slug + '/' + outcomeLabel);
+            const symbol     = slug + '/' + outcomeLabel + ':USDC';
+
+            result.push ({
+                'id':             tokenId,
+                'symbol':         symbol,
+                'base':           outcomeLabel,
+                'quote':          'USDC',
+                'settle':         undefined,
+                'baseId':         tokenId,
+                'quoteId':        'USDC',
+                'settleId':       undefined,
+                'type':           'prediction',
+                'spot':           false,
+                'margin':         false,
+                'swap':           false,
+                'future':         false,
+                'option':         false,
+                'prediction':     true,
+                'active':         active,
+                'contract':       false,
+                'linear':         undefined,
+                'inverse':        undefined,
+                'contractSize':   undefined,
+                'expiry':         endDate ? this.parse8601 (endDate) : undefined,
+                'expiryDatetime': endDate,
+                'strike':         undefined,
+                'optionType':     undefined,
+                'taker':          0.02,
+                'maker':          0.02,
+                'percentage':     true,
+                'tierBased':      false,
+                'feeSide':        'get',
+                'precision': {
+                    'amount': 0.000001,
+                    'price':  0.001,
+                },
+                'limits': {
+                    'leverage': { 'min': 1,    'max': 1        },
+                    'amount':   { 'min': 0,    'max': undefined },
+                    'price':    { 'min': 0.001,'max': 0.999    },
+                    'cost':     { 'min': undefined, 'max': undefined },
+                },
+                'info': this.extend (raw, {
+                    'slug':         slug,
+                    'address':      address,
+                    'outcomeLabel': outcomeLabel,
+                    'tokenId':      tokenId,
+                    'volume24h':    volume24h,
+                }),
+                'created': undefined,
+            } as unknown as Market);
+        }
+        return result;
+    }
+
+    // -----------------------------------------------------------------------
+    // Ticker
+    // -----------------------------------------------------------------------
+
+    async fetchTicker (symbol: Str, params: Dict = {}): Promise<Ticker> {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const slug   = this.safeString (market['info'], 'slug');
+        const response = await this.limitlessPublicGetMarketsAddressOrSlug (this.extend ({
+            'addressOrSlug': slug,
+        }, params));
+        return this.parseTicker (response, market);
+    }
+
+    parseTicker (raw: Dict, market: Market = undefined): Ticker {
+        const outcomeLabel = market ? this.safeString (market['info'], 'outcomeLabel') : 'YES';
+        const tokens   = this.safeValue (raw, 'tokens', {});
+        const tokenData = this.safeValue (tokens, outcomeLabel, {});
+        const price    = this.safeNumber (tokenData, 'price');
+        const now      = this.milliseconds ();
+
+        return this.safeTicker ({
+            'symbol':        this.safeSymbol (undefined, market),
+            'timestamp':     now,
+            'datetime':      this.iso8601 (now),
+            'high':          undefined,
+            'low':           undefined,
+            'bid':           price,
+            'bidVolume':     undefined,
+            'ask':           price,
+            'askVolume':     undefined,
+            'vwap':          undefined,
+            'open':          undefined,
+            'close':         price,
+            'last':          price,
+            'previousClose': undefined,
+            'change':        undefined,
+            'percentage':    this.safeNumber (tokenData, 'priceChange24h'),
+            'average':       price,
+            'baseVolume':    undefined,
+            'quoteVolume':   this.safeNumber (raw, 'volume24h'),
+            'info':          raw,
+        }, market);
+    }
+
+    // -----------------------------------------------------------------------
+    // Order book (sizes in 6-decimal USDC micro-units → ÷ 1_000_000)
+    // -----------------------------------------------------------------------
+
+    async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
+        await this.loadMarkets ();
+        const market  = this.market (symbol);
+        const slug    = this.safeString (market['info'], 'slug');
+
+        const response  = await this.limitlessPublicGetMarketsSlugOrderbook (this.extend ({
+            'slug': slug,
+        }, params));
+
+        const timestamp = this.milliseconds ();
+        const decimals  = this.safeInteger (this.options, 'usdcDecimals', 6);
+        // scale = 10^decimals; USDC uses 6 decimals → 1_000_000
+        const scale     = decimals === 6 ? 1000000 : decimals === 8 ? 100000000 : 1000000;
+
+        const rawBids = (this.safeList (response, 'bids', []) || []) as any[];
+        const rawAsks = (this.safeList (response, 'asks', []) || []) as any[];
+
+        const convertLevel = (entry: any) => {
+            const price  = this.safeNumber (entry, 'price');
+            const sizeMicro = this.safeNumber (entry, 'size');
+            return [ price, sizeMicro !== undefined ? sizeMicro / scale : undefined ];
+        };
+
+        const bids = rawBids.map (convertLevel);
+        const asks = rawAsks.map (convertLevel);
+
+        return {
+            'symbol':    symbol,
+            'bids':      bids,
+            'asks':      asks,
+            'timestamp': timestamp,
+            'datetime':  this.iso8601 (timestamp),
+            'nonce':     undefined,
+        } as unknown as OrderBook;
+    }
+
+    // -----------------------------------------------------------------------
+    // OHLCV (single price point per tick — no true OHLCV)
+    // -----------------------------------------------------------------------
+
+    async fetchOHLCV (symbol: Str, timeframe = '1d', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
+        await this.loadMarkets ();
+        const market   = this.market (symbol);
+        const slug     = this.safeString (market['info'], 'slug');
+        const fidelity = this.safeInteger (this.timeframes, timeframe, 1440);
+
+        const response = await this.limitlessPublicGetMarketsSlugHistoricalPrice (this.extend ({
+            'slug':     slug,
+            'fidelity': fidelity,
+        }, params));
+
+        const history = (this.safeList (response, 'data', response as any) || []) as any[];
+        return this.parseOHLCVs (history, market, timeframe, since, limit);
+    }
+
+    parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
+        const ts    = this.safeInteger (ohlcv, 'timestamp');
+        const price = this.safeNumber  (ohlcv, 'price');
+        return [
+            ts !== undefined ? ts * 1000 : undefined,
+            price, price, price, price,   // synthetic OHLC from single tick
+            undefined,
+        ];
+    }
+
+    // -----------------------------------------------------------------------
+    // Orders
+    // -----------------------------------------------------------------------
+
+    async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+        this.checkRequiredCredentials ();
+        const request: Dict = {};
+        let market: Market = undefined;
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            request['slug'] = this.safeString (market['info'], 'slug');
+        }
+        const slug = this.safeString (request, 'slug', 'all');
+        const response = await this.limitlessPrivateGetMarketsSlugUserOrders (
+            this.extend ({ 'slug': slug }, this.omit (request, 'slug'), params)
+        );
+        const orders = (this.safeList (response, 'data', []) || []) as any[];
+        return this.parseOrders (orders, market, since, limit);
+    }
+
+    parseOrder (order: Dict, market: Market = undefined): Order {
+        const id     = this.safeString (order, 'id', this.safeString (order, 'orderId'));
+        const slug   = this.safeString (order, 'marketSlug', this.safeString (order, 'slug'));
+        const mkt    = slug ? this.safeMarket (slug, market) : market;
+        const status = this.parseOrderStatus (this.safeString (order, 'status'));
+        const side   = this.safeStringLower (order, 'side');
+        const price  = this.safeNumber (order, 'price');
+        const amount = this.safeNumber (order, 'size', this.safeNumber (order, 'amount'));
+        const filled = this.safeNumber (order, 'filledSize', 0);
+        const remaining = (amount !== undefined && filled !== undefined) ? amount - filled : undefined;
+        const ts     = this.safeInteger (order, 'createdAt', this.parse8601 (this.safeString (order, 'created_at')));
+
+        return this.safeOrder ({
+            'id':                 id,
+            'clientOrderId':      undefined,
+            'info':               order,
+            'timestamp':          ts,
+            'datetime':           this.iso8601 (ts),
+            'lastTradeTimestamp': undefined,
+            'status':             status,
+            'symbol':             mkt ? mkt['symbol'] : undefined,
+            'type':               'limit',
+            'timeInForce':        'GTC',
+            'postOnly':           undefined,
+            'side':               side,
+            'price':              price,
+            'stopPrice':          undefined,
+            'triggerPrice':       undefined,
+            'average':            undefined,
+            'amount':             amount,
+            'cost':               undefined,
+            'filled':             filled,
+            'remaining':          remaining,
+            'fee':                undefined,
+            'trades':             [],
+        }, mkt);
+    }
+
+    parseOrderStatus (status: Str): Str {
+        const statuses: Dict = {
+            'open':      'open',
+            'filled':    'closed',
+            'cancelled': 'canceled',
+            'canceled':  'canceled',
+        };
+        return this.safeString (statuses, status, status);
+    }
+
+    async createOrder (symbol: Str, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
+        this.checkRequiredCredentials ();
+        await this.loadMarkets ();
+        const market  = this.market (symbol);
+        const slug    = this.safeString (market['info'], 'slug');
+        const outcome = this.safeString (market['info'], 'outcomeLabel');
+
+        const request: Dict = {
+            'marketSlug':   slug,
+            'outcome':      outcome,
+            'side':         (side as string).toLowerCase (),
+            'size':         amount,
+            'price':        price,
+            'orderType':    type,
+        };
+
+        const response = await this.limitlessPrivatePostOrders (this.extend (request, params));
+        return this.parseOrder (response, market);
+    }
+
+    async cancelOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
+        this.checkRequiredCredentials ();
+        const response = await this.limitlessPrivateDeleteOrdersOrderId (this.extend ({ 'order_id': id }, params));
+        return this.parseOrder (response);
+    }
+
+    async cancelAllOrders (symbol: Str = undefined, params: Dict = {}): Promise<Order[]> {
+        this.checkRequiredCredentials ();
+        const request: Dict = {};
+        if (symbol !== undefined) {
+            await this.loadMarkets ();
+            const market = this.market (symbol);
+            request['marketSlug'] = this.safeString (market['info'], 'slug');
+        }
+        const response = await this.limitlessPrivatePostOrdersCancelBatch (this.extend (request, params));
+        return this.parseOrders (this.safeList (response, 'data', []) as any[]);
+    }
+
+    // -----------------------------------------------------------------------
+    // Positions
+    // -----------------------------------------------------------------------
+
+    async fetchPositions (symbols?: Str[], params: Dict = {}): Promise<Position[]> {
+        this.checkRequiredCredentials ();
+        const response = await this.limitlessPrivateGetPortfolioPositions (params);
+        const positions = (this.safeList (response, 'data', []) || []) as any[];
+        return this.parsePositions (positions, symbols);
+    }
+
+    parsePosition (position: Dict, market: Market = undefined): Position {
+        const slug    = this.safeString (position, 'marketSlug', this.safeString (position, 'slug'));
+        const outcome = this.safeString (position, 'outcome');
+        const mkt     = this.safeMarket (slug + '/' + outcome, market);
+        const size    = this.safeNumber (position, 'size');
+        const price   = this.safeNumber (position, 'avgPrice');
+        const cur     = this.safeNumber (position, 'currentPrice');
+
+        return {
+            'id':                            undefined,
+            'symbol':                        mkt['symbol'],
+            'timestamp':                     undefined,
+            'datetime':                      undefined,
+            'contracts':                     size,
+            'contractSize':                  1,
+            'side':                          'long',
+            'notional':                      (size !== undefined && cur !== undefined) ? size * cur : undefined,
+            'leverage':                      1,
+            'unrealizedPnl':                 (size !== undefined && price !== undefined && cur !== undefined) ? size * (cur - price) : undefined,
+            'realizedPnl':                   this.safeNumber (position, 'realizedPnl'),
+            'collateral':                    undefined,
+            'entryPrice':                    price,
+            'markPrice':                     cur,
+            'liquidationPrice':              undefined,
+            'hedged':                        false,
+            'maintenanceMargin':             undefined,
+            'maintenanceMarginPercentage':   undefined,
+            'initialMargin':                 undefined,
+            'initialMarginPercentage':       undefined,
+            'marginRatio':                   undefined,
+            'marginMode':                    'cross',
+            'marginType':                    'cross',
+            'percentage':                    undefined,
+            'info':                          position,
+        } as Position;
+    }
+
+    // -----------------------------------------------------------------------
+    // Events (group markets act as events; child markets as CCXT markets)
+    // -----------------------------------------------------------------------
+
+    async fetchEvents (params: Dict = {}): Promise<any[]> {
+        const query = this.safeString (params, 'query');
+        const rest  = this.omit (params, ['query']);
+        let rawMarkets: any[] = [];
+
+        if (query) {
+            const response = await this.limitlessPublicGetMarketsSearch (this.extend ({
+                'term': query,
+            }, rest));
+            rawMarkets = (this.safeList (response, 'data', []) || []) as any[];
+        } else {
+            rawMarkets = await this.fetchMarkets (params) as any[];
+        }
+
+        // Group child markets under their group (parent) as events
+        const eventsMap: Dict = {};
+        for (const raw of rawMarkets) {
+            const groupId = this.safeString (raw, 'groupId', this.safeString (raw, 'slug'));
+            if (!eventsMap[groupId]) {
+                eventsMap[groupId] = this.extend (raw, {
+                    'id':      groupId,
+                    'slug':    groupId,
+                    'title':   this.safeString (raw, 'title', this.safeString (raw, 'slug')),
+                    'markets': {},
+                });
+            }
+            const symbol = this.safeString (raw, 'symbol');
+            if (symbol) {
+                eventsMap[groupId]['markets'][symbol] = raw;
+            }
+        }
+
+        const result: any[] = [];
+        for (const key of Object.keys (eventsMap)) {
+            result.push (eventsMap[key]);
+        }
+        return result;
+    }
+
+    // -----------------------------------------------------------------------
+    // Signing (API key header; EIP-712 signing handled externally for orders)
+    // -----------------------------------------------------------------------
+
+    sign (path: Str, api: any = 'limitless', method = 'GET', params: Dict = {}, headers: Dict = undefined, body: Dict = undefined) {
+        const apiGroup: string = typeof api === 'string' ? api : api[0];
+        const access: string  = typeof api === 'string' ? 'public' : api[1];
+
+        const baseUrls = this.urls['api'] as Dict;
+        const baseUrl  = this.safeString (baseUrls, apiGroup, baseUrls['limitless'] as string);
+        let url        = baseUrl + '/' + this.implodeParams (path as string, params);
+        const query    = this.omit (params, this.extractParams (path as string));
+
+        const querystring = this.urlencode (query);
+        if (method === 'GET' && querystring) {
+            url += '?' + querystring;
+        }
+
+        headers = this.extend ({
+            'Accept':       'application/json',
+            'Content-Type': 'application/json',
+        }, headers || {});
+
+        if (access === 'private') {
+            this.checkRequiredCredentials ();
+            headers = this.extend (headers, {
+                'x-api-key': this.apiKey,
+            });
+
+            if (method !== 'GET' && querystring) {
+                body = query as any;
+            }
+        }
+
+        return { 'url': url, 'method': method, 'body': body, 'headers': headers };
+    }
+}
