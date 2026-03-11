@@ -158,22 +158,92 @@ export default class polymarket extends Exchange {
     // Market loading — each Polymarket outcome token becomes one CCXT market
     // -----------------------------------------------------------------------
 
+    shortenSlug (slug: string): string {
+        /**
+         * Shortens a hyphenated slug by applying phrase replacements
+         * and dropping common stop words, then uppercasing.
+         *
+         * e.g. "will-the-federal-reserve-increase-interest-rates-by-25-basis-points"
+         *   → "FED_HIKE_RATES_25BPS"
+         */
+        const replacements: Dict = {
+            // finance / prediction market phrases
+            'federal-reserve':    'fed',
+            'interest-rates':     'rates',
+            'interest-rate':      'rate',
+            'basis-points':       'bps',
+            'basis-point':        'bp',
+            'executive-order':    'eo',
+            'united-states':      'us',
+            'united-kingdom':     'uk',
+            'european-union':     'eu',
+            'artificial-intelligence': 'ai',
+            'republican-party':   'gop',
+            'democratic-party':   'dems',
+            'stock-market':       'market',
+            'price-target':       'pt',
+            'market-cap':         'mcap',
+            // actions
+            'increase':  'hike',
+            'decrease':  'cut',
+            'higher':    'up',
+            'lower':     'down',
+            'greater':   'gt',
+            'less':      'lt',
+            'above':     'above',
+            'below':     'below',
+            'million':   'M',
+            'billion':   'B',
+            'trillion':  'T',
+            'percent':   'pct',
+        };
+
+        const stopWords = new Set ([
+            'will', 'the', 'a', 'an', 'after', 'before', 'in', 'at', 'by',
+            'of', 'there', 'be', 'to', 'or', 'and', 'for', 'on', 'its',
+            'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were',
+        ]);
+
+        let s = (slug || '').toLowerCase ();
+
+        // Apply multi-word phrase replacements (slug uses hyphens)
+        for (const phrase of Object.keys (replacements)) {
+            s = s.split (phrase).join (replacements[phrase] as string);
+        }
+
+        // Drop stop words and empty tokens
+        const parts = s.split ('-').filter ((w) => w.length > 0 && !stopWords.has (w));
+
+        return parts.join ('_').toUpperCase ();
+    }
+
+    slugToMarketId (eventSlug: Str, marketSlug: Str, outcome: Str): string {
+        /**
+         * Builds a compound market ID: EVENT_SLUG:MARKET_SLUG:OUTCOME
+         * e.g. "US_ELECTION_2028:TRUMP:YES"
+         */
+        return this.shortenSlug (eventSlug as string) + ':' + this.shortenSlug (marketSlug as string) + ':' + (outcome as string).toUpperCase ();
+    }
+
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
         /**
-         * Fetches all active Polymarket events → markets → outcomes and
-         * flattens them into the CCXT market list.
+         * Fetches all active Polymarket events → markets → outcomes,
+         * flattens them into the CCXT market list, and stores a nested
+         * events dict at this.events keyed by normalised event slug.
          *
-         * Each outcome token (YES/NO/candidate) becomes one CCXT market:
-         *   symbol  = {conditionId}/{outcomeLabel}:USDC
+         * Each outcome token becomes one CCXT market:
+         *   symbol  = EVENT_SLUG:MARKET_SLUG:OUTCOME  (e.g. "US_ELECTION_2028:TRUMP:YES")
          *   id      = clobTokenId  (the actual CLOB order-book identifier)
          */
-        const markets: Market[] = [];
+        const flatMarkets: Market[] = [];
+        const eventsDict: Dict = {};
         let offset = 0;
         const pageSize = this.safeInteger (this.options, 'maxFetchEventsLimit', 500);
         const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'active'));
         const rest = this.omit (params, ['status']);
-
+        let i = 0;
         while (true) {
+            i++ ;
             const request: Dict = this.extend ({
                 'limit':     pageSize,
                 'offset':    offset,
@@ -187,23 +257,38 @@ export default class polymarket extends Exchange {
             }
 
             const response = await this.gammaPublicGetEvents (request);
-            const events: any[] = (this.safeList (response, 'data', []) || []) as any[];
-
-            if (!events || events.length === 0) {
+            if (!response || response.length === 0) {
                 break;
             }
-            for (const event of events) {
-                const parsedMarkets = this.parseEventToMarkets (event);
-                for (const m of parsedMarkets) {
-                    markets.push (m);
+
+            if (i === 10) {
+                break;
+            }
+
+            for (const rawEvent of response) {
+                const ccxtMarkets = this.parseEventToMarkets (rawEvent);
+                const marketsById: Dict = {};
+                for (const m of ccxtMarkets) {
+                    const sym = m['symbol'] as string;
+                    flatMarkets.push (m);
+                    marketsById[sym] = m;
+                }
+                const parsedEvent = this.parseEvent (rawEvent, marketsById);
+                const eventSlug = this.safeString (rawEvent, 'slug');
+                if (eventSlug) {
+                    const eventKey = this.shortenSlug (eventSlug as string);
+                    eventsDict[eventKey] = parsedEvent;
                 }
             }
-            if (events.length < pageSize) {
+
+            if (response.length < pageSize) {
                 break;
             }
             offset += pageSize;
         }
-        return markets;
+
+        this.events = eventsDict;
+        return flatMarkets;
     }
 
     parseEventToMarkets (event: Dict): Market[] {
@@ -223,6 +308,7 @@ export default class polymarket extends Exchange {
             const market      = rawMarkets[mi];
             const conditionId = this.safeString (market, 'conditionId');
             const marketId    = this.safeString (market, 'id');
+            const marketSlug  = this.safeString (market, 'slug', conditionId);
             const question    = this.safeString (market, 'question', this.safeString (market, 'title'));
             const active      = this.safeBool   (market, 'active', false);
             const closed      = this.safeBool   (market, 'closed', false);
@@ -261,8 +347,8 @@ export default class polymarket extends Exchange {
                     continue;
                 }
 
-                // symbol = conditionId/OUTCOME:USDC  (e.g. "0xabc…/YES:USDC")
-                const symbol = conditionId + '/' + outcomeLabel + ':USDC';
+                // symbol = EVENT_SLUG:MARKET_SLUG:OUTCOME  (e.g. "US_ELECTION_2028:TRUMP:YES")
+                const symbol = this.slugToMarketId (eventSlug, marketSlug, outcomeLabel);
 
                 result.push ({
                     'id':              clobTokenId,
@@ -312,6 +398,7 @@ export default class polymarket extends Exchange {
                         'eventTags':     eventTags,
                         'marketId':      marketId,
                         'conditionId':   conditionId,
+                        'marketSlug':    marketSlug,
                         'question':      question,
                         'marketIndex':   mi,
                         'outcomeIndex':  oi,
@@ -701,32 +788,38 @@ export default class polymarket extends Exchange {
     // Returns raw Polymarket events (with nested markets and outcomes).
     // -----------------------------------------------------------------------
 
-    async fetchEvents (params: Dict = {}): Promise<any[]> {
+    async fetchEvents (params: Dict = {}): Promise<any> {
         /**
-         * Fetches Polymarket events, each containing its CCXT-format markets.
-         *
-         * Returned array shape:
-         *   [{
-         *     id, slug, title, description, category, tags,
-         *     volume24h, liquidity, url, image,
-         *     markets: {                        ← keyed by CCXT symbol
-         *       '{conditionId}/YES:USDC': { ...CCXT market... },
-         *       '{conditionId}/NO:USDC':  { ...CCXT market... },
+         * Returns events dict keyed by normalised event slug:
+         *   {
+         *     "US_ELECTION_2028": {
+         *       id, slug, title, ...,
+         *       markets: {
+         *         "US_ELECTION_2028:TRUMP:YES": { ...CCXT market... },
+         *       }
          *     }
-         *   }, ...]
+         *   }
+         *
+         * For single-event fetches (id / slug / query params) the result
+         * contains only the matching events. For the no-params case it
+         * delegates to loadMarkets() and returns this.events.
          *
          * Params:
-         *   - id     (str) : fetch single event by ID
+         *   - id     (str) : fetch single event by numeric ID
          *   - slug   (str) : fetch single event by slug
          *   - query  (str) : text search via /public-search
          *   - status (str) : 'active' | 'closed' | 'all'  (default: 'active')
-         *   - limit  (int) : max results (default: 100)
-         *   - offset (int) : pagination offset
+         *   - limit  (int) : max search results (default: 50)
          */
         const id    = this.safeString (params, 'id');
         const slug  = this.safeString (params, 'slug');
         const query = this.safeString (params, 'query');
         const rest  = this.omit (params, ['id', 'slug', 'query', 'status']);
+
+        if (!id && !slug && !query) {
+            await this.loadMarkets ();
+            return this['events'] as Dict;
+        }
 
         let rawEvents: any[] = [];
 
@@ -742,44 +835,40 @@ export default class polymarket extends Exchange {
                 'limit_per_type': this.safeInteger (params, 'limit', 50),
             }, rest));
             rawEvents = (this.safeList (response, 'events', []) || []) as any[];
-        } else {
-            const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'active'));
-            const limit  = this.safeInteger (params, 'limit',  this.safeInteger (this.options, 'defaultFetchEventsLimit', 100));
-            const offset = this.safeInteger (params, 'offset', 0);
-
-            const request: Dict = this.extend ({
-                'limit':     limit,
-                'offset':    offset,
-                'order':     'volume24hr',
-                'ascending': false,
-            }, rest);
-
-            if (status === 'active') {
-                request['active'] = true;
-            } else if (status === 'closed') {
-                request['closed'] = true;
-            }
-
-            const response = await this.gammaPublicGetEvents (request);
-            rawEvents = (this.safeList (response, 'data', []) || []) as any[];
         }
 
-        return this.parseEvents (rawEvents);
+        const eventsDict: Dict = {};
+        for (const rawEvent of rawEvents) {
+            const ccxtMarkets = this.parseEventToMarkets (rawEvent);
+            const marketsById: Dict = {};
+            for (const m of ccxtMarkets) {
+                marketsById[m['symbol'] as string] = m;
+            }
+            const parsedEvent = this.parseEvent (rawEvent, marketsById);
+            const eventSlug = this.safeString (rawEvent, 'slug');
+            if (eventSlug) {
+                const eventKey = this.shortenSlug (eventSlug as string);
+                eventsDict[eventKey] = parsedEvent;
+            }
+        }
+        return eventsDict;
     }
 
-    parseEvent (rawEvent: Dict): Dict {
+    parseEvent (rawEvent: Dict, marketsById: Dict = undefined): Dict {
         /**
          * Augments one raw Gamma API event with parsed CCXT markets.
-         * The returned `markets` dict is keyed by CCXT symbol.
+         * The returned `markets` dict is keyed by compound symbol
+         * (EVENT_SLUG:MARKET_SLUG:OUTCOME). Pre-computed marketsById
+         * can be passed to avoid re-parsing outcomes.
          */
-        const ccxtMarkets = this.parseEventToMarkets (rawEvent);
-
-        // Index markets by symbol for O(1) lookup
-        const marketsById: Dict = {};
-        for (const m of ccxtMarkets) {
-            const symbol = this.safeString (m, 'symbol');
-            if (symbol) {
-                marketsById[symbol] = m;
+        if (marketsById === undefined) {
+            marketsById = {};
+            const ccxtMarkets = this.parseEventToMarkets (rawEvent);
+            for (const m of ccxtMarkets) {
+                const symbol = this.safeString (m, 'symbol');
+                if (symbol) {
+                    marketsById[symbol] = m;
+                }
             }
         }
 
