@@ -633,46 +633,57 @@ export default class kalshi extends Exchange {
 
     async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<any> {
         /**
-         * Fetches events from the Kalshi /events endpoint (fast — one call),
-         * filters by query strings, parses, caches in this.events/this.markets,
-         * and returns the matching events dict.
+         * Fetches events from the Kalshi /events endpoint, paginates up to
+         * maxPages pages, filters client-side by query strings (Kalshi has no
+         * search API), caches in this.events/this.markets, and returns the
+         * matching events dict.
          *
          *   await exchange.fetchEvents (['Trump', 'KXBTC'])
          */
         const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'open'));
-        const limit = this.safeInteger (params, 'limit', this.safeInteger (this.options, 'defaultFetchEventsLimit', 100));
-        const rest = this.omit (params, [ 'status', 'limit' ]);
-        const response = await this.kalshiPublicGetEvents (this.extend ({ 'status': status, 'limit': limit }, rest));
-        const rawEvents = (this.safeList (response, 'events', []) || []) as any[];
-        // Client-side filter when queries are provided (Kalshi has no search API)
-        let filtered = rawEvents;
-        if (queries && queries.length > 0) {
-            const lowerQueries = queries.map ((q) => (q as string).toLowerCase ());
-            filtered = rawEvents.filter ((rawEvent) => {
-                const slug = (this.safeString (rawEvent, 'event_ticker') || '').toLowerCase ();
-                const title = (this.safeString (rawEvent, 'title') || '').toLowerCase ();
-                return lowerQueries.some ((q) => slug.indexOf (q) !== -1 || title.indexOf (q) !== -1);
-            });
-        }
+        const pageLimit = this.safeInteger (params, 'limit', 200);
+        const maxPages = this.safeInteger (params, 'maxPages', 5);
+        const rest = this.omit (params, [ 'status', 'limit', 'maxPages' ]);
         if (!this.events) {
             this.events = {};
         }
         if (!this.markets) {
             this.markets = {};
         }
+        const lowerQueries = (queries && queries.length > 0) ? queries.map ((q) => (q as string).toLowerCase ()) : [];
         const result: Dict = {};
-        filtered.forEach ((rawEvent) => {
-            const parsedEvent = this.parseEvent (rawEvent);
-            const eventTicker = this.safeString (rawEvent, 'event_ticker');
-            const eventKey = eventTicker ? this.shortenSlug (eventTicker) : undefined;
-            if (eventKey) {
-                (this.events as Dict)[eventKey] = parsedEvent;
-                result[eventKey] = parsedEvent;
-                Object.keys ((parsedEvent['markets'] || {}) as Dict).forEach ((sym) => {
-                    this.markets[sym] = (parsedEvent['markets'] as Dict)[sym];
-                });
+        let cursor: string | undefined = undefined;
+        let page = 0;
+        while (page < maxPages) {
+            const request: Dict = { 'status': status, 'limit': pageLimit, 'with_nested_markets': true };
+            if (cursor) {
+                request['cursor'] = cursor;
             }
-        });
+            const response = await this.kalshiPublicGetEvents (this.extend (request, rest));
+            const rawEvents = (this.safeList (response, 'events', []) || []) as any[];
+            cursor = this.safeString (response, 'cursor');
+            const filtered = lowerQueries.length === 0 ? rawEvents : rawEvents.filter ((rawEvent) => {
+                const slug = (this.safeString (rawEvent, 'event_ticker') || '').toLowerCase ();
+                const title = (this.safeString (rawEvent, 'title') || '').toLowerCase ();
+                return lowerQueries.some ((q) => slug.indexOf (q) !== -1 || title.indexOf (q) !== -1);
+            });
+            filtered.forEach ((rawEvent) => {
+                const parsedEvent = this.parseEvent (rawEvent);
+                const eventTicker = this.safeString (rawEvent, 'event_ticker');
+                const eventKey = eventTicker ? this.shortenSlug (eventTicker) : undefined;
+                if (eventKey) {
+                    (this.events as Dict)[eventKey] = parsedEvent;
+                    result[eventKey] = parsedEvent;
+                    Object.keys ((parsedEvent['markets'] || {}) as Dict).forEach ((sym) => {
+                        this.markets[sym] = (parsedEvent['markets'] as Dict)[sym];
+                    });
+                }
+            });
+            page++;
+            if (!cursor || rawEvents.length < pageLimit) {
+                break;
+            }
+        }
         return result;
     }
 
