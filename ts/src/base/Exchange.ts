@@ -2430,40 +2430,38 @@ export default class Exchange {
          */
         const replacements = {
             // finance / prediction market phrases
-            'federal-reserve':         'fed',
-            'interest-rates':          'rates',
-            'interest-rate':           'rate',
-            'basis-points':            'bps',
-            'basis-point':             'bp',
-            'executive-order':         'eo',
-            'united-states':           'us',
-            'united-kingdom':          'uk',
-            'european-union':          'eu',
+            'federal-reserve': 'fed',
+            'interest-rates': 'rates',
+            'interest-rate': 'rate',
+            'basis-points': 'bps',
+            'basis-point': 'bp',
+            'executive-order': 'eo',
+            'united-states': 'us',
+            'united-kingdom': 'uk',
+            'european-union': 'eu',
             'artificial-intelligence': 'ai',
-            'republican-party':        'gop',
-            'democratic-party':        'dems',
-            'stock-market':            'market',
-            'price-target':            'pt',
-            'market-cap':              'mcap',
+            'republican-party': 'gop',
+            'democratic-party': 'dems',
+            'stock-market': 'market',
+            'price-target': 'pt',
+            'market-cap': 'mcap',
             // actions
             'increase': 'hike',
             'decrease': 'cut',
-            'higher':   'up',
-            'lower':    'down',
-            'greater':  'gt',
-            'less':     'lt',
-            'million':  'M',
-            'billion':  'B',
+            'higher': 'up',
+            'lower': 'down',
+            'greater': 'gt',
+            'less': 'lt',
+            'million': 'M',
+            'billion': 'B',
             'trillion': 'T',
-            'percent':  'pct',
+            'percent': 'pct',
         };
-
         const stopWords = new Set ([
             'will', 'the', 'a', 'an', 'after', 'before', 'in', 'at', 'by',
             'of', 'there', 'be', 'to', 'or', 'and', 'for', 'on', 'its',
             'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were',
         ]);
-
         let s = (slug || '').toLowerCase ();
         for (const phrase of Object.keys (replacements)) {
             s = s.split (phrase).join (replacements[phrase]);
@@ -2472,12 +2470,257 @@ export default class Exchange {
         return parts.join ('_').toUpperCase ();
     }
 
+    createUnifiedSymbol2 (question, outcome) {
+        const stopwords = new Set ([
+            'will', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be',
+        ]);
+        const dict = {
+            'increase': 'HIKE',
+            'decrease': 'CUT',
+            'military': '',
+            'operations': 'OPS',
+            'interest': '',
+            'rates': 'RATES',
+            'announce': '',
+            'announces': '',
+            'announced': '',
+            'federal-reserve': 'fed',
+            'interest-rates': 'rates',
+            'interest-rate': 'rate',
+            'basis-points': 'bps',
+            'basis-point': 'bp',
+            'executive-order': 'eo',
+            'united-states': 'us',
+            'united-kingdom': 'uk',
+            'european-union': 'eu',
+            'artificial-intelligence': 'ai',
+            'republican-party': 'gop',
+            'democratic-party': 'dems',
+            'stock-market': 'market',
+            'price-target': 'pt',
+            'market-cap': 'mcap',
+            // actions
+            'higher': 'up',
+            'lower': 'down',
+            'greater': 'gt',
+            'less': 'lt',
+            'million': 'M',
+            'billion': 'B',
+            'trillion': 'T',
+            'percent': 'pct',
+        };
+        const months = {
+            'january': 'JAN',
+            'february': 'FEB',
+            'march': 'MAR',
+            'april': 'APR',
+            'may': 'MAY',
+            'june': 'JUN',
+            'july': 'JUL',
+            'august': 'AUG',
+            'september': 'SEP',
+            'october': 'OCT',
+            'november': 'NOV',
+            'december': 'DEC',
+        };
+        let tokens = question
+            .toLowerCase ()
+            .replace (/[^a-z0-9\s]/g, '')
+            .split (/\s+/)
+            .filter ((t) => !stopwords.has (t));
+        tokens = tokens.map ((t) => dict[t] ?? t);
+        let actor = tokens.find ((t) => [ 'trump', 'fed', 'biden', 'putin' ].includes (t)) || tokens[0];
+        let topic = tokens.find ((t) => [ 'iran', 'china', 'rates', 'bitcoin' ].includes (t));
+        let action = tokens.find ((t) => [ 'cut', 'hike', 'ops', 'ban', 'approve' ]);
+        actor = actor?.toUpperCase ();
+        topic = topic?.toUpperCase ();
+        action = action?.toUpperCase ();
+        let condition = '';
+        for (let i = 0; i < tokens.length; i++) {
+            if (months[tokens[i]]) {
+                const day = tokens[i + 1]?.replace (/\D/g, '');
+                condition = months[tokens[i]] + (day || '');
+                break;
+            }
+        }
+        const eventSlug = [ actor, topic, action ].filter (Boolean).join ('-');
+        return `${eventSlug}:${condition}:${outcome.toUpperCase ()}`;
+    }
+
+    createUnifiedSymbol3 (eventSlug, marketSlug, outcome) {
+        const stopwords = new Set ([
+            'will', 'what', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be', 'this', 'week',
+        ]);
+        const dict = {
+            'federal-reserve': 'fed',
+            'interest-rates': 'rates',
+            'interest-rate': 'rate',
+            'basis-points': 'bps',
+            'basis-point': 'bp',
+            'executive-order': 'eo',
+            'united-states': 'us',
+            'united-kingdom': 'uk',
+            'european-union': 'eu',
+            'artificial-intelligence': 'ai',
+            'republican-party': 'gop',
+            'democratic-party': 'dems',
+            'stock-market': 'market',
+            'price-target': 'pt',
+            'market-cap': 'mcap',
+            // actions
+            'increase': 'hike',
+            'decrease': 'cut',
+            'higher': 'up',
+            'lower': 'down',
+            'greater': 'gt',
+            'less': 'lt',
+            'million': 'M',
+            'billion': 'B',
+            'trillion': 'T',
+            'percent': 'pct',
+            // 'military': '',
+        };
+        const months = {
+            'january': 'JAN',
+            'february': 'FEB',
+            'march': 'MAR',
+            'april': 'APR',
+            'may': 'MAY',
+            'june': 'JUN',
+            'july': 'JUL',
+            'august': 'AUG',
+            'september': 'SEP',
+            'october': 'OCT',
+            'november': 'NOV',
+            'december': 'DEC',
+        };
+        const tokenize = (slug) => {
+            let tokens = slug
+                .toLowerCase ()
+                .replace (/[^a-z0-9\s-]/g, '')
+                .replace (/-/g, ' ')
+                .split (/\s+/)
+                .filter ((t) => !stopwords.has (t));
+            tokens = tokens.map ((t) => dict[t] ?? t);
+            return tokens.filter (Boolean);
+        };
+        const extractDate = (tokens) => {
+            for (let i = 0; i < tokens.length; i++) {
+                if (months[tokens[i]]) {
+                    const day = tokens[i + 1]?.replace (/\D/g, '');
+                    return months[tokens[i]] + (day || '');
+                }
+            }
+            return '';
+        };
+        const eventTokens = tokenize (eventSlug);
+        let marketTokens = tokenize (marketSlug);
+        const date = extractDate (eventTokens) || extractDate (marketTokens);
+        // remove duplicated context
+        marketTokens = marketTokens.filter ((t) => !eventTokens.includes (t));
+        const pick = (tokens) => tokens.slice (0, 2).map ((t) => t.toUpperCase ());
+        const eventPart = pick (eventTokens).join ('-');
+        const marketPart = pick (marketTokens).join ('-');
+        const left = date ? `${eventPart}-${date}` : eventPart;
+        return `${left}:${marketPart}:${outcome.toUpperCase ()}`;
+    }
+
+    createUnifiedSymbol (eventSlug, marketSlug, outcome) {
+        const stopwords = new Set ([
+            'will', 'what', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be', 'this', 'week', 'say', 'who', 'which',
+        ]);
+        const dict = {
+            'announces': '',
+            'announced': '',
+            'announcing': '',
+            'announce': '',
+            'against': '',
+            'federal-reserve': 'fed',
+            'interest-rates': 'rates',
+            'interest-rate': 'rate',
+            'basis-points': 'bps',
+            'basis-point': 'bp',
+            'executive-order': 'eo',
+            'united-states': 'us',
+            'united-kingdom': 'uk',
+            'european-union': 'eu',
+            'artificial-intelligence': 'ai',
+            'republican-party': 'gop',
+            'democratic-party': 'dems',
+            'stock-market': 'market',
+            'price-target': 'pt',
+            'market-cap': 'mcap',
+            'operations': 'ops',
+            'operation': 'op',
+            'military': 'mil',
+            // actions
+            'increase': 'hike',
+            'decrease': 'cut',
+            'higher': 'up',
+            'lower': 'down',
+            'greater': 'gt',
+            'less': 'lt',
+            'million': 'M',
+            'billion': 'B',
+            'trillion': 'T',
+            'percent': 'pct',
+        };
+        const months = {
+            'january': 'JAN',
+            'february': 'FEB',
+            'march': 'MAR',
+            'april': 'APR',
+            'may': 'MAY',
+            'june': 'JUN',
+            'july': 'JUL',
+            'august': 'AUG',
+            'september': 'SEP',
+            'october': 'OCT',
+            'november': 'NOV',
+            'december': 'DEC',
+        };
+        const tokenize = (slug) => {
+            let tokens = slug
+                .toLowerCase ()
+                .replace (/[^a-z0-9\s-]/g, '')
+                .replace (/-/g, ' ')
+                .split (/\s+/)
+                .filter ((t) => !stopwords.has (t));
+            tokens = tokens.map ((t) => dict[t.toLowerCase ()] ?? t);
+            return tokens.filter (Boolean);
+        };
+        const extractDate = (tokens) => {
+            for (let i = 0; i < tokens.length; i++) {
+                if (months[tokens[i]]) {
+                    const day = tokens[i + 1]?.replace (/\D/g, '');
+                    return months[tokens[i]] + (day || '');
+                }
+            }
+            return '';
+        };
+        const eventTokens = tokenize (eventSlug);
+        const marketTokens = tokenize (marketSlug);
+        const date = extractDate (eventTokens) || extractDate (marketTokens);
+        // remove tokens already present in event
+        // marketTokens = marketTokens.filter ((t) => !eventTokens.includes (t));
+        // keep first meaningful tokens
+        // const eventPart = eventTokens.slice (0, 5).map ((t) => t.toUpperCase ()).join ('-');
+        // const marketPart = marketTokens.slice (0, 3).map ((t) => t.toUpperCase ()).join ('-');
+        const eventPart = eventTokens.map ((t) => t.toUpperCase ()).join ('-');
+        const marketPart = marketTokens.map ((t) => t.toUpperCase ()).join ('-');
+        const left = date ? `${eventPart}-${date}` : eventPart;
+        if (marketPart.length > 0) {
+            return `${left}:${marketPart}:${outcome.toUpperCase ()}`;
+        }
+        return `${left}:${outcome.toUpperCase ()}`;
+    }
+
     slugToMarketId (eventSlug: string, marketSlug: string, outcome: string): string {
         /**
-         * Builds a compound prediction-market ID: EVENT_SLUG:MARKET_SLUG:OUTCOME
-         * e.g. "US_ELECTION_2028:TRUMP:YES"
+         * Builds a compound prediction-market ID: MARKET_SLUG:OUTCOME
+         * e.g. "TRUMP_WIN_2028:YES"
          */
-        return this.shortenSlug (eventSlug) + ':' + this.shortenSlug (marketSlug) + ':' + outcome.toUpperCase ();
+        return this.shortenSlug (marketSlug) + ':' + outcome.toUpperCase ();
     }
 
     parseTicker (ticker: Dict, market: Market = undefined): Ticker {

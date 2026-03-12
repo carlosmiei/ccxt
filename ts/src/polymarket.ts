@@ -733,27 +733,29 @@ export default class polymarket extends Exchange {
          * newly fetched ones).
          *
          * Params:
-         *   - limit (int) : max results per search term (default: 50)
+         *   - limit (int) : max results per search term (default: 100)
          */
-        if (!queries || queries.length === 0) {
-            await this.loadMarkets ();
-            return this.events;
-        }
 
-        const limit = this.safeInteger (params, 'limit', 50);
-        const rest  = this.omit (params, ['limit']);
+        const pageSize = this.safeInteger (params, 'limit', 50);
+        const rest     = this.omit (params, [ 'limit' ]);
 
-        // Collect raw events, deduplicating by event id
+        // For each query: fetch page 1, then all remaining pages in parallel
         const seen: Dict = {};
         const rawEvents: any[] = [];
-
         for (const q of queries) {
-            const response = await this.gammaPublicGetPublicSearch (this.extend ({
-                'q':              q,
-                'limit_per_type': limit,
-            }, rest));
-            const found = (this.safeList (response, 'events', []) || []) as any[];
-            for (const rawEvent of found) {
+            const baseRequest: Dict = { 'q': q, 'limit_per_type': pageSize, 'events_status': 'active' };
+            const first = await this.gammaPublicGetPublicSearch (this.extend ({ 'page': 1 }, baseRequest, rest));
+            const firstEvents = (this.safeList (first, 'events', []) || []) as any[];
+            const pagination = this.safeValue (first, 'pagination', {});
+            const totalResults = this.safeInteger (pagination, 'totalResults', firstEvents.length);
+            const totalPages = Math.ceil (totalResults / pageSize);
+            const remainingPages: number[] = [];
+            for (let p = 2; p <= totalPages; p++) {
+                remainingPages.push (p);
+            }
+            const restResponses = await Promise.all (remainingPages.map ((p) => this.gammaPublicGetPublicSearch (this.extend ({ 'page': p }, baseRequest, rest))));
+            const allEvents = (firstEvents as any[]).concat (restResponses.flatMap ((r) => (this.safeList (r, 'events', []) || []) as any[]));
+            for (const rawEvent of allEvents) {
                 const eventId = this.safeString (rawEvent, 'id');
                 if (eventId && !seen[eventId]) {
                     seen[eventId] = true;
