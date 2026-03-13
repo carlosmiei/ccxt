@@ -322,6 +322,8 @@ export default class Exchange {
     };
     fees: object;
     markets_by_id: Dictionary<any> = undefined;
+    outcomes: Dictionary<any> = undefined;
+    outcomes_by_id: Dictionary<any> = undefined;
     symbols: string[] = undefined;
     ids: string[] = undefined;
     currencies: Currencies = {};
@@ -2717,12 +2719,25 @@ export default class Exchange {
         return `${left}:${outcome.toUpperCase ()}`;
     }
 
-    slugToMarketId (eventSlug: string, marketSlug: string, outcome: string): string {
+    slugToMarketSymbol (eventSlug: string, marketSlug: string): string {
         /**
-         * Builds a compound prediction-market ID: MARKET_SLUG:OUTCOME
+         * Builds a unified market symbol (without outcome): MARKET_SLUG
+         * e.g. "TRUMP_WIN_2028"
+         */
+        return this.shortenSlug (marketSlug);
+    }
+
+    slugToOutcomeSymbol (eventSlug: string, marketSlug: string, outcome: string): string {
+        /**
+         * Builds a unified outcome symbol: MARKET_SLUG:OUTCOME
          * e.g. "TRUMP_WIN_2028:YES"
          */
         return this.shortenSlug (marketSlug) + ':' + outcome.toUpperCase ();
+    }
+
+    slugToMarketId (eventSlug: string, marketSlug: string, outcome: string): string {
+        // Kept for backward compatibility — delegates to slugToOutcomeSymbol
+        return this.slugToOutcomeSymbol (eventSlug, marketSlug, outcome);
     }
 
     parseTicker (ticker: Dict, market: Market = undefined): Ticker {
@@ -3207,6 +3222,23 @@ export default class Exchange {
         this.currencies_by_id = this.indexBy (this.currencies, 'id');
         const currenciesSortedByCode = this.keysort (this.currencies);
         this.codes = Object.keys (currenciesSortedByCode);
+        // Build outcomes index from market outcomes arrays
+        this.outcomes = {};
+        this.outcomes_by_id = {};
+        for (const sym of Object.keys (this.markets)) {
+            const mkt = this.markets[sym];
+            const outcomesList = (mkt['outcomes'] || []) as any[];
+            for (const oc of outcomesList) {
+                const ocSymbol = oc['symbol'];
+                if (ocSymbol) {
+                    this.outcomes[ocSymbol] = oc;
+                }
+                const ocId = oc['id'];
+                if (ocId) {
+                    this.outcomes_by_id[ocId] = oc;
+                }
+            }
+        }
         return this.markets;
     }
 
@@ -5879,6 +5911,31 @@ export default class Exchange {
             return this.createExpiredOptionMarket (symbol);
         }
         throw new BadSymbol (this.id + ' does not have market symbol ' + symbol);
+    }
+
+    outcome (outcomeSymbol: string): any {
+        if (this.outcomes === undefined) {
+            throw new ExchangeError (this.id + ' outcomes not loaded');
+        }
+        if (outcomeSymbol in this.outcomes) {
+            return this.outcomes[outcomeSymbol];
+        }
+        throw new BadSymbol (this.id + ' does not have outcome symbol ' + outcomeSymbol);
+    }
+
+    safeOutcome (outcomeIdOrSymbol: Str, outcomeObj: any = undefined): any {
+        if (outcomeIdOrSymbol !== undefined) {
+            if (this.outcomes !== undefined && outcomeIdOrSymbol in this.outcomes) {
+                return this.outcomes[outcomeIdOrSymbol];
+            }
+            if (this.outcomes_by_id !== undefined && outcomeIdOrSymbol in this.outcomes_by_id) {
+                return this.outcomes_by_id[outcomeIdOrSymbol];
+            }
+        }
+        if (outcomeObj !== undefined) {
+            return outcomeObj;
+        }
+        return { 'id': outcomeIdOrSymbol, 'symbol': outcomeIdOrSymbol, 'marketSymbol': undefined, 'label': undefined, 'info': {} };
     }
 
     createExpiredOptionMarket (symbol: string): MarketInterface {

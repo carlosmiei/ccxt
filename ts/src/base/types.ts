@@ -24,6 +24,55 @@ export type NullableList = List | undefined;
 /** Request parameters */
 // type Params = Dictionary<string | number | boolean | string[]>;
 
+export interface PredictionEvent {
+    id: string;
+    symbol: string; // unified symbol across all events, derived from slug or title
+    title: string;
+    description: string;
+    slug: string;
+    markets: PredictionMarket[];
+
+    url: string;
+    image?: string;
+    active?: boolean;
+
+    category?: string;
+    tags?: string[];
+    created: number;
+    end?: number;
+    endDatetime?: string;
+    createdDatetime: string;
+    lastUpdatedAt: number;
+    resolutionSource?: string;
+    info: any;
+}
+
+export interface PredictionOutcome {
+    id: string;           // exchange-native identifier (clobTokenId, kalshi ticker)
+    symbol: string;       // unified outcome symbol (e.g. TRUMP_BALANCE_BUDGET:YES)
+    marketSymbol: string; // parent market symbol (e.g. TRUMP_BALANCE_BUDGET)
+    label: string;        // outcome label (e.g. 'YES', 'NO')
+    price?: number;       // current price (optional)
+    active?: boolean;
+    info?: any;           // raw exchange data
+}
+
+export interface PredictionMarket {
+    id: string;
+    symbol: string; // unified symbol across all markets, derived from event and outcome labels
+    created: number;
+    description: string;
+    active: boolean;
+    price: number;
+    info: any;
+    resolutionSource?: string;
+    image?: string;
+    lastUpdatedAt: number;
+    end?: number;
+    endDatetime?: string;
+    outcomes: PredictionOutcome[];
+}
+
 export interface MinMax {
     min: Num;
     max: Num;
@@ -97,6 +146,7 @@ export interface MarketInterface {
     };
     created: Int;
     info: any;
+    outcomes?: PredictionOutcome[];
 }
 
 export interface Trade {

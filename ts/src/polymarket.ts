@@ -193,13 +193,10 @@ export default class polymarket extends Exchange {
         const eventsDict: Dict = {};
         for (const rawEvent of allRawEvents) {
             const ccxtMarkets = this.parseEventToMarkets (rawEvent);
-            const marketsById: Dict = {};
             for (const m of ccxtMarkets) {
-                const sym = m['symbol'] as string;
                 flatMarkets.push (m);
-                marketsById[sym] = m;
             }
-            const parsedEvent = this.parseEvent (rawEvent, marketsById);
+            const parsedEvent = this.parseEvent (rawEvent, ccxtMarkets);
             const eventSlug = this.safeString (rawEvent, 'slug');
             if (eventSlug) {
                 const eventKey = this.shortenSlug (eventSlug as string);
@@ -213,13 +210,10 @@ export default class polymarket extends Exchange {
     parseEventToMarkets (event: Dict): Market[] {
         /**
          * Converts one Polymarket event (with nested markets and outcomes)
-         * into a flat array of CCXT markets — one per outcome token.
+         * into a flat array of CCXT markets — one per polymarket market.
+         * Each CCXT market contains an `outcomes` array with one entry per outcome token.
          */
-        const eventId       = this.safeString (event, 'id');
-        const eventSlug     = this.safeString (event, 'slug', eventId);
-        const eventTitle    = this.safeString (event, 'title');
-        const eventCategory = this.safeString (event, 'category');
-        const eventTags     = (this.safeList (event, 'tags', []) || []) as any[];
+        const eventSlug     = this.safeString (event, 'slug', this.safeString (event, 'id'));
         const rawMarkets    = (this.safeList (event, 'markets', []) || []) as any[];
         const result: Market[] = [];
 
@@ -228,15 +222,10 @@ export default class polymarket extends Exchange {
             const conditionId = this.safeString (market, 'conditionId');
             const marketId    = this.safeString (market, 'id');
             const marketSlug  = this.safeString (market, 'slug', conditionId);
-            const question    = this.safeString (market, 'question', this.safeString (market, 'title'));
             const active      = this.safeBool   (market, 'active', false);
             const closed      = this.safeBool   (market, 'closed', false);
-            const negRisk     = this.safeBool   (market, 'negRisk', false);
             const tickSize    = this.safeNumber  (market, 'minimumTickSize', 0.01);
             const endDate     = this.safeString  (market, 'endDate', this.safeString (market, 'end_date_iso'));
-            const volume      = this.safeNumber  (market, 'volume');
-            const volume24h   = this.safeNumber  (market, 'volume24hr', this.safeNumber (market, 'volume24h'));
-            const liquidity   = this.safeNumber  (market, 'liquidity');
 
             // Gamma API returns these arrays as JSON-encoded strings
             let outcomeLabels: string[]  = [];
@@ -257,6 +246,15 @@ export default class polymarket extends Exchange {
                 outcomePrices = parsedPrices as string[];
             }
 
+            if (outcomeLabels.length === 0 || clobTokenIds.length === 0) {
+                continue;
+            }
+
+            // Market symbol (no outcome suffix)
+            const marketSymbol = this.slugToMarketSymbol (eventSlug, marketSlug);
+
+            // Build outcomes array
+            const outcomes: any[] = [];
             for (let oi = 0; oi < outcomeLabels.length; oi++) {
                 const outcomeLabel = outcomeLabels[oi];
                 const clobTokenId  = clobTokenIds[oi];
@@ -266,74 +264,61 @@ export default class polymarket extends Exchange {
                     continue;
                 }
 
-                // symbol = EVENT_SLUG:MARKET_SLUG:OUTCOME  (e.g. "US_ELECTION_2028:TRUMP:YES")
-                const symbol = this.slugToMarketId (eventSlug, marketSlug, outcomeLabel);
-
-                result.push ({
-                    'id':              clobTokenId,
-                    'symbol':          symbol,
-                    'base':            outcomeLabel,
-                    'quote':           'USDC',
-                    'settle':          undefined,
-                    'baseId':          clobTokenId,
-                    'quoteId':         'USDC',
-                    'settleId':        undefined,
-                    'type':            'prediction',
-                    'spot':            false,
-                    'margin':          false,
-                    'swap':            false,
-                    'future':          false,
-                    'option':          false,
-                    'prediction':      true,
-                    'active':          active && !closed,
-                    'contract':        false,
-                    'linear':          undefined,
-                    'inverse':         undefined,
-                    'contractSize':    undefined,
-                    'expiry':          endDate ? this.parse8601 (endDate) : undefined,
-                    'expiryDatetime':  endDate,
-                    'strike':          undefined,
-                    'optionType':      undefined,
-                    'taker':           0.0,
-                    'maker':           0.0,
-                    'percentage':      true,
-                    'tierBased':       false,
-                    'feeSide':         'get',
-                    'precision': {
-                        'amount':  tickSize,
-                        'price':   tickSize,
-                    },
-                    'limits': {
-                        'leverage':  { 'min': 1,    'max': 1        },
-                        'amount':    { 'min': 1,    'max': undefined },
-                        'price':     { 'min': 0.01, 'max': 0.99     },
-                        'cost':      { 'min': undefined, 'max': undefined },
-                    },
-                    'info': this.extend (market, {
-                        'eventId':       eventId,
-                        'eventSlug':     eventSlug,
-                        'eventTitle':    eventTitle,
-                        'eventCategory': eventCategory,
-                        'eventTags':     eventTags,
-                        'marketId':      marketId,
-                        'conditionId':   conditionId,
-                        'marketSlug':    marketSlug,
-                        'question':      question,
-                        'marketIndex':   mi,
-                        'outcomeIndex':  oi,
-                        'outcomeLabel':  outcomeLabel,
-                        'clobTokenId':   clobTokenId,
-                        'outcomePrice':  outcomePrice,
-                        'totalOutcomes': outcomeLabels.length,
-                        'negRisk':       negRisk,
-                        'tickSize':      tickSize,
-                        'volume':        volume,
-                        'volume24h':     volume24h,
-                        'liquidity':     liquidity,
-                    }),
-                    'created':       undefined,
-                } as unknown as Market);
+                outcomes.push ({
+                    'id':           clobTokenId,
+                    'symbol':       marketSymbol + ':' + outcomeLabel.toUpperCase (),
+                    'marketSymbol': marketSymbol,
+                    'label':        outcomeLabel,
+                    'price':        outcomePrice,
+                    'active':       active && !closed,
+                    'info':         market,
+                });
             }
+
+            result.push ({
+                'id':              conditionId || marketId,
+                'symbol':          marketSymbol,
+                'base':            'USDC',
+                'quote':           'USDC',
+                'settle':          undefined,
+                'baseId':          conditionId || marketId,
+                'quoteId':         'USDC',
+                'settleId':        undefined,
+                'type':            'prediction',
+                'spot':            false,
+                'margin':          false,
+                'swap':            false,
+                'future':          false,
+                'option':          false,
+                'prediction':      true,
+                'active':          active && !closed,
+                'contract':        false,
+                'linear':          undefined,
+                'inverse':         undefined,
+                'contractSize':    undefined,
+                'expiry':          endDate ? this.parse8601 (endDate) : undefined,
+                'expiryDatetime':  endDate,
+                'strike':          undefined,
+                'optionType':      undefined,
+                'taker':           0.0,
+                'maker':           0.0,
+                'percentage':      true,
+                'tierBased':       false,
+                'feeSide':         'get',
+                'precision': {
+                    'amount':  tickSize,
+                    'price':   tickSize,
+                },
+                'limits': {
+                    'leverage':  { 'min': 1,    'max': 1        },
+                    'amount':    { 'min': 1,    'max': undefined },
+                    'price':     { 'min': 0.01, 'max': 0.99     },
+                    'cost':      { 'min': undefined, 'max': undefined },
+                },
+                'outcomes':  outcomes,
+                'info':      market,
+                'created':   undefined,
+            } as unknown as Market);
         }
         return result;
     }
@@ -342,10 +327,10 @@ export default class polymarket extends Exchange {
     // Ticker — price data for one outcome token
     // -----------------------------------------------------------------------
 
-    async fetchTicker (symbol: Str, params: Dict = {}): Promise<Ticker> {
+    async fetchTicker (outcome: Str, params: Dict = {}): Promise<Ticker> {
         await this.loadMarkets ();
-        const market = this.market (symbol);
-        const tokenId = market['id'] as string;
+        const outcomeObj = this.outcome (outcome);
+        const tokenId = outcomeObj['id'] as string;
 
         // Sequential to avoid Promise.all (not in lib scope)
         const midpointResponse = await this.clobPublicGetMidpoint ({ 'token_id': tokenId });
@@ -353,17 +338,17 @@ export default class polymarket extends Exchange {
 
         return this.parseTicker (
             { 'midpoint': midpointResponse, 'book': bookResponse },
-            market
+            outcomeObj as any
         );
     }
 
-    async fetchTickers (symbols?: Str[], params: Dict = {}): Promise<Tickers> {
+    async fetchTickers (outcomes?: Str[], params: Dict = {}): Promise<Tickers> {
         await this.loadMarkets ();
-        const targets: string[] = symbols ? this.marketSymbols (symbols) : Object.keys (this.markets);
+        const targets: string[] = outcomes ? (outcomes as string[]) : Object.keys (this.outcomes || {});
         const result: Tickers = {};
-        for (const symbol of targets) {
-            const ticker = await this.fetchTicker (symbol, params);
-            result[symbol] = ticker;
+        for (const outcomeSymbol of targets) {
+            const ticker = await this.fetchTicker (outcomeSymbol, params);
+            result[outcomeSymbol] = ticker;
         }
         return result;
     }
@@ -410,27 +395,27 @@ export default class polymarket extends Exchange {
     // Order book — CLOB order book for one outcome token
     // -----------------------------------------------------------------------
 
-    async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
+    async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
-        const market  = this.market (symbol);
-        const tokenId = market['id'] as string;
+        const outcomeObj = this.outcome (outcome);
+        const tokenId = outcomeObj['id'] as string;
 
         const response = await this.clobPublicGetBook (this.extend ({
             'token_id': tokenId,
         }, params));
 
         const timestamp = this.milliseconds ();
-        return this.parseOrderBook (response, symbol, timestamp, 'bids', 'asks', 'price', 'size');
+        return this.parseOrderBook (response, outcome, timestamp, 'bids', 'asks', 'price', 'size');
     }
 
     // -----------------------------------------------------------------------
     // OHLCV — price history for one outcome token
     // -----------------------------------------------------------------------
 
-    async fetchOHLCV (symbol: Str, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
+    async fetchOHLCV (outcome: Str, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
-        const market   = this.market (symbol);
-        const tokenId  = market['id'] as string;
+        const outcomeObj = this.outcome (outcome);
+        const tokenId  = outcomeObj['id'] as string;
         const fidelity = this.safeString (this.timeframes, timeframe, '1');
 
         const request: Dict = {
@@ -451,7 +436,7 @@ export default class polymarket extends Exchange {
         const response = await this.clobPublicGetPricesHistory (this.extend (request, params));
         const history  = (this.safeList (response, 'history', []) || []) as any[];
 
-        return this.parseOHLCVs (history, market, timeframe, since, limit);
+        return this.parseOHLCVs (history, outcomeObj as any, timeframe, since, limit);
     }
 
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
@@ -472,10 +457,10 @@ export default class polymarket extends Exchange {
     // Trades — public trade history for one outcome token
     // -----------------------------------------------------------------------
 
-    async fetchTrades (symbol: Str, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Trade[]> {
+    async fetchTrades (outcome: Str, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Trade[]> {
         await this.loadMarkets ();
-        const market  = this.market (symbol);
-        const tokenId = market['id'] as string;
+        const outcomeObj = this.outcome (outcome);
+        const tokenId = outcomeObj['id'] as string;
 
         const request: Dict = { 'asset_id': tokenId };
         if (limit !== undefined) {
@@ -485,7 +470,7 @@ export default class polymarket extends Exchange {
         const response = await this.clobPublicGetDataTrades (this.extend (request, params));
         const trades   = (this.safeList (response, 'data', []) || []) as any[];
 
-        return this.parseTrades (trades, market, since, limit);
+        return this.parseTrades (trades, outcomeObj as any, since, limit);
     }
 
     parseTrade (trade: Dict, market: Market = undefined): Trade {
@@ -543,19 +528,19 @@ export default class polymarket extends Exchange {
     // Positions — open positions for the authenticated user
     // -----------------------------------------------------------------------
 
-    async fetchPositions (symbols?: Str[], params: Dict = {}): Promise<Position[]> {
+    async fetchPositions (outcomes?: Str[], params: Dict = {}): Promise<Position[]> {
         this.checkRequiredCredentials ();
         const response = await this.dataPrivateGetPositions (this.extend ({
             'user': this.walletAddress,
         }, params));
 
         const positions = (this.safeList (response, 'data', []) || []) as any[];
-        return this.parsePositions (positions, symbols);
+        return this.parsePositions (positions, outcomes);
     }
 
     parsePosition (position: Dict, market: Market = undefined): Position {
         const tokenId    = this.safeString (position, 'asset');
-        const marketData = this.safeMarket (tokenId, market);
+        const marketData = this.safeOutcome (tokenId, market as any);
         const size       = this.safeNumber (position, 'size');
         const entryPrice = this.safeNumber (position, 'avgPrice');
         const curPrice   = this.safeNumber (position, 'currentPrice');
@@ -597,17 +582,17 @@ export default class polymarket extends Exchange {
     // Orders — authenticated order management
     // -----------------------------------------------------------------------
 
-    async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+    async fetchOpenOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
         this.checkRequiredCredentials ();
         const request: Dict = {};
-        let market: Market = undefined;
-        if (symbol !== undefined) {
-            market = this.market (symbol);
-            request['asset_id'] = market['id'];
+        let outcomeObj: any = undefined;
+        if (outcome !== undefined) {
+            outcomeObj = this.outcome (outcome);
+            request['asset_id'] = outcomeObj['id'];
         }
         const response = await this.clobPrivateGetDataOrders (this.extend (request, params));
         const orders   = (this.safeList (response, 'data', []) || []) as any[];
-        return this.parseOrders (orders, market, since, limit);
+        return this.parseOrders (orders, outcomeObj as any, since, limit);
     }
 
     async fetchOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
@@ -619,7 +604,7 @@ export default class polymarket extends Exchange {
     parseOrder (order: Dict, market: Market = undefined): Order {
         const id      = this.safeString (order, 'id');
         const tokenId = this.safeString (order, 'asset_id');
-        const mkt     = this.safeMarket (tokenId, market);
+        const mkt     = this.safeOutcome (tokenId, market as any);
         const status  = this.parseOrderStatus (this.safeString (order, 'status'));
         const side    = this.safeStringLower (order, 'side');
         const price   = this.safeNumber (order, 'price');
@@ -664,11 +649,11 @@ export default class polymarket extends Exchange {
         return this.safeString (statuses, status, status);
     }
 
-    async createOrder (symbol: Str, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
+    async createOrder (outcome: Str, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
         this.checkRequiredCredentials ();
         await this.loadMarkets ();
-        const market  = this.market (symbol);
-        const tokenId = market['id'] as string;
+        const outcomeObj = this.outcome (outcome);
+        const tokenId = outcomeObj['id'] as string;
         const sideStr = (side as string).toUpperCase ();
         const typeStr = (type as string).toUpperCase ();
 
@@ -681,7 +666,7 @@ export default class polymarket extends Exchange {
         };
 
         const response = await this.clobPrivatePostOrder (this.extend (request, params));
-        return this.parseOrder (response, market);
+        return this.parseOrder (response, outcomeObj as any);
     }
 
     async cancelOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
@@ -690,13 +675,13 @@ export default class polymarket extends Exchange {
         return this.parseOrder (response);
     }
 
-    async cancelAllOrders (symbol: Str = undefined, params: Dict = {}): Promise<Order[]> {
+    async cancelAllOrders (outcome: Str = undefined, params: Dict = {}): Promise<Order[]> {
         this.checkRequiredCredentials ();
         const request: Dict = {};
-        if (symbol !== undefined) {
+        if (outcome !== undefined) {
             await this.loadMarkets ();
-            const market = this.market (symbol);
-            request['asset_id'] = market['id'];
+            const outcomeObj = this.outcome (outcome);
+            request['asset_id'] = outcomeObj['id'];
         }
         const response = await this.clobPrivateDeleteOrders (this.extend (request, params));
         return this.parseOrders (response);
@@ -760,13 +745,10 @@ export default class polymarket extends Exchange {
 
         for (const rawEvent of rawEvents) {
             const ccxtMarkets = this.parseEventToMarkets (rawEvent);
-            const marketsById: Dict = {};
             for (const m of ccxtMarkets) {
-                const sym = m['symbol'] as string;
-                marketsById[sym] = m;
-                this.markets[sym] = m;
+                this.markets[m['symbol'] as string] = m;
             }
-            const parsedEvent = this.parseEvent (rawEvent, marketsById);
+            const parsedEvent = this.parseEvent (rawEvent, ccxtMarkets);
             const eventSlug = this.safeString (rawEvent, 'slug');
             if (eventSlug) {
                 const eventKey = this.shortenSlug (eventSlug as string);
@@ -777,22 +759,9 @@ export default class polymarket extends Exchange {
         return this.events;
     }
 
-    parseEvent (rawEvent: Dict, marketsById: Dict = undefined): Dict {
-        /**
-         * Augments one raw Gamma API event with parsed CCXT markets.
-         * The returned `markets` dict is keyed by compound symbol
-         * (EVENT_SLUG:MARKET_SLUG:OUTCOME). Pre-computed marketsById
-         * can be passed to avoid re-parsing outcomes.
-         */
-        if (marketsById === undefined) {
-            marketsById = {};
-            const ccxtMarkets = this.parseEventToMarkets (rawEvent);
-            for (const m of ccxtMarkets) {
-                const symbol = this.safeString (m, 'symbol');
-                if (symbol) {
-                    marketsById[symbol] = m;
-                }
-            }
+    parseEvent (rawEvent: Dict, marketsList: any[] = undefined): Dict {
+        if (marketsList === undefined) {
+            marketsList = this.parseEventToMarkets (rawEvent);
         }
 
         const slug = this.safeString (rawEvent, 'slug');
@@ -801,7 +770,8 @@ export default class polymarket extends Exchange {
             'slug': slug,
             'symbol': slug ? this.shortenSlug (slug) : undefined,
             'title': this.safeString (rawEvent, 'title'),
-            'markets': marketsById,
+            'markets': marketsList,
+            'info': rawEvent
         });
     }
 
