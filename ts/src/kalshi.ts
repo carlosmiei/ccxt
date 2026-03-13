@@ -151,7 +151,8 @@ export default class kalshi extends Exchange {
             for (const raw of rawMarkets) {
                 const parsed = this.parseBinaryMarketToOutcomes (raw);
                 const eventTicker = this.safeString (raw, 'event_ticker');
-                const eventKey = eventTicker ? this.shortenSlug (eventTicker) : undefined;
+                const eventTitle = this.safeString (raw, 'title', eventTicker);
+                const eventKey = eventTitle ? this.shortenSlug (eventTitle) : undefined;
                 for (const m of parsed) {
                     flatMarkets.push (m);
                     if (eventKey) {
@@ -159,7 +160,8 @@ export default class kalshi extends Exchange {
                             eventsDict[eventKey] = {
                                 'id': eventTicker,
                                 'slug': eventTicker,
-                                'title': this.safeString (raw, 'title', eventTicker),
+                                'symbol': eventKey,
+                                'title': eventTitle,
                                 'markets': {},
                             };
                         }
@@ -651,32 +653,24 @@ export default class kalshi extends Exchange {
             this.markets = {};
         }
         const lowerQueries = (queries && queries.length > 0) ? queries.map ((q) => (q as string).toLowerCase ()) : [];
-        const result: Dict = {};
+        // Phase 1: sequential cursor scan (lightweight — no nested markets) to collect matching tickers
+        const matchedTickers: string[] = [];
         let cursor: string | undefined = undefined;
         let page = 0;
         while (page < maxPages) {
-            const request: Dict = { 'status': status, 'limit': pageLimit, 'with_nested_markets': true };
+            const request: Dict = { 'status': status, 'limit': pageLimit };
             if (cursor) {
                 request['cursor'] = cursor;
             }
             const response = await this.kalshiPublicGetEvents (this.extend (request, rest));
             const rawEvents = (this.safeList (response, 'events', []) || []) as any[];
             cursor = this.safeString (response, 'cursor');
-            const filtered = lowerQueries.length === 0 ? rawEvents : rawEvents.filter ((rawEvent) => {
-                const slug = (this.safeString (rawEvent, 'event_ticker') || '').toLowerCase ();
+            rawEvents.forEach ((rawEvent) => {
+                const ticker = (this.safeString (rawEvent, 'event_ticker') || '');
                 const title = (this.safeString (rawEvent, 'title') || '').toLowerCase ();
-                return lowerQueries.some ((q) => slug.indexOf (q) !== -1 || title.indexOf (q) !== -1);
-            });
-            filtered.forEach ((rawEvent) => {
-                const parsedEvent = this.parseEvent (rawEvent);
-                const eventTicker = this.safeString (rawEvent, 'event_ticker');
-                const eventKey = eventTicker ? this.shortenSlug (eventTicker) : undefined;
-                if (eventKey) {
-                    (this.events as Dict)[eventKey] = parsedEvent;
-                    result[eventKey] = parsedEvent;
-                    Object.keys ((parsedEvent['markets'] || {}) as Dict).forEach ((sym) => {
-                        this.markets[sym] = (parsedEvent['markets'] as Dict)[sym];
-                    });
+                const matches = lowerQueries.length === 0 || lowerQueries.some ((q) => ticker.toLowerCase ().indexOf (q) !== -1 || title.indexOf (q) !== -1);
+                if (matches && ticker) {
+                    matchedTickers.push (ticker);
                 }
             });
             page++;
@@ -684,6 +678,22 @@ export default class kalshi extends Exchange {
                 break;
             }
         }
+        // Phase 2: fetch full event details (with nested markets) for all matched tickers in parallel
+        const detailResponses = await Promise.all (matchedTickers.map ((ticker) => this.kalshiPublicGetEventsEventTicker ({ 'event_ticker': ticker })));
+        const result: Dict = {};
+        detailResponses.forEach ((detail) => {
+            const fullEvent = this.safeValue (detail, 'event', detail) as Dict;
+            const parsedEvent = this.parseEvent (fullEvent);
+            const eventTitle = this.safeString (fullEvent, 'title');
+            const eventKey = eventTitle ? this.shortenSlug (eventTitle) : undefined;
+            if (eventKey) {
+                (this.events as Dict)[eventKey] = parsedEvent;
+                result[eventKey] = parsedEvent;
+                Object.keys ((parsedEvent['markets'] || {}) as Dict).forEach ((sym) => {
+                    this.markets[sym] = (parsedEvent['markets'] as Dict)[sym];
+                });
+            }
+        });
         return result;
     }
 
@@ -699,10 +709,13 @@ export default class kalshi extends Exchange {
                 }
             }
         }
+        const ticker = this.safeString (rawEvent, 'event_ticker');
+        const title = this.safeString (rawEvent, 'title');
         return this.extend (rawEvent, {
-            'id': this.safeString (rawEvent, 'event_ticker'),
-            'slug': this.safeString (rawEvent, 'event_ticker'),
-            'title': this.safeString (rawEvent, 'title'),
+            'id': ticker,
+            'slug': ticker,
+            'symbol': title ? this.shortenSlug (title) : undefined,
+            'title': title,
             'markets': marketsDict,
         });
     }

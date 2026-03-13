@@ -2475,6 +2475,7 @@ export default class Exchange {
             'will', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be',
         ]);
         const dict = {
+            'bitcoin': 'BTC',
             'increase': 'HIKE',
             'decrease': 'CUT',
             'military': '',

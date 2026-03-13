@@ -168,58 +168,44 @@ export default class polymarket extends Exchange {
          *   symbol  = EVENT_SLUG:MARKET_SLUG:OUTCOME  (e.g. "US_ELECTION_2028:TRUMP:YES")
          *   id      = clobTokenId  (the actual CLOB order-book identifier)
          */
+        const pageSize = this.safeInteger (this.options, 'maxFetchEventsLimit', 500);
+        const maxPages = 20;
+        const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'active'));
+        const rest = this.omit (params, [ 'status' ]);
+        const baseRequest: Dict = this.extend ({ 'limit': pageSize, 'order': 'volume24hr', 'ascending': false }, rest);
+        if (status === 'active') {
+            baseRequest['active'] = true;
+        } else if (status === 'closed') {
+            baseRequest['closed'] = true;
+        }
+        // Fetch page 1 first; if full, fire remaining pages in parallel
+        const firstPage = ((await this.gammaPublicGetEvents (this.extend ({ 'offset': 0 }, baseRequest))) || []) as any[];
+        let allRawEvents = firstPage;
+        if (firstPage.length >= pageSize) {
+            const offsets: number[] = [];
+            for (let p = 1; p < maxPages; p++) {
+                offsets.push (p * pageSize);
+            }
+            const restPages = await Promise.all (offsets.map ((off) => this.gammaPublicGetEvents (this.extend ({ 'offset': off }, baseRequest)).then ((r: any) => r || [])));
+            allRawEvents = (firstPage as any[]).concat ((restPages as any[][]).flat ());
+        }
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
-        let offset = 0;
-        const pageSize = this.safeInteger (this.options, 'maxFetchEventsLimit', 500);
-        const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'active'));
-        const rest = this.omit (params, ['status']);
-        let i = 0;
-        while (true) {
-            i++ ;
-            const request: Dict = this.extend ({
-                'limit':     pageSize,
-                'offset':    offset,
-                'order':     'volume24hr',
-                'ascending': false,
-            }, rest);
-            if (status === 'active') {
-                request['active'] = true;
-            } else if (status === 'closed') {
-                request['closed'] = true;
+        for (const rawEvent of allRawEvents) {
+            const ccxtMarkets = this.parseEventToMarkets (rawEvent);
+            const marketsById: Dict = {};
+            for (const m of ccxtMarkets) {
+                const sym = m['symbol'] as string;
+                flatMarkets.push (m);
+                marketsById[sym] = m;
             }
-
-            const response = await this.gammaPublicGetEvents (request);
-            if (!response || response.length === 0) {
-                break;
+            const parsedEvent = this.parseEvent (rawEvent, marketsById);
+            const eventSlug = this.safeString (rawEvent, 'slug');
+            if (eventSlug) {
+                const eventKey = this.shortenSlug (eventSlug as string);
+                eventsDict[eventKey] = parsedEvent;
             }
-
-            if (i === 10) {
-                break;
-            }
-
-            for (const rawEvent of response) {
-                const ccxtMarkets = this.parseEventToMarkets (rawEvent);
-                const marketsById: Dict = {};
-                for (const m of ccxtMarkets) {
-                    const sym = m['symbol'] as string;
-                    flatMarkets.push (m);
-                    marketsById[sym] = m;
-                }
-                const parsedEvent = this.parseEvent (rawEvent, marketsById);
-                const eventSlug = this.safeString (rawEvent, 'slug');
-                if (eventSlug) {
-                    const eventKey = this.shortenSlug (eventSlug as string);
-                    eventsDict[eventKey] = parsedEvent;
-                }
-            }
-
-            if (response.length < pageSize) {
-                break;
-            }
-            offset += pageSize;
         }
-
         this.events = eventsDict;
         return flatMarkets;
     }
@@ -809,11 +795,13 @@ export default class polymarket extends Exchange {
             }
         }
 
+        const slug = this.safeString (rawEvent, 'slug');
         return this.extend (rawEvent, {
-            'id':       this.safeString (rawEvent, 'id'),
-            'slug':     this.safeString (rawEvent, 'slug'),
-            'title':    this.safeString (rawEvent, 'title'),
-            'markets':  marketsById,
+            'id': this.safeString (rawEvent, 'id'),
+            'slug': slug,
+            'symbol': slug ? this.shortenSlug (slug) : undefined,
+            'title': this.safeString (rawEvent, 'title'),
+            'markets': marketsById,
         });
     }
 
