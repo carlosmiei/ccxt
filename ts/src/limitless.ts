@@ -132,6 +132,43 @@ export default class Limitless extends Exchange {
      * @see https://docs.limitless.exchange/api-reference/markets/get-active-markets
      */
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
+        const queries = this.safeList (params, 'queries', []) as string[];
+        const rest = this.omit (params, [ 'queries' ]);
+        if (queries && queries.length > 0) {
+            const limit = this.safeInteger (rest, 'limit', 50);
+            const searchRest = this.omit (rest, [ 'limit' ]);
+            const seen: Dict = {};
+            const rawMarkets: any[] = [];
+            for (const q of queries) {
+                const response = await this.limitlessPublicGetMarketsSearch (this.extend ({ 'term': q, 'limit': limit }, searchRest));
+                const found = this.safeList (response, 'data', []) as any[];
+                for (const raw of found) {
+                    const slug = this.safeString (raw, 'slug');
+                    if (slug && !seen[slug]) {
+                        seen[slug] = true;
+                        rawMarkets.push (raw);
+                    }
+                }
+            }
+            const flatMarkets: Market[] = [];
+            const eventsDict: Dict = {};
+            for (const raw of rawMarkets) {
+                const groupId = this.safeString (raw, 'groupId', this.safeString (raw, 'slug'));
+                const eventKey = groupId ? this.shortenSlug (groupId) : undefined;
+                const parsed = this.parseMarketToOutcomes (raw);
+                for (const m of parsed) {
+                    flatMarkets.push (m);
+                    if (eventKey) {
+                        if (!eventsDict[eventKey]) {
+                            eventsDict[eventKey] = { 'id': groupId, 'slug': groupId, 'title': this.safeString (raw, 'title', groupId), 'markets': {} };
+                        }
+                        (eventsDict[eventKey] as Dict)['markets'][m['symbol'] as string] = m;
+                    }
+                }
+            }
+            this.events = eventsDict;
+            return flatMarkets;
+        }
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
         let page = 1;
@@ -140,7 +177,7 @@ export default class Limitless extends Exchange {
             const response = await this.limitlessPublicGetMarketsActive (this.extend ({
                 'page': page,
                 'limit': pageSize,
-            }, params));
+            }, rest));
             const rawMarkets = (this.safeList (response, 'data', response as any) || []) as any[];
             if (!rawMarkets || rawMarkets.length === 0) {
                 break;

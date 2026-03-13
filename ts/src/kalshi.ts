@@ -143,6 +143,9 @@ export default class kalshi extends Exchange {
      * @see https://trading-api.readme.io/reference/getmarkets
      */
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
+        const queries = this.safeList (params, 'queries', []) as string[];
+        const rest = this.omit (params, [ 'queries' ]);
+        const lowerQueries = (queries && queries.length > 0) ? queries.map ((q) => (q as string).toLowerCase ()) : [];
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
         let cursor: Str = undefined;
@@ -152,9 +155,17 @@ export default class kalshi extends Exchange {
             if (cursor !== undefined) {
                 request['cursor'] = cursor;
             }
-            const response = await this.kalshiPublicGetMarkets (this.extend (request, params));
+            const response = await this.kalshiPublicGetMarkets (this.extend (request, rest));
             const rawMarkets = this.safeList (response, 'markets', []) as any[];
             for (const raw of rawMarkets) {
+                if (lowerQueries.length > 0) {
+                    const ticker = (this.safeString (raw, 'ticker') || '').toLowerCase ();
+                    const title = (this.safeString (raw, 'title') || '').toLowerCase ();
+                    const matches = lowerQueries.some ((q) => ticker.indexOf (q) !== -1 || title.indexOf (q) !== -1);
+                    if (!matches) {
+                        continue;
+                    }
+                }
                 const parsed = this.parseBinaryMarketToOutcomes (raw);
                 const eventTicker = this.safeString (raw, 'event_ticker');
                 const eventTitle = this.safeString (raw, 'title', eventTicker);

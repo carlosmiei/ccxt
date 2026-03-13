@@ -127,12 +127,50 @@ export default class Myriad extends Exchange {
      * @see https://docs.myriad.markets/api-reference/markets/list-markets
      */
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
+        const queries = this.safeList (params, 'queries', []) as string[];
+        const rest0 = this.omit (params, [ 'queries' ]);
+        if (queries && queries.length > 0) {
+            const limit = this.safeInteger (rest0, 'limit', this.safeInteger (this.options, 'defaultFetchMarketsLimit', 50));
+            const searchRest = this.omit (rest0, [ 'limit' ]);
+            const seen: Dict = {};
+            const rawEvents: any[] = [];
+            for (const q of queries) {
+                const response = await this.myriadPublicGetQuestions (this.extend ({ 'keyword': q, 'limit': limit }, searchRest));
+                const found = (this.safeList (response, 'data', response as any) || []) as any[];
+                for (const rawEvent of found) {
+                    const eventId = this.safeString (rawEvent, 'id');
+                    if (eventId && !seen[eventId]) {
+                        seen[eventId] = true;
+                        rawEvents.push (rawEvent);
+                    }
+                }
+            }
+            const flatMarkets: Market[] = [];
+            const eventsDict: Dict = {};
+            for (const rawEvent of rawEvents) {
+                const questionSlug = this.safeString (rawEvent, 'slug', this.safeString (rawEvent, 'id'));
+                const eventKey = questionSlug ? this.shortenSlug (questionSlug) : undefined;
+                const parsed = this.parseEvent (rawEvent);
+                if (eventKey) {
+                    eventsDict[eventKey] = parsed;
+                }
+                const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
+                for (const rawMarket of rawMarkets) {
+                    const outcomes = this.parseMarketOutcomes (rawMarket, questionSlug);
+                    for (const m of outcomes) {
+                        flatMarkets.push (m);
+                    }
+                }
+            }
+            this.events = eventsDict;
+            return flatMarkets;
+        }
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
         let page = 1;
         const limit = this.safeInteger (this.options, 'defaultFetchMarketsLimit', 50);
-        const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultMarketStatus', 'open'));
-        const rest = this.omit (params, [ 'status' ]);
+        const status = this.safeString (rest0, 'status', this.safeString (this.options, 'defaultMarketStatus', 'open'));
+        const rest = this.omit (rest0, [ 'status' ]);
         while (true) {
             const response = await this.myriadPublicGetMarkets (this.extend ({
                 'status': status,

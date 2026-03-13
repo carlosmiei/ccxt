@@ -163,10 +163,55 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/events/list-events
      */
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
+        const queries = this.safeList (params, 'queries', []) as string[];
+        const rest0 = this.omit (params, [ 'queries' ]);
+        if (queries && queries.length > 0) {
+            const pageSize = this.safeInteger (rest0, 'limit', 50);
+            const searchRest = this.omit (rest0, [ 'limit' ]);
+            const seen: Dict = {};
+            const rawEvents: any[] = [];
+            for (const q of queries) {
+                const baseRequest: Dict = { 'q': q, 'limit_per_type': pageSize, 'events_status': 'active' };
+                const first = await this.gammaPublicGetPublicSearch (this.extend ({ 'page': 1 }, baseRequest, searchRest));
+                const firstEvents = this.safeList (first, 'events', []) as any[];
+                const pagination = this.safeValue (first, 'pagination', {});
+                const totalResults = this.safeInteger (pagination, 'totalResults', firstEvents.length);
+                const totalPages = Math.ceil (totalResults / pageSize);
+                const remaining: number[] = [];
+                for (let p = 2; p <= totalPages; p++) {
+                    remaining.push (p);
+                }
+                const restResponses = await Promise.all (remaining.map ((p) => this.gammaPublicGetPublicSearch (this.extend ({ 'page': p }, baseRequest, searchRest))));
+                const allEvents = (firstEvents as any[]).concat (restResponses.flatMap ((r) => this.safeList (r, 'events', []) as any[]));
+                for (const rawEvent of allEvents) {
+                    const eventId = this.safeString (rawEvent, 'id');
+                    if (eventId && !seen[eventId]) {
+                        seen[eventId] = true;
+                        rawEvents.push (rawEvent);
+                    }
+                }
+            }
+            const flatMarkets: Market[] = [];
+            const eventsDict: Dict = {};
+            for (const rawEvent of rawEvents) {
+                const ccxtMarkets = this.parseEventToMarkets (rawEvent);
+                for (const m of ccxtMarkets) {
+                    flatMarkets.push (m);
+                }
+                const parsedEvent = this.parseEvent (rawEvent, ccxtMarkets);
+                const eventSlug = this.safeString (rawEvent, 'slug');
+                if (eventSlug) {
+                    const eventKey = this.shortenSlug (eventSlug as string);
+                    eventsDict[eventKey] = parsedEvent;
+                }
+            }
+            this.events = eventsDict;
+            return flatMarkets;
+        }
         const pageSize = this.safeInteger (this.options, 'maxFetchEventsLimit', 500);
         const maxPages = 20;
-        const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'active'));
-        const rest = this.omit (params, [ 'status' ]);
+        const status = this.safeString (rest0, 'status', this.safeString (this.options, 'defaultEventStatus', 'active'));
+        const rest = this.omit (rest0, [ 'status' ]);
         const baseRequest: Dict = this.extend ({ 'limit': pageSize, 'order': 'volume24hr', 'ascending': false }, rest);
         if (status === 'active') {
             baseRequest['active'] = true;
