@@ -35,6 +35,7 @@ export interface PredictionEvent {
     url: string;
     image?: string;
     active?: boolean;
+    resolved?: boolean;
 
     category?: string;
     tags?: string[];

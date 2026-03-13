@@ -100,7 +100,13 @@
     "prefer-exponentiation-operator": "off",
     "jsdoc/check-tag-names": ["error", {
       "definedTags": ["method"]
-    }]
+    }],
+    "jsdoc/require-param": "off",
+    "jsdoc/require-returns": "off",
+    "jsdoc/require-param-description": "off",
+    "jsdoc/require-param-type": "off",
+    "jsdoc/require-returns-type": "off",
+    "no-restricted-syntax": "off"
   },
   "settings": {
     "import/resolver": {

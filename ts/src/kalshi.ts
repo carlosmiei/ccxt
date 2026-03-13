@@ -17,8 +17,9 @@ import Exchange from './abstract/kalshi.js';
 import { rsa } from './base/functions/rsa.js';
 import type {
     Int, Str, Num, Dict,
-    Market, Ticker, Tickers, OrderBook, Trade, OHLCV,
+    Market, Ticker, OrderBook, Trade, OHLCV,
     Order, Balances, Position,
+    PredictionEvent,
 } from './base/types.js';
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,11 @@ export default class kalshi extends Exchange {
     // Markets — each binary Kalshi market → YES + NO CCXT markets
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches all Kalshi markets via cursor pagination and maps each binary market to YES and NO CCXT markets.
+     * @param params
+     * @see https://trading-api.readme.io/reference/getmarkets
+     */
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
@@ -147,7 +153,7 @@ export default class kalshi extends Exchange {
                 request['cursor'] = cursor;
             }
             const response = await this.kalshiPublicGetMarkets (this.extend (request, params));
-            const rawMarkets = (this.safeList (response, 'markets', []) || []) as any[];
+            const rawMarkets = this.safeList (response, 'markets', []) as any[];
             for (const raw of rawMarkets) {
                 const parsed = this.parseBinaryMarketToOutcomes (raw);
                 const eventTicker = this.safeString (raw, 'event_ticker');
@@ -178,6 +184,10 @@ export default class kalshi extends Exchange {
         return flatMarkets;
     }
 
+    /**
+     * Converts a single raw Kalshi market into a pair of CCXT markets representing the YES and NO outcomes.
+     * @param raw
+     */
     parseBinaryMarketToOutcomes (raw: Dict): Market[] {
         const ticker = this.safeString (raw, 'ticker');
         const eventTicker = this.safeString (raw, 'event_ticker');
@@ -270,6 +280,12 @@ export default class kalshi extends Exchange {
     // Ticker
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches the current market price and bid/ask for a single Kalshi outcome.
+     * @param outcome
+     * @param params
+     * @see https://trading-api.readme.io/reference/getmarket
+     */
     async fetchTicker (outcome: Str, params: Dict = {}): Promise<Ticker> {
         await this.loadMarkets ();
         const outcomeObj = this.outcome (outcome);
@@ -279,6 +295,11 @@ export default class kalshi extends Exchange {
         return this.parseTicker (raw, outcomeObj as any);
     }
 
+    /**
+     * Parses a raw Kalshi market object into a unified CCXT Ticker, converting cent prices to decimals.
+     * @param raw
+     * @param market
+     */
     parseTicker (raw: Dict, market: Market = undefined): Ticker {
         const isNo = market ? (market['label'] === 'NO' || this.safeString (market['info'], 'outcomeLabel') === 'NO') : false;
         const now = this.milliseconds ();
@@ -327,6 +348,13 @@ export default class kalshi extends Exchange {
     // Order book
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches the order book for a single Kalshi outcome, converting YES-side cents to decimal prices.
+     * @param outcome
+     * @param limit
+     * @param params
+     * @see https://trading-api.readme.io/reference/getmarketorderbook
+     */
     async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
         const outcomeObj = this.outcome (outcome);
@@ -338,8 +366,8 @@ export default class kalshi extends Exchange {
         const book = this.safeValue (response, 'orderbook', response);
         const timestamp = this.milliseconds ();
         // Kalshi uses YES-side perspective: `yes` = bids, `no` = asks (inverted)
-        const rawYes = (this.safeList (book, 'yes', []) || []) as any[];
-        const rawNo = (this.safeList (book, 'no', []) || []) as any[];
+        const rawYes = this.safeList (book, 'yes', []) as any[];
+        const rawNo = this.safeList (book, 'no', []) as any[];
         // Convert [price_cents, size] → {price, amount}
         const toLevel = (entry: any, invert: boolean) => {
             const priceCents = this.safeNumber (entry, 0);
@@ -363,6 +391,13 @@ export default class kalshi extends Exchange {
         return this.sortedOrders (outcome, timestamp, bids, asks);
     }
 
+    /**
+     * Sorts bids descending and asks ascending, then returns a CCXT-shaped OrderBook object.
+     * @param symbol
+     * @param timestamp
+     * @param bids
+     * @param asks
+     */
     sortedOrders (symbol: Str, timestamp: Int, bids: any[], asks: any[]): OrderBook {
         // Sort bids descending, asks ascending, match CCXT OrderBook shape
         bids.sort ((a: any, b: any) => b[0] - a[0]);
@@ -381,6 +416,15 @@ export default class kalshi extends Exchange {
     // OHLCV
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches OHLCV candlesticks for a single Kalshi outcome from the candlesticks endpoint.
+     * @param outcome
+     * @param timeframe
+     * @param since
+     * @param limit
+     * @param params
+     * @see https://trading-api.readme.io/reference/getcandlesticks
+     */
     async fetchOHLCV (outcome: Str, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
         const outcomeObj = this.outcome (outcome);
@@ -404,10 +448,15 @@ export default class kalshi extends Exchange {
         const response = await this.kalshiPublicGetSeriesSeriesTickerMarketsTickerCandlesticks (
             this.extend (request, params)
         );
-        const candles = (this.safeList (response, 'candlesticks', []) || []) as any[];
+        const candles = this.safeList (response, 'candlesticks', []) as any[];
         return this.parseOHLCVs (candles, outcomeObj as any, timeframe, since, limit);
     }
 
+    /**
+     * Parses a single Kalshi candlestick object into a CCXT OHLCV tuple, converting cent prices to decimals.
+     * @param ohlcv
+     * @param market
+     */
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
         // Kalshi candlestick prices are in cents → divide by 100
         const ts = this.safeInteger (ohlcv, 'end_period_ts');
@@ -430,6 +479,14 @@ export default class kalshi extends Exchange {
     // Trades
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches public trade history for a single Kalshi market ticker.
+     * @param outcome
+     * @param since
+     * @param limit
+     * @param params
+     * @see https://trading-api.readme.io/reference/getmarkettrades
+     */
     async fetchTrades (outcome: Str, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Trade[]> {
         await this.loadMarkets ();
         const outcomeObj = this.outcome (outcome);
@@ -439,10 +496,15 @@ export default class kalshi extends Exchange {
             request['limit'] = limit;
         }
         const response = await this.kalshiPublicGetMarketsTickerTrades (this.extend (request, params));
-        const trades = (this.safeList (response, 'trades', []) || []) as any[];
+        const trades = this.safeList (response, 'trades', []) as any[];
         return this.parseTrades (trades, outcomeObj as any, since, limit);
     }
 
+    /**
+     * Parses a raw Kalshi trade object into a unified CCXT Trade object.
+     * @param trade
+     * @param market
+     */
     parseTrade (trade: Dict, market: Market = undefined): Trade {
         const id = this.safeString (trade, 'trade_id');
         const ts = this.parse8601 (this.safeString (trade, 'created_time'));
@@ -450,7 +512,12 @@ export default class kalshi extends Exchange {
         const price = priceCents !== undefined ? priceCents / 100 : undefined;
         const amount = this.safeNumber (trade, 'count');
         const rawSide = this.safeStringLower (trade, 'taker_side');
-        const side = (rawSide === 'yes') ? 'buy' : (rawSide === 'no') ? 'sell' : undefined;
+        let side: string | undefined;
+        if (rawSide === 'yes') {
+            side = 'buy';
+        } else if (rawSide === 'no') {
+            side = 'sell';
+        }
         return this.safeTrade ({
             'id': id,
             'info': trade,
@@ -472,12 +539,20 @@ export default class kalshi extends Exchange {
     // Balance
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches the authenticated user's USD portfolio balance from Kalshi.
+     * @param params
+     * @see https://trading-api.readme.io/reference/getbalance
+     */
     async fetchBalance (params: Dict = {}): Promise<Balances> {
-        this.checkRequiredCredentials ();
         const response = await this.kalshiPrivateGetPortfolioBalance (params);
         return this.parseBalance (response);
     }
 
+    /**
+     * Parses a Kalshi balance response (cents) into a CCXT Balances object with a USD entry.
+     * @param response
+     */
     parseBalance (response: Dict): Balances {
         // Kalshi balance in cents → divide by 100
         const result: Dict = { 'info': response };
@@ -491,26 +566,39 @@ export default class kalshi extends Exchange {
     // Positions
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches open market positions for the authenticated Kalshi user.
+     * @param outcomes
+     * @param params
+     * @see https://trading-api.readme.io/reference/getportfoliopositions
+     */
     async fetchPositions (outcomes?: Str[], params: Dict = {}): Promise<Position[]> {
-        this.checkRequiredCredentials ();
         const response = await this.kalshiPrivateGetPortfolioPositions (params);
-        const positions = (this.safeList (response, 'market_positions', []) || []) as any[];
+        const positions = this.safeList (response, 'market_positions', []) as any[];
         return this.parsePositions (positions, outcomes);
     }
 
+    /**
+     * Parses a raw Kalshi portfolio position into a unified CCXT Position object.
+     * @param position
+     * @param market
+     */
     parsePosition (position: Dict, market: Market = undefined): Position {
         const ticker = this.safeString (position, 'ticker');
         const outcomeObj = this.safeOutcome (ticker, market as any);
         const yesContracts = this.safeNumber (position, 'position');  // positive = long YES
-        const fees = this.safeNumber (position, 'fees_paid');
+        let positionSide: string | undefined;
+        if (yesContracts !== undefined) {
+            positionSide = yesContracts >= 0 ? 'long' : 'short';
+        }
         return {
             'id': undefined,
             'symbol': this.safeString (outcomeObj, 'symbol', ticker),
             'timestamp': undefined,
             'datetime': undefined,
-            'contracts': yesContracts !== undefined ? (yesContracts < 0 ? -yesContracts : yesContracts) : undefined,
+            'contracts': yesContracts !== undefined ? Math.abs (yesContracts) : undefined,
             'contractSize': 1,
-            'side': yesContracts !== undefined ? (yesContracts >= 0 ? 'long' : 'short') : undefined,
+            'side': positionSide,
             'notional': undefined,
             'leverage': 1,
             'unrealizedPnl': undefined,
@@ -536,8 +624,15 @@ export default class kalshi extends Exchange {
     // Orders
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches resting (open) orders for the authenticated Kalshi user, optionally filtered by ticker.
+     * @param outcome
+     * @param since
+     * @param limit
+     * @param params
+     * @see https://trading-api.readme.io/reference/getorders
+     */
     async fetchOpenOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
-        this.checkRequiredCredentials ();
         const request: Dict = { 'status': 'resting' };
         let outcomeObj: any = undefined;
         if (outcome !== undefined) {
@@ -545,16 +640,27 @@ export default class kalshi extends Exchange {
             request['ticker'] = this.safeString (outcomeObj['info'], 'ticker');
         }
         const response = await this.kalshiPrivateGetPortfolioOrders (this.extend (request, params));
-        const orders = (this.safeList (response, 'orders', []) || []) as any[];
+        const orders = this.safeList (response, 'orders', []) as any[];
         return this.parseOrders (orders, outcomeObj as any, since, limit);
     }
 
+    /**
+     * Fetches a single order by ID from the Kalshi portfolio endpoint.
+     * @param id
+     * @param symbol
+     * @param params
+     * @see https://trading-api.readme.io/reference/getorder
+     */
     async fetchOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
-        this.checkRequiredCredentials ();
         const response = await this.kalshiPrivateGetPortfolioOrdersOrderId (this.extend ({ 'order_id': id }, params));
         return this.parseOrder (this.safeValue (response, 'order', response));
     }
 
+    /**
+     * Parses a raw Kalshi order object into a unified CCXT Order object.
+     * @param order
+     * @param market
+     */
     parseOrder (order: Dict, market: Market = undefined): Order {
         const id = this.safeString (order, 'order_id');
         const ticker = this.safeString (order, 'ticker');
@@ -593,6 +699,10 @@ export default class kalshi extends Exchange {
         }, mkt);
     }
 
+    /**
+     * Maps a Kalshi order status string to the CCXT unified status vocabulary.
+     * @param status
+     */
     parseOrderStatus (status: Str): Str {
         const statuses: Dict = {
             'resting': 'open',
@@ -603,8 +713,17 @@ export default class kalshi extends Exchange {
         return this.safeString (statuses, status, status);
     }
 
+    /**
+     * Places a limit or market order on Kalshi for the given outcome token.
+     * @param outcome
+     * @param type
+     * @param side
+     * @param amount
+     * @param price
+     * @param params
+     * @see https://trading-api.readme.io/reference/createorder
+     */
     async createOrder (outcome: Str, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
-        this.checkRequiredCredentials ();
         await this.loadMarkets ();
         const outcomeObj = this.outcome (outcome);
         const ticker = this.safeString (outcomeObj['info'], 'ticker');
@@ -624,14 +743,25 @@ export default class kalshi extends Exchange {
         return this.parseOrder (this.safeValue (response, 'order', response), outcomeObj as any);
     }
 
+    /**
+     * Cancels a single open order by ID on Kalshi.
+     * @param id
+     * @param symbol
+     * @param params
+     * @see https://trading-api.readme.io/reference/cancelorder
+     */
     async cancelOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
-        this.checkRequiredCredentials ();
         const response = await this.kalshiPrivateDeletePortfolioOrdersOrderId (this.extend ({ 'order_id': id }, params));
         return this.parseOrder (this.safeValue (response, 'order', response));
     }
 
+    /**
+     * Cancels all open orders on Kalshi, optionally scoped to one outcome ticker.
+     * @param outcome
+     * @param params
+     * @see https://trading-api.readme.io/reference/cancelorders
+     */
     async cancelAllOrders (outcome: Str = undefined, params: Dict = {}): Promise<Order[]> {
-        this.checkRequiredCredentials ();
         const request: Dict = {};
         if (outcome !== undefined) {
             await this.loadMarkets ();
@@ -646,15 +776,14 @@ export default class kalshi extends Exchange {
     // Events
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches Kalshi events via cursor-paginated /events, filters client-side by query strings,
+     * then fetches full event details with nested markets in parallel and caches in this.events.
+     * @param queries
+     * @param params
+     * @see https://trading-api.readme.io/reference/getevents
+     */
     async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<any> {
-        /**
-         * Fetches events from the Kalshi /events endpoint, paginates up to
-         * maxPages pages, filters client-side by query strings (Kalshi has no
-         * search API), caches in this.events/this.markets, and returns the
-         * matching events dict.
-         *
-         *   await exchange.fetchEvents (['Trump', 'KXBTC'])
-         */
         const status = this.safeString (params, 'status', this.safeString (this.options, 'defaultEventStatus', 'open'));
         const pageLimit = this.safeInteger (params, 'limit', 200);
         const maxPages = this.safeInteger (params, 'maxPages', 5);
@@ -676,7 +805,7 @@ export default class kalshi extends Exchange {
                 request['cursor'] = cursor;
             }
             const response = await this.kalshiPublicGetEvents (this.extend (request, rest));
-            const rawEvents = (this.safeList (response, 'events', []) || []) as any[];
+            const rawEvents = this.safeList (response, 'events', []) as any[];
             cursor = this.safeString (response, 'cursor');
             rawEvents.forEach ((rawEvent) => {
                 const ticker = (this.safeString (rawEvent, 'event_ticker') || '');
@@ -710,8 +839,12 @@ export default class kalshi extends Exchange {
         return result;
     }
 
-    parseEvent (rawEvent: Dict): Dict {
-        const rawMarkets = (this.safeList (rawEvent, 'markets', []) || []) as any[];
+    /**
+     * Parses a raw Kalshi event object (with nested markets) into the unified CCXT event shape.
+     * @param rawEvent
+     */
+    parseEvent (rawEvent: Dict): PredictionEvent {
+        const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
         const marketsList: any[] = [];
         for (const rawMarket of rawMarkets) {
             const parsed = this.parseBinaryMarketToOutcomes (rawMarket);
@@ -721,12 +854,23 @@ export default class kalshi extends Exchange {
         }
         const ticker = this.safeString (rawEvent, 'event_ticker');
         const title = this.safeString (rawEvent, 'title');
-        return this.extend (rawEvent, {
+        return this.extend ({
             'id': ticker,
             'slug': ticker,
             'symbol': title ? this.shortenSlug (title) : undefined,
             'title': title,
             'markets': marketsList,
+            'url': this.safeString (rawEvent, 'url'),
+            'image': this.safeString (rawEvent, 'image_url'),
+            'created': this.parse8601 (this.safeString (rawEvent, 'created_date_iso')),
+            'createdDatetime': this.safeString (rawEvent, 'created_date_iso'),
+            'end': this.parse8601 (this.safeString (rawEvent, 'end_date_iso')),
+            'endDatetime': this.safeString (rawEvent, 'end_date_iso'),
+            'category': this.safeString (rawEvent, 'category'),
+            'lastUpdatedAt': this.parse8601 (this.safeString (rawEvent, 'last_updated_date_iso')),
+            'lastUpdatedAtDatetime': this.safeString (rawEvent, 'last_updated_date_iso'),
+            'resolutionSource': this.safeString (rawEvent, 'resolution_source'),
+            'resolved': this.safeBool (rawEvent, 'resolved'),
             'info': rawEvent,
         });
     }
@@ -735,6 +879,15 @@ export default class kalshi extends Exchange {
     // RSA-PSS signing
     // -----------------------------------------------------------------------
 
+    /**
+     * Builds the request URL and attaches RSA-PSS SHA-256 authentication headers for private endpoints.
+     * @param path
+     * @param api
+     * @param method
+     * @param params
+     * @param headers
+     * @param body
+     */
     sign (path: Str, api: any = 'kalshi', method = 'GET', params: Dict = {}, headers: Dict = undefined, body: Dict = undefined) {
         const apiGroup: string = typeof api === 'string' ? api : api[0];
         const access: string = typeof api === 'string' ? 'public' : api[1];
