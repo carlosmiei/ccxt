@@ -2460,9 +2460,10 @@ export default class Exchange {
         const stopWords = new Set ([
             'will', 'the', 'a', 'an', 'after', 'before', 'in', 'at', 'by',
             'of', 'there', 'be', 'to', 'or', 'and', 'for', 'on', 'its',
-            'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were',
+            'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were', '?', 'how', 'many', 'who', 'what', 'when', 'where', 'which', 'much',
         ]);
-        let s = (slug || '').toLowerCase ();
+        let s = (slug || '').toLowerCase ().trim ().replace (' ', '-').replace (/[^a-z0-9]+/g, '-')
+            .replace (/^-+|-+$/g, '');
         for (const phrase of Object.keys (replacements)) {
             s = s.split (phrase).join (replacements[phrase]);
         }
