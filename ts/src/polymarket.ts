@@ -181,8 +181,18 @@ export default class polymarket extends Exchange {
                 for (let p = 2; p <= totalPages; p++) {
                     remaining.push (p);
                 }
-                const restResponses = await Promise.all (remaining.map ((p) => this.gammaPublicGetPublicSearch (this.extend ({ 'page': p }, baseRequest, searchRest))));
-                const allEvents = (firstEvents as any[]).concat (restResponses.flatMap ((r) => this.safeList (r, 'events', []) as any[]));
+                const restPromises: any[] = [];
+                for (let pi = 0; pi < remaining.length; pi++) {
+                    restPromises.push (this.gammaPublicGetPublicSearch (this.extend ({ 'page': remaining[pi] }, baseRequest, searchRest)));
+                }
+                const restResponses = await Promise.all (restPromises);
+                const allEvents: any[] = (firstEvents as any[]).slice ();
+                for (let ri = 0; ri < restResponses.length; ri++) {
+                    const pageEvents = this.safeList (restResponses[ri], 'events', []) as any[];
+                    for (let ei = 0; ei < pageEvents.length; ei++) {
+                        allEvents.push (pageEvents[ei]);
+                    }
+                }
                 for (const rawEvent of allEvents) {
                     const eventId = this.safeString (rawEvent, 'id');
                     if (eventId && !seen[eventId]) {
@@ -226,8 +236,18 @@ export default class polymarket extends Exchange {
             for (let p = 1; p < maxPages; p++) {
                 offsets.push (p * pageSize);
             }
-            const restPages = await Promise.all (offsets.map ((off) => this.gammaPublicGetEvents (this.extend ({ 'offset': off }, baseRequest)).then ((r: any) => r || [])));
-            allRawEvents = (firstPage as any[]).concat ((restPages as any[][]).flat ());
+            const restPromises2: any[] = [];
+            for (let oi = 0; oi < offsets.length; oi++) {
+                restPromises2.push (this.gammaPublicGetEvents (this.extend ({ 'offset': offsets[oi] }, baseRequest)));
+            }
+            const restPages = await Promise.all (restPromises2);
+            allRawEvents = (firstPage as any[]).slice ();
+            for (let ri2 = 0; ri2 < restPages.length; ri2++) {
+                const page = (restPages[ri2] as any[]) || [];
+                for (let pi2 = 0; pi2 < page.length; pi2++) {
+                    allRawEvents.push (page[pi2]);
+                }
+            }
         }
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
@@ -687,7 +707,7 @@ export default class polymarket extends Exchange {
      * @param params
      * @see https://docs.polymarket.com/api-reference/trade/get-single-order-by-id
      */
-    async fetchOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
+    async fetchOrder (id: Str, outcome: Str = undefined, params: Dict = {}): Promise<Order> {
         const response = await this.clobPrivateGetDataOrderId (this.extend ({ 'id': id }, params));
         return this.parseOrder (response);
     }
@@ -782,7 +802,7 @@ export default class polymarket extends Exchange {
      * @param params
      * @see https://docs.polymarket.com/api-reference/trade/cancel-single-order
      */
-    async cancelOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
+    async cancelOrder (id: Str, outcome: Str = undefined, params: Dict = {}): Promise<Order> {
         const response = await this.clobPrivateDeleteOrder (this.extend ({ 'order_id': id }, params));
         return this.parseOrder (response);
     }
@@ -834,8 +854,18 @@ export default class polymarket extends Exchange {
             for (let p = 2; p <= totalPages; p++) {
                 remainingPages.push (p);
             }
-            const restResponses = await Promise.all (remainingPages.map ((p) => this.gammaPublicGetPublicSearch (this.extend ({ 'page': p }, baseRequest, rest))));
-            const allEvents = (firstEvents as any[]).concat (restResponses.flatMap ((r) => this.safeList (r, 'events', []) as any[]));
+            const restPromises3: any[] = [];
+            for (let pi3 = 0; pi3 < remainingPages.length; pi3++) {
+                restPromises3.push (this.gammaPublicGetPublicSearch (this.extend ({ 'page': remainingPages[pi3] }, baseRequest, rest)));
+            }
+            const restResponses = await Promise.all (restPromises3);
+            const allEvents: any[] = (firstEvents as any[]).slice ();
+            for (let ri3 = 0; ri3 < restResponses.length; ri3++) {
+                const pageEvents3 = this.safeList (restResponses[ri3], 'events', []) as any[];
+                for (let ei3 = 0; ei3 < pageEvents3.length; ei3++) {
+                    allEvents.push (pageEvents3[ei3]);
+                }
+            }
             for (const rawEvent of allEvents) {
                 const eventId = this.safeString (rawEvent, 'id');
                 if (eventId && !seen[eventId]) {

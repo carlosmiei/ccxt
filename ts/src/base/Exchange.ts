@@ -2459,24 +2459,31 @@ export default class Exchange {
             'trillion': 'T',
             'percent': 'pct',
         };
-        const stopWords = new Set ([
+        const stopWords = [
             'will', 'the', 'a', 'an', 'after', 'before', 'in', 'at', 'by',
             'of', 'there', 'be', 'to', 'or', 'and', 'for', 'on', 'its',
             'that', 'this', 'from', 'with', 'as', 'is', 'are', 'was', 'were', '?', 'how', 'many', 'who', 'what', 'when', 'where', 'which', 'much',
-        ]);
+        ];
         let s = (slug || '').toLowerCase ().trim ().replace (' ', '-').replace (/[^a-z0-9]+/g, '-')
             .replace (/^-+|-+$/g, '');
-        for (const phrase of Object.keys (replacements)) {
-            s = s.split (phrase).join (replacements[phrase]);
+        for (let i = 0, replacementKeys = Object.keys (replacements); i < replacementKeys.length; i++) {
+            s = s.split (replacementKeys[i]).join (replacements[replacementKeys[i]]);
         }
-        const parts = s.split ('-').filter ((w) => w.length > 0 && !stopWords.has (w));
+        const rawParts = s.split ('-');
+        const parts: string[] = [];
+        for (let i = 0; i < rawParts.length; i++) {
+            const w = rawParts[i];
+            if (w.length > 0 && stopWords.indexOf (w) === -1) {
+                parts.push (w);
+            }
+        }
         return parts.join ('_').toUpperCase ();
     }
 
     createUnifiedSymbol2 (question, outcome) {
-        const stopwords = new Set ([
+        const stopwords = [
             'will', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be',
-        ]);
+        ];
         const dict = {
             'bitcoin': 'BTC',
             'increase': 'HIKE',
@@ -2527,34 +2534,68 @@ export default class Exchange {
             'november': 'NOV',
             'december': 'DEC',
         };
-        let tokens = question
-            .toLowerCase ()
-            .replace (/[^a-z0-9\s]/g, '')
-            .split (/\s+/)
-            .filter ((t) => !stopwords.has (t));
-        tokens = tokens.map ((t) => dict[t] ?? t);
-        let actor = tokens.find ((t) => [ 'trump', 'fed', 'biden', 'putin' ].includes (t)) || tokens[0];
-        let topic = tokens.find ((t) => [ 'iran', 'china', 'rates', 'bitcoin' ].includes (t));
-        let action = tokens.find ((t) => [ 'cut', 'hike', 'ops', 'ban', 'approve' ]);
-        actor = actor?.toUpperCase ();
-        topic = topic?.toUpperCase ();
-        action = action?.toUpperCase ();
-        let condition = '';
+        const rawTokens = question.toLowerCase ().replace (/[^a-z0-9\s]/g, '').split (/\s+/);
+        const tokens: string[] = [];
+        for (let i = 0; i < rawTokens.length; i++) {
+            const t = rawTokens[i];
+            if (stopwords.indexOf (t) === -1) {
+                const dictVal = dict[t];
+                tokens.push (dictVal !== undefined ? dictVal : t);
+            }
+        }
+        const actorKeywords = [ 'trump', 'fed', 'biden', 'putin' ];
+        const topicKeywords = [ 'iran', 'china', 'rates', 'bitcoin' ];
+        const actionKeywords = [ 'cut', 'hike', 'ops', 'ban', 'approve' ];
+        let actor = tokens[0];
+        let topic = '';
+        let action = '';
         for (let i = 0; i < tokens.length; i++) {
-            if (months[tokens[i]]) {
-                const day = tokens[i + 1]?.replace (/\D/g, '');
-                condition = months[tokens[i]] + (day || '');
+            if (actorKeywords.indexOf (tokens[i]) !== -1) {
+                actor = tokens[i];
                 break;
             }
         }
-        const eventSlug = [ actor, topic, action ].filter (Boolean).join ('-');
-        return `${eventSlug}:${condition}:${outcome.toUpperCase ()}`;
+        for (let i = 0; i < tokens.length; i++) {
+            if (topicKeywords.indexOf (tokens[i]) !== -1) {
+                topic = tokens[i];
+                break;
+            }
+        }
+        for (let i = 0; i < tokens.length; i++) {
+            if (actionKeywords.indexOf (tokens[i]) !== -1) {
+                action = tokens[i];
+                break;
+            }
+        }
+        const actorUpper = actor ? actor.toUpperCase () : '';
+        const topicUpper = topic ? topic.toUpperCase () : '';
+        const actionUpper = action ? action.toUpperCase () : '';
+        let condition = '';
+        for (let i = 0; i < tokens.length; i++) {
+            if (months[tokens[i]]) {
+                const nextToken = (i + 1 < tokens.length) ? tokens[i + 1].replace (/\D/g, '') : '';
+                condition = months[tokens[i]] + nextToken;
+                break;
+            }
+        }
+        const slugParts: string[] = [];
+        if (actorUpper) {
+            slugParts.push (actorUpper);
+        }
+        if (topicUpper) {
+            slugParts.push (topicUpper);
+        }
+        if (actionUpper) {
+            slugParts.push (actionUpper);
+        }
+        const eventSlug = slugParts.join ('-');
+        return eventSlug + ':' + condition + ':' + outcome.toUpperCase ();
     }
 
     createUnifiedSymbol3 (eventSlug, marketSlug, outcome) {
-        const stopwords = new Set ([
+        const stopwords = [
             'will', 'what', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be', 'this', 'week',
-        ]);
+        ];
         const dict = {
             'federal-reserve': 'fed',
             'interest-rates': 'rates',
@@ -2598,41 +2639,76 @@ export default class Exchange {
             'november': 'NOV',
             'december': 'DEC',
         };
-        const tokenize = (slug) => {
-            let tokens = slug
-                .toLowerCase ()
-                .replace (/[^a-z0-9\s-]/g, '')
-                .replace (/-/g, ' ')
-                .split (/\s+/)
-                .filter ((t) => !stopwords.has (t));
-            tokens = tokens.map ((t) => dict[t] ?? t);
-            return tokens.filter (Boolean);
-        };
-        const extractDate = (tokens) => {
-            for (let i = 0; i < tokens.length; i++) {
-                if (months[tokens[i]]) {
-                    const day = tokens[i + 1]?.replace (/\D/g, '');
-                    return months[tokens[i]] + (day || '');
+        const eventRaw = eventSlug.toLowerCase ().replace (/[^a-z0-9\s-]/g, '').replace (/-/g, ' ').split (/\s+/);
+        const eventTokens: string[] = [];
+        for (let i = 0; i < eventRaw.length; i++) {
+            const t = eventRaw[i];
+            if (stopwords.indexOf (t) !== -1) {
+                continue;
+            }
+            const dictVal = dict[t];
+            const mapped = (dictVal !== undefined) ? dictVal : t;
+            if (mapped) {
+                eventTokens.push (mapped);
+            }
+        }
+        const marketRaw = marketSlug.toLowerCase ().replace (/[^a-z0-9\s-]/g, '').replace (/-/g, ' ').split (/\s+/);
+        const allMarketTokens: string[] = [];
+        for (let i = 0; i < marketRaw.length; i++) {
+            const t = marketRaw[i];
+            if (stopwords.indexOf (t) !== -1) {
+                continue;
+            }
+            const dictVal = dict[t];
+            const mapped = (dictVal !== undefined) ? dictVal : t;
+            if (mapped) {
+                allMarketTokens.push (mapped);
+            }
+        }
+        let date = '';
+        for (let i = 0; i < eventTokens.length; i++) {
+            if (months[eventTokens[i]]) {
+                const nextToken = (i + 1 < eventTokens.length) ? eventTokens[i + 1].replace (/\D/g, '') : '';
+                date = months[eventTokens[i]] + nextToken;
+                break;
+            }
+        }
+        if (!date) {
+            for (let i = 0; i < allMarketTokens.length; i++) {
+                if (months[allMarketTokens[i]]) {
+                    const nextToken = (i + 1 < allMarketTokens.length) ? allMarketTokens[i + 1].replace (/\D/g, '') : '';
+                    date = months[allMarketTokens[i]] + nextToken;
+                    break;
                 }
             }
-            return '';
-        };
-        const eventTokens = tokenize (eventSlug);
-        let marketTokens = tokenize (marketSlug);
-        const date = extractDate (eventTokens) || extractDate (marketTokens);
+        }
         // remove duplicated context
-        marketTokens = marketTokens.filter ((t) => !eventTokens.includes (t));
-        const pick = (tokens) => tokens.slice (0, 2).map ((t) => t.toUpperCase ());
-        const eventPart = pick (eventTokens).join ('-');
-        const marketPart = pick (marketTokens).join ('-');
-        const left = date ? `${eventPart}-${date}` : eventPart;
-        return `${left}:${marketPart}:${outcome.toUpperCase ()}`;
+        const marketTokens: string[] = [];
+        for (let i = 0; i < allMarketTokens.length; i++) {
+            if (eventTokens.indexOf (allMarketTokens[i]) === -1) {
+                marketTokens.push (allMarketTokens[i]);
+            }
+        }
+        const eventPickLen = eventTokens.length < 2 ? eventTokens.length : 2;
+        const marketPickLen = marketTokens.length < 2 ? marketTokens.length : 2;
+        const eventPickParts: string[] = [];
+        for (let i = 0; i < eventPickLen; i++) {
+            eventPickParts.push (eventTokens[i].toUpperCase ());
+        }
+        const marketPickParts: string[] = [];
+        for (let i = 0; i < marketPickLen; i++) {
+            marketPickParts.push (marketTokens[i].toUpperCase ());
+        }
+        const eventPart = eventPickParts.join ('-');
+        const marketPart = marketPickParts.join ('-');
+        const left = date ? (eventPart + '-' + date) : eventPart;
+        return left + ':' + marketPart + ':' + outcome.toUpperCase ();
     }
 
     createUnifiedSymbol (eventSlug, marketSlug, outcome) {
-        const stopwords = new Set ([
+        const stopwords = [
             'will', 'what', 'the', 'a', 'an', 'after', 'before', 'in', 'on', 'at', 'by', 'of', 'to', 'there', 'be', 'this', 'week', 'say', 'who', 'which',
-        ]);
+        ];
         const dict = {
             'announces': '',
             'announced': '',
@@ -2683,40 +2759,66 @@ export default class Exchange {
             'november': 'NOV',
             'december': 'DEC',
         };
-        const tokenize = (slug) => {
-            let tokens = slug
-                .toLowerCase ()
-                .replace (/[^a-z0-9\s-]/g, '')
-                .replace (/-/g, ' ')
-                .split (/\s+/)
-                .filter ((t) => !stopwords.has (t));
-            tokens = tokens.map ((t) => dict[t.toLowerCase ()] ?? t);
-            return tokens.filter (Boolean);
-        };
-        const extractDate = (tokens) => {
-            for (let i = 0; i < tokens.length; i++) {
-                if (months[tokens[i]]) {
-                    const day = tokens[i + 1]?.replace (/\D/g, '');
-                    return months[tokens[i]] + (day || '');
+        const eventRaw2 = eventSlug.toLowerCase ().replace (/[^a-z0-9\s-]/g, '').replace (/-/g, ' ').split (/\s+/);
+        const eventTokens: string[] = [];
+        for (let i = 0; i < eventRaw2.length; i++) {
+            const t = eventRaw2[i];
+            if (stopwords.indexOf (t) !== -1) {
+                continue;
+            }
+            const tLower = t.toLowerCase ();
+            const dictVal = dict[tLower];
+            const mapped = (dictVal !== undefined) ? dictVal : t;
+            if (mapped) {
+                eventTokens.push (mapped);
+            }
+        }
+        const marketRaw2 = marketSlug.toLowerCase ().replace (/[^a-z0-9\s-]/g, '').replace (/-/g, ' ').split (/\s+/);
+        const marketTokens: string[] = [];
+        for (let i = 0; i < marketRaw2.length; i++) {
+            const t = marketRaw2[i];
+            if (stopwords.indexOf (t) !== -1) {
+                continue;
+            }
+            const tLower = t.toLowerCase ();
+            const dictVal = dict[tLower];
+            const mapped = (dictVal !== undefined) ? dictVal : t;
+            if (mapped) {
+                marketTokens.push (mapped);
+            }
+        }
+        let date = '';
+        for (let i = 0; i < eventTokens.length; i++) {
+            if (months[eventTokens[i]]) {
+                const nextToken = (i + 1 < eventTokens.length) ? eventTokens[i + 1].replace (/\D/g, '') : '';
+                date = months[eventTokens[i]] + nextToken;
+                break;
+            }
+        }
+        if (!date) {
+            for (let i = 0; i < marketTokens.length; i++) {
+                if (months[marketTokens[i]]) {
+                    const nextToken = (i + 1 < marketTokens.length) ? marketTokens[i + 1].replace (/\D/g, '') : '';
+                    date = months[marketTokens[i]] + nextToken;
+                    break;
                 }
             }
-            return '';
-        };
-        const eventTokens = tokenize (eventSlug);
-        const marketTokens = tokenize (marketSlug);
-        const date = extractDate (eventTokens) || extractDate (marketTokens);
-        // remove tokens already present in event
-        // marketTokens = marketTokens.filter ((t) => !eventTokens.includes (t));
-        // keep first meaningful tokens
-        // const eventPart = eventTokens.slice (0, 5).map ((t) => t.toUpperCase ()).join ('-');
-        // const marketPart = marketTokens.slice (0, 3).map ((t) => t.toUpperCase ()).join ('-');
-        const eventPart = eventTokens.map ((t) => t.toUpperCase ()).join ('-');
-        const marketPart = marketTokens.map ((t) => t.toUpperCase ()).join ('-');
-        const left = date ? `${eventPart}-${date}` : eventPart;
-        if (marketPart.length > 0) {
-            return `${left}:${marketPart}:${outcome.toUpperCase ()}`;
         }
-        return `${left}:${outcome.toUpperCase ()}`;
+        const eventUpParts: string[] = [];
+        for (let i = 0; i < eventTokens.length; i++) {
+            eventUpParts.push (eventTokens[i].toUpperCase ());
+        }
+        const marketUpParts: string[] = [];
+        for (let i = 0; i < marketTokens.length; i++) {
+            marketUpParts.push (marketTokens[i].toUpperCase ());
+        }
+        const eventPart = eventUpParts.join ('-');
+        const marketPart = marketUpParts.join ('-');
+        const left = date ? (eventPart + '-' + date) : eventPart;
+        if (marketPart.length > 0) {
+            return left + ':' + marketPart + ':' + outcome.toUpperCase ();
+        }
+        return left + ':' + outcome.toUpperCase ();
     }
 
     slugToMarketSymbol (eventSlug: string, marketSlug: string): string {
@@ -3225,10 +3327,10 @@ export default class Exchange {
         // Build outcomes index from market outcomes arrays
         this.outcomes = {};
         this.outcomes_by_id = {};
-        for (const sym of Object.keys (this.markets)) {
-            const mkt = this.markets[sym];
-            const outcomesList = (mkt['outcomes'] || []) as any[];
-            for (const oc of outcomesList) {
+        for (let i = 0, marketSymbols = Object.keys (this.markets); i < marketSymbols.length; i++) {
+            const outcomesList = ((this.markets[marketSymbols[i]])['outcomes'] || []) as any[];
+            for (let j = 0; j < outcomesList.length; j++) {
+                const oc = outcomesList[j];
                 const ocSymbol = oc['symbol'];
                 if (ocSymbol) {
                     this.outcomes[ocSymbol] = oc;
@@ -5935,7 +6037,7 @@ export default class Exchange {
         if (outcomeObj !== undefined) {
             return outcomeObj;
         }
-        return { 'id': outcomeIdOrSymbol, 'symbol': outcomeIdOrSymbol, 'marketSymbol': undefined, 'label': undefined, 'info': {} };
+        return { 'id': outcomeIdOrSymbol, 'symbol': outcomeIdOrSymbol, 'marketSymbol': undefined, 'label': undefined, 'info': {}};
     }
 
     createExpiredOptionMarket (symbol: string): MarketInterface {

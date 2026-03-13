@@ -361,13 +361,18 @@ export default class Limitless extends Exchange {
         const scale = 10 ** decimals;
         const rawBids = this.safeList (response, 'bids', []) as any[];
         const rawAsks = this.safeList (response, 'asks', []) as any[];
-        const convertLevel = (entry: any) => {
-            const price = this.safeNumber (entry, 'price');
-            const sizeMicro = this.safeNumber (entry, 'size');
-            return [ price, sizeMicro !== undefined ? sizeMicro / scale : undefined ];
-        };
-        const bids = rawBids.map (convertLevel);
-        const asks = rawAsks.map (convertLevel);
+        const bids: any[] = [];
+        const asks: any[] = [];
+        for (let bi = 0; bi < rawBids.length; bi++) {
+            const price = this.safeNumber (rawBids[bi], 'price');
+            const sizeMicro = this.safeNumber (rawBids[bi], 'size');
+            bids.push ([ price, sizeMicro !== undefined ? sizeMicro / scale : undefined ]);
+        }
+        for (let ai = 0; ai < rawAsks.length; ai++) {
+            const price = this.safeNumber (rawAsks[ai], 'price');
+            const sizeMicro = this.safeNumber (rawAsks[ai], 'size');
+            asks.push ([ price, sizeMicro !== undefined ? sizeMicro / scale : undefined ]);
+        }
         return {
             'symbol': symbol,
             'bids': bids,

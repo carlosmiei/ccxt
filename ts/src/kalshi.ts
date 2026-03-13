@@ -145,7 +145,10 @@ export default class kalshi extends Exchange {
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
         const queries = this.safeList (params, 'queries', []) as string[];
         const rest = this.omit (params, [ 'queries' ]);
-        const lowerQueries = (queries && queries.length > 0) ? queries.map ((q) => (q as string).toLowerCase ()) : [];
+        const lowerQueries: string[] = [];
+        for (let qi = 0; qi < queries.length; qi++) {
+            lowerQueries.push ((queries[qi] as string).toLowerCase ());
+        }
         const flatMarkets: Market[] = [];
         const eventsDict: Dict = {};
         let cursor: Str = undefined;
@@ -161,7 +164,13 @@ export default class kalshi extends Exchange {
                 if (lowerQueries.length > 0) {
                     const ticker = (this.safeString (raw, 'ticker') || '').toLowerCase ();
                     const title = (this.safeString (raw, 'title') || '').toLowerCase ();
-                    const matches = lowerQueries.some ((q) => ticker.indexOf (q) !== -1 || title.indexOf (q) !== -1);
+                    let matches = false;
+                    for (let mi = 0; mi < lowerQueries.length; mi++) {
+                        if (ticker.indexOf (lowerQueries[mi]) !== -1 || title.indexOf (lowerQueries[mi]) !== -1) {
+                            matches = true;
+                            break;
+                        }
+                    }
                     if (!matches) {
                         continue;
                     }
@@ -216,23 +225,27 @@ export default class kalshi extends Exchange {
         // Build outcomes
         const outcomeLabels = [ 'YES', 'NO' ];
         const outcomeIds = [ ticker, ticker + '-NO' ];
-        const outcomes: any[] = outcomeLabels.map ((label, i) => ({
-            'id': outcomeIds[i],
-            'symbol': marketSymbol + ':' + label,
-            'marketSymbol': marketSymbol,
-            'label': label,
-            'active': active,
-            'info': {
-                'ticker': ticker,
-                'eventTicker': eventTicker,
-                'seriesTicker': seriesTicker,
-                'subtitle': subtitle,
-                'outcomeLabel': label,
-                'volume': volume,
-                'liquidity': liquidity,
-                'openInterest': openInt,
-            },
-        }));
+        const outcomes: any[] = [];
+        for (let oi = 0; oi < outcomeLabels.length; oi++) {
+            const label = outcomeLabels[oi];
+            outcomes.push ({
+                'id': outcomeIds[oi],
+                'symbol': marketSymbol + ':' + label,
+                'marketSymbol': marketSymbol,
+                'label': label,
+                'active': active,
+                'info': {
+                    'ticker': ticker,
+                    'eventTicker': eventTicker,
+                    'seriesTicker': seriesTicker,
+                    'subtitle': subtitle,
+                    'outcomeLabel': label,
+                    'volume': volume,
+                    'liquidity': liquidity,
+                    'openInterest': openInt,
+                },
+            });
+        }
         return [ {
             'id': ticker,
             'symbol': marketSymbol,
@@ -319,17 +332,17 @@ export default class kalshi extends Exchange {
         const yesAsk = this.safeNumber (raw, 'yes_ask');
         const yesBid = this.safeNumber (raw, 'yes_bid');
         const last = this.safeNumber (raw, 'last_price');
-        const toDecimal = (v: Num) => (v !== undefined ? v / 100 : undefined);
-        let bid: Num; let ask: Num; let
-            close: Num;
+        let bid: Num;
+        let ask: Num;
+        let close: Num;
         if (isNo) {
-            bid = toDecimal (yesAsk !== undefined ? 100 - yesAsk : undefined);
-            ask = toDecimal (yesBid !== undefined ? 100 - yesBid : undefined);
-            close = toDecimal (last !== undefined ? 100 - last : undefined);
+            bid = (yesAsk !== undefined) ? (100 - yesAsk) / 100 : undefined;
+            ask = (yesBid !== undefined) ? (100 - yesBid) / 100 : undefined;
+            close = (last !== undefined) ? (100 - last) / 100 : undefined;
         } else {
-            bid = toDecimal (yesBid);
-            ask = toDecimal (yesAsk);
-            close = toDecimal (last);
+            bid = (yesBid !== undefined) ? yesBid / 100 : undefined;
+            ask = (yesAsk !== undefined) ? yesAsk / 100 : undefined;
+            close = (last !== undefined) ? last / 100 : undefined;
         }
         return this.safeTicker ({
             'symbol': symbol,
@@ -379,25 +392,29 @@ export default class kalshi extends Exchange {
         // Kalshi uses YES-side perspective: `yes` = bids, `no` = asks (inverted)
         const rawYes = this.safeList (book, 'yes', []) as any[];
         const rawNo = this.safeList (book, 'no', []) as any[];
-        // Convert [price_cents, size] → {price, amount}
-        const toLevel = (entry: any, invert: boolean) => {
-            const priceCents = this.safeNumber (entry, 0);
-            const size = this.safeNumber (entry, 1);
-            const price = invert
-                ? (100 - priceCents) / 100
-                : priceCents / 100;
-            return [ price, size ];
-        };
-        let bids: any[]; let
-            asks: any[];
+        // Convert [price_cents, size] → [price, size]
+        const bids: any[] = [];
+        const asks: any[] = [];
         if (isNo) {
             // NO perspective: NO bids come from rawNo, NO asks invert rawYes
-            bids = rawNo.map ((e: any) => toLevel (e, false));
-            asks = rawYes.map ((e: any) => toLevel (e, true));
+            for (let bi = 0; bi < rawNo.length; bi++) {
+                const priceCents = this.safeNumber (rawNo[bi], 0);
+                bids.push ([ priceCents / 100, this.safeNumber (rawNo[bi], 1) ]);
+            }
+            for (let ai = 0; ai < rawYes.length; ai++) {
+                const priceCents = this.safeNumber (rawYes[ai], 0);
+                asks.push ([ (100 - priceCents) / 100, this.safeNumber (rawYes[ai], 1) ]);
+            }
         } else {
             // YES perspective: YES bids from rawYes, YES asks invert rawNo
-            bids = rawYes.map ((e: any) => toLevel (e, false));
-            asks = rawNo.map ((e: any) => toLevel (e, true));
+            for (let bi = 0; bi < rawYes.length; bi++) {
+                const priceCents = this.safeNumber (rawYes[bi], 0);
+                bids.push ([ priceCents / 100, this.safeNumber (rawYes[bi], 1) ]);
+            }
+            for (let ai = 0; ai < rawNo.length; ai++) {
+                const priceCents = this.safeNumber (rawNo[ai], 0);
+                asks.push ([ (100 - priceCents) / 100, this.safeNumber (rawNo[ai], 1) ]);
+            }
         }
         return this.sortedOrders (outcome, timestamp, bids, asks);
     }
@@ -805,7 +822,10 @@ export default class kalshi extends Exchange {
         if (!this.markets) {
             this.markets = {};
         }
-        const lowerQueries = (queries && queries.length > 0) ? queries.map ((q) => (q as string).toLowerCase ()) : [];
+        const lowerQueries: string[] = [];
+        for (let qi = 0; qi < queries.length; qi++) {
+            lowerQueries.push ((queries[qi] as string).toLowerCase ());
+        }
         // Phase 1: sequential cursor scan (lightweight — no nested markets) to collect matching tickers
         const matchedTickers: string[] = [];
         let cursor: string | undefined = undefined;
@@ -818,23 +838,35 @@ export default class kalshi extends Exchange {
             const response = await this.kalshiPublicGetEvents (this.extend (request, rest));
             const rawEvents = this.safeList (response, 'events', []) as any[];
             cursor = this.safeString (response, 'cursor');
-            rawEvents.forEach ((rawEvent) => {
+            for (let rei = 0; rei < rawEvents.length; rei++) {
+                const rawEvent = rawEvents[rei];
                 const ticker = (this.safeString (rawEvent, 'event_ticker') || '');
                 const title = (this.safeString (rawEvent, 'title') || '').toLowerCase ();
-                const matches = lowerQueries.length === 0 || lowerQueries.some ((q) => ticker.toLowerCase ().indexOf (q) !== -1 || title.indexOf (q) !== -1);
+                let matches = (lowerQueries.length === 0);
+                for (let li = 0; li < lowerQueries.length; li++) {
+                    if (ticker.toLowerCase ().indexOf (lowerQueries[li]) !== -1 || title.indexOf (lowerQueries[li]) !== -1) {
+                        matches = true;
+                        break;
+                    }
+                }
                 if (matches && ticker) {
                     matchedTickers.push (ticker);
                 }
-            });
+            }
             page++;
             if (!cursor || rawEvents.length < pageLimit) {
                 break;
             }
         }
         // Phase 2: fetch full event details (with nested markets) for all matched tickers in parallel
-        const detailResponses = await Promise.all (matchedTickers.map ((ticker) => this.kalshiPublicGetEventsEventTicker ({ 'event_ticker': ticker, 'with_nested_markets': true })));
+        const detailPromises: any[] = [];
+        for (let ti = 0; ti < matchedTickers.length; ti++) {
+            detailPromises.push (this.kalshiPublicGetEventsEventTicker ({ 'event_ticker': matchedTickers[ti], 'with_nested_markets': true }));
+        }
+        const detailResponses = await Promise.all (detailPromises);
         const result: Dict = {};
-        detailResponses.forEach ((detail) => {
+        for (let di = 0; di < detailResponses.length; di++) {
+            const detail = detailResponses[di];
             const fullEvent = this.safeValue (detail, 'event', detail) as Dict;
             const parsedEvent = this.parseEvent (fullEvent);
             const eventTitle = this.safeString (fullEvent, 'title');
@@ -842,11 +874,13 @@ export default class kalshi extends Exchange {
             if (eventKey) {
                 (this.events as Dict)[eventKey] = parsedEvent;
                 result[eventKey] = parsedEvent;
-                ((parsedEvent['markets'] || []) as any[]).forEach ((m) => {
+                const parsedMarkets = (parsedEvent['markets'] || []) as any[];
+                for (let mi = 0; mi < parsedMarkets.length; mi++) {
+                    const m = parsedMarkets[mi];
                     this.markets[m['symbol']] = m;
-                });
+                }
             }
-        });
+        }
         return result;
     }
 
