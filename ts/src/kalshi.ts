@@ -428,8 +428,8 @@ export default class kalshi extends Exchange {
      */
     sortedOrders (symbol: Str, timestamp: Int, bids: any[], asks: any[]): OrderBook {
         // Sort bids descending, asks ascending, match CCXT OrderBook shape
-        bids.sort ((a: any, b: any) => b[0] - a[0]);
-        asks.sort ((a: any, b: any) => a[0] - b[0]);
+        bids = this.sortBy (bids, 0, true);
+        asks = this.sortBy (asks, 0);
         return {
             'symbol': symbol,
             'bids': bids,
