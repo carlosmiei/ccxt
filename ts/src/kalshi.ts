@@ -881,7 +881,7 @@ export default class kalshi extends Exchange {
                 }
             }
         }
-        return result;
+        return Object.values (result);
     }
 
     /**

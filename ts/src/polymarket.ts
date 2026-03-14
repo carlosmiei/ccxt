@@ -893,7 +893,7 @@ export default class polymarket extends Exchange {
                 this.events[eventKey] = parsedEvent;
             }
         }
-        return this.events;
+        return Object.values(this.events);
     }
 
     /**

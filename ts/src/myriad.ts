@@ -16,7 +16,7 @@
 import Exchange from './abstract/myriad.js';
 import type {
     Int, Str, Num, Dict,
-    Market, Ticker, OrderBook, OHLCV,
+    Market, Ticker, OrderBook, OHLCV, PredictionEvent,
 } from './base/types.js';
 
 // ---------------------------------------------------------------------------
@@ -145,33 +145,30 @@ export default class Myriad extends Exchange {
                     }
                 }
             }
-            const flatMarkets: Market[] = [];
-            const eventsDict: Dict = {};
+            const qFlatMarkets: Market[] = [];
+            const qEventsDict: Dict = {};
             for (const rawEvent of rawEvents) {
                 const questionSlug = this.safeString (rawEvent, 'slug', this.safeString (rawEvent, 'id'));
                 const eventKey = questionSlug ? this.shortenSlug (questionSlug) : undefined;
                 const parsed = this.parseEvent (rawEvent);
                 if (eventKey) {
-                    eventsDict[eventKey] = parsed;
+                    qEventsDict[eventKey] = parsed;
                 }
-                const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
-                for (const rawMarket of rawMarkets) {
-                    const outcomes = this.parseMarketOutcomes (rawMarket, questionSlug);
-                    for (const m of outcomes) {
-                        flatMarkets.push (m);
-                    }
+                for (const m of (parsed['markets'] as Market[])) {
+                    qFlatMarkets.push (m);
                 }
             }
-            this.events = eventsDict;
-            return flatMarkets;
+            this.events = qEventsDict;
+            return qFlatMarkets;
         }
         const flatMarkets: Market[] = [];
-        const eventsDict: Dict = {};
+        const networkGroups: Dict = {};
         let page = 1;
         const limit = this.safeInteger (this.options, 'defaultFetchMarketsLimit', 50);
         const status = this.safeString (rest0, 'status', this.safeString (this.options, 'defaultMarketStatus', 'open'));
         const rest = this.omit (rest0, [ 'status' ]);
-        while (true) {
+        let hasMore = true;
+        while (hasMore) {
             const response = await this.myriadPublicGetMarkets (this.extend ({
                 'status': status,
                 'limit': limit,
@@ -188,22 +185,40 @@ export default class Myriad extends Exchange {
                 for (const m of parsed) {
                     flatMarkets.push (m);
                     if (eventKey) {
-                        if (!eventsDict[eventKey]) {
-                            eventsDict[eventKey] = {
-                                'id': networkId,
-                                'slug': networkId,
-                                'title': (this.options as Dict)['networks'] ? ((this.options as Dict)['networks'] as Dict)[networkId] || networkId : networkId,
-                                'markets': {},
-                            };
+                        if (!networkGroups[eventKey]) {
+                            const networkName = (this.options as Dict)['networks'] ? ((this.options as Dict)['networks'] as Dict)[networkId] || networkId : networkId;
+                            networkGroups[eventKey] = { 'networkId': networkId, 'title': networkName, 'markets': [] };
                         }
-                        (eventsDict[eventKey] as Dict)['markets'][m['symbol'] as string] = m;
+                        (networkGroups[eventKey] as Dict)['markets'].push (m);
                     }
                 }
             }
-            if (rawMarkets.length < limit) {
-                break;
-            }
+            hasMore = rawMarkets.length >= limit;
             page++;
+        }
+        const eventsDict: Dict = {};
+        for (const eventKey of Object.keys (networkGroups)) {
+            const g = networkGroups[eventKey] as Dict;
+            const networkId = g['networkId'] as string;
+            eventsDict[eventKey] = this.extend ({
+                'id': networkId,
+                'slug': networkId,
+                'symbol': networkId,
+                'title': g['title'],
+                'description': undefined,
+                'markets': g['markets'],
+                'url': undefined,
+                'image': undefined,
+                'active': true,
+                'resolved': false,
+                'created': undefined,
+                'createdDatetime': undefined,
+                'end': undefined,
+                'endDatetime': undefined,
+                'lastUpdatedAt': undefined,
+                'resolutionSource': undefined,
+                'info': { 'networkId': networkId },
+            }) as unknown as PredictionEvent;
         }
         this.events = eventsDict;
         return flatMarkets;
@@ -459,10 +474,10 @@ export default class Myriad extends Exchange {
      * @param params
      * @see https://docs.myriad.markets/api-reference/questions/list-questions
      */
-    async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<any> {
+    async fetchEvents (queries: string[] = [], params: Dict = {}): Promise<PredictionEvent[]> {
         if (!queries || queries.length === 0) {
             await this.loadMarkets ();
-            return this.events;
+            return Object.values (this.events as Dict) as PredictionEvent[];
         }
         const limit = this.safeInteger (params, 'limit', this.safeInteger (this.options, 'defaultFetchEventsLimit', 50));
         const rest = this.omit (params, [ 'limit' ]);
@@ -488,43 +503,58 @@ export default class Myriad extends Exchange {
         if (!this.markets) {
             this.markets = {};
         }
+        const result: PredictionEvent[] = [];
         for (const rawEvent of rawEvents) {
             const questionSlug = this.safeString (rawEvent, 'slug', this.safeString (rawEvent, 'id'));
             const eventKey = questionSlug ? this.shortenSlug (questionSlug) : undefined;
             const parsedEvent = this.parseEvent (rawEvent);
             if (eventKey) {
                 (this.events as Dict)[eventKey] = parsedEvent;
-                for (const sym of Object.keys ((parsedEvent['markets'] || {}) as Dict)) {
-                    this.markets[sym] = (parsedEvent['markets'] as Dict)[sym];
+                for (const m of (parsedEvent['markets'] as Market[])) {
+                    this.markets[m['symbol'] as string] = m;
                 }
+                result.push (parsedEvent);
             }
         }
-        return this.events;
+        return result;
     }
 
     /**
      * Parses a raw Myriad question object into the unified CCXT event shape with a nested markets dict.
      * @param rawEvent
      */
-    parseEvent (rawEvent: Dict): Dict {
+    parseEvent (rawEvent: Dict): PredictionEvent {
         const questionSlug = this.safeString (rawEvent, 'slug', this.safeString (rawEvent, 'id'));
         const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
-        const marketsDict: Dict = {};
+        const marketsList: Market[] = [];
         for (const rawMarket of rawMarkets) {
             const outcomes = this.parseMarketOutcomes (rawMarket, questionSlug);
             for (const m of outcomes) {
-                const sym = this.safeString (m, 'symbol');
-                if (sym) {
-                    marketsDict[sym] = m;
-                }
+                marketsList.push (m);
             }
         }
+        const endDate = this.safeString (rawEvent, 'expiresAt', this.safeString (rawEvent, 'endDate'));
         return this.extend (rawEvent, {
             'id': this.safeString (rawEvent, 'id'),
             'slug': questionSlug,
+            'symbol': questionSlug ? this.shortenSlug (questionSlug) : undefined,
             'title': this.safeString (rawEvent, 'title'),
-            'markets': marketsDict,
-        });
+            'description': this.safeString (rawEvent, 'description'),
+            'markets': marketsList,
+            'url': this.safeString (rawEvent, 'url'),
+            'image': this.safeString (rawEvent, 'imageUrl', this.safeString (rawEvent, 'image')),
+            'active': this.safeBool (rawEvent, 'active'),
+            'resolved': this.safeBool (rawEvent, 'resolved', false),
+            'category': this.safeString (rawEvent, 'category'),
+            'tags': this.safeList (rawEvent, 'tags'),
+            'created': this.parse8601 (this.safeString (rawEvent, 'createdAt')),
+            'createdDatetime': this.safeString (rawEvent, 'createdAt'),
+            'end': endDate ? this.parse8601 (endDate) : undefined,
+            'endDatetime': endDate,
+            'lastUpdatedAt': this.parse8601 (this.safeString (rawEvent, 'updatedAt')),
+            'resolutionSource': this.safeString (rawEvent, 'resolutionSource'),
+            'info': rawEvent,
+        }) as unknown as PredictionEvent;
     }
 
     // -----------------------------------------------------------------------
