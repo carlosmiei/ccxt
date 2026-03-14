@@ -893,7 +893,7 @@ export default class polymarket extends Exchange {
                 this.events[eventKey] = parsedEvent;
             }
         }
-        return Object.values(this.events);
+        return Object.values (this.events);
     }
 
     /**
@@ -902,6 +902,65 @@ export default class polymarket extends Exchange {
      * @param marketsList
      */
     parseEvent (rawEvent: Dict, marketsList: any[] = undefined): Dict {
+        // {
+        //     "id": "73113",
+        //     "ticker": "ukraine-agrees-not-to-join-nato-before-2027",
+        //     "slug": "ukraine-agrees-not-to-join-nato-before-2027",
+        //     "title": "Ukraine agrees not to join NATO before 2027? ",
+        //     "description": "This market will resolve to \\"Yes\\" if Ukraine publicly agrees not to join NATO by December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to “No”.\\n\\nAn official pledge by Ukraine not to join NATO will qualify for a “Yes” resolution whether as a unilateral announcement or part of an agreement with the Russian Federation.\\n\\nAny agreement or pledge made before the resolution date of this market will qualify, regardless of if/when the agreement goes into effect.\\n\\nAn agreement by Ukraine not to join NATO for any amount of time will count (e.g. If Ukraine not to join NATO for 10 years this will qualify).\\n\\nAn agreement by Ukraine not to join NATO as a precondition of a more comprehensive peace process or deal will qualify, even if the agreement is not finalized or part of a formalized peace deal. The September 8, 1995 “Agreed Basic Principles” between Bosnia and Yugoslavia which recognized the borders and sovereignty of Bosnia and Herzegovina, and was later formalized through the Dayton Peace Agreement is an example of a qualifying agreement. \\n\\nThe primary resolution source for this market will be an official announcement by the Ukraine, however an overwhelming consensus of credible reporting confirming a qualifying agreement has been reached will also count.",
+        //     "resolutionSource": "",
+        //     "startDate": "2025-11-05T17:00:57.200353Z",
+        //     "creationDate": "2025-11-05T17:00:57.20035Z",
+        //     "endDate": "2026-12-31T00:00:00Z",
+        //     "image": "https://polymarket-upload.s3.us-east-2.amazonaws.com/ukraine-agrees-not-to-join-nato-before-july-vKEDpScXuAtt.jpg",
+        //     "icon": "https://polymarket-upload.s3.us-east-2.amazonaws.com/ukraine-agrees-not-to-join-nato-before-july-vKEDpScXuAtt.jpg",
+        //     "active": true,
+        //     "closed": false,
+        //     "archived": false,
+        //     "new": false,
+        //     "featured": false,
+        //     "restricted": true,
+        //     "liquidity": "22010.6659",
+        //     "openInterest": "0",
+        //     "createdAt": "2025-11-04T19:27:23.246129Z",
+        //     "updatedAt": "2026-03-14T14:38:21.25643Z",
+        //     "competitive": "0.9538344143456696",
+        //     "enableOrderBook": true,
+        //     "liquidityClob": "22010.6659",
+        //     "commentCount": "0",
+        //     "markets": [],
+        //     "tags": [
+        //         {
+        //             "id": "101970",
+        //             "label": "World",
+        //             "slug": "world",
+        //             "forceShow": false,
+        //             "createdAt": "2025-03-19T23:36:08.498099Z",
+        //             "updatedAt": "2026-03-09T22:25:02.420693Z",
+        //             "requiresTranslation": false
+        //         },
+        //         {
+        //             "id": "270",
+        //             "label": "putin",
+        //             "slug": "putin",
+        //             "publishedAt": "2023-11-02 21:46:19.507+00",
+        //             "createdAt": "2023-11-02T21:46:19.528Z",
+        //             "updatedAt": "2026-03-09T22:29:44.08742Z",
+        //             "requiresTranslation": false
+        //         }
+        //     ],
+        //     "cyom": false,
+        //     "showAllOutcomes": true,
+        //     "showMarketImages": true,
+        //     "enableNegRisk": false,
+        //     "automaticallyActive": true,
+        //     "seriesSlug": "ukraine-not-nato",
+        //     "negRiskAugmented": false,
+        //     "cumulativeMarkets": false,
+        //     "pendingDeployment": false,
+        //     "deploying": false,
+        //     "requiresTranslation": false
+        // }
         if (marketsList === undefined) {
             marketsList = this.parseEventToMarkets (rawEvent);
         }

@@ -889,6 +889,70 @@ export default class kalshi extends Exchange {
      * @param rawEvent
      */
     parseEvent (rawEvent: Dict): PredictionEvent {
+        // {
+        //         "available_on_brokers": true,
+        //         "category": "Politics",
+        //         "collateral_return_type": "",
+        //         "event_ticker": "KXBALANCE-29",
+        //         "last_updated_ts": "0001-01-01T00:00:00Z",
+        //         "markets": [
+        //             {
+        //                 "can_close_early": true,
+        //                 "close_time": "2029-07-01T14:00:00Z",
+        //                 "created_time": "0001-01-01T00:00:00Z",
+        //                 "early_close_condition": "This market will close and expire early if the event occurs.",
+        //                 "event_ticker": "KXBALANCE-29",
+        //                 "expected_expiration_time": "2029-07-01T14:00:00Z",
+        //                 "expiration_time": "2029-07-01T14:00:00Z",
+        //                 "expiration_value": "",
+        //                 "fractional_trading_enabled": false,
+        //                 "last_price_dollars": "0.1000",
+        //                 "latest_expiration_time": "2029-07-01T14:00:00Z",
+        //                 "liquidity_dollars": "0.0000",
+        //                 "market_type": "binary",
+        //                 "no_ask_dollars": "0.9000",
+        //                 "no_bid_dollars": "0.8900",
+        //                 "no_sub_title": "During Trump's term",
+        //                 "notional_value_dollars": "1.0000",
+        //                 "open_interest_fp": "16268.00",
+        //                 "open_time": "2025-01-03T15:00:00Z",
+        //                 "previous_price_dollars": "0.0000",
+        //                 "previous_yes_ask_dollars": "0.0000",
+        //                 "previous_yes_bid_dollars": "0.0000",
+        //                 "price_level_structure": "linear_cent",
+        //                 "price_ranges": [
+        //                     {
+        //                         "end": "1.0000",
+        //                         "start": "0.0000",
+        //                         "step": "0.0100"
+        //                     }
+        //                 ],
+        //                 "response_price_units": "usd_cent",
+        //                 "result": "",
+        //                 "rules_primary": "If there is not a budget deficit for any of fiscal years 2025, 2026, 2027, or 2028, then the market resolves to Yes.",
+        //                 "rules_secondary": "",
+        //                 "settlement_timer_seconds": "1800",
+        //                 "status": "active",
+        //                 "subtitle": "",
+        //                 "tick_size": "1",
+        //                 "ticker": "KXBALANCE-29",
+        //                 "title": "Will Trump balance the budget?",
+        //                 "updated_time": "0001-01-01T00:00:00Z",
+        //                 "volume_24h_fp": "28.00",
+        //                 "volume_fp": "40111.00",
+        //                 "yes_ask_dollars": "0.1100",
+        //                 "yes_ask_size_fp": "",
+        //                 "yes_bid_dollars": "0.1000",
+        //                 "yes_bid_size_fp": "",
+        //                 "yes_sub_title": "During Trump's term"
+        //             }
+        //         ],
+        //         "mutually_exclusive": false,
+        //         "series_ticker": "KXBALANCE",
+        //         "strike_period": "",
+        //         "sub_title": "During Trump's term",
+        //         "title": "Will Trump balance the budget?"
+        // }
         const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
         const marketsList: any[] = [];
         for (const rawMarket of rawMarkets) {

@@ -275,6 +275,80 @@ export default class Limitless extends Exchange {
      * @param markets
      */
     parseEvent (groupId: string, title: string, raw: Dict, markets: Market[]): PredictionEvent {
+        // {
+        //     "id": "36814",
+        //     "automationType": "manual",
+        //     "conditionId": "0x11287d02d8067ff3d3d8bd21b212ebcfdc20b638f7f6440e4115f649e6b57015",
+        //     "negRiskRequestId": null,
+        //     "description": "<p>This market will resolve to “Yes” if Donald Trump resigns or is removed as President or otherwise ceases to be the President of the United States for any period of time by December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to “No”.</p><p>An announcement of Donald Trump's resignation/removal before this market's end date will immediately resolve this market to \\"Yes\\", regardless of when the announced resignation/removal goes into effect.</p><p>Only permanent removal from office will qualify. Temporary removal (e.g. temporary invocation of the 25th Amendment under Section 3 or a Section 4 invocation not sustained by both Houses of Congress) or impeachment without removal will not count.</p><p>A sustained invocation of the Twenty-Fifth Amendment, Section 4 (i.e., if both Houses of Congress, by two-thirds vote, uphold the Vice President and Cabinet’s determination of presidential inability) will qualify for a \\"Yes\\" resolution.</p><p>The resolution source for this market will be a consensus of credible reporting.</p>",
+        //     "collateralToken": {
+        //         "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        //         "decimals": "6",
+        //         "symbol": "USDC"
+        //     },
+        //     "title": "💎 Trump out as President before 2027?",
+        //     "proxyTitle": null,
+        //     "expirationDate": "Jan 1, 2027",
+        //     "expirationTimestamp": "1798779540000",
+        //     "createdAt": "2026-01-20T18:17:48.298Z",
+        //     "updatedAt": "2026-02-24T17:00:11.833Z",
+        //     "categories": [
+        //         "Politics"
+        //     ],
+        //     "status": "FUNDED",
+        //     "expired": false,
+        //     "hidden": false,
+        //     "creator": {
+        //         "name": "Limitless",
+        //         "imageURI": "https://limitless.exchange/assets/images/logo.svg",
+        //         "link": "https://x.com/trylimitless"
+        //     },
+        //     "tags": [
+        //         "Limitless"
+        //     ],
+        //     "volume": "264692684",
+        //     "volumeFormatted": "264.692684",
+        //     "tokens": {
+        //         "yes": "56154308742753982686710750162015444986563701968079760676518531584453506363044",
+        //         "no": "32572248812801208874557774576516861470423415416073401354576860825663488568217"
+        //     },
+        //     "prices": [
+        //         0.165,
+        //         0.835
+        //     ],
+        //     "isOther": false,
+        //     "isRewardable": true,
+        //     "slug": "trump-out-as-president-before-2027-1768933068297",
+        //     "tradeType": "clob",
+        //     "venue": {
+        //         "exchange": "0x05c748E2f4DcDe0ec9Fa8DDc40DE6b867f923fa5",
+        //         "adapter": null
+        //     },
+        //     "marketType": "single",
+        //     "priorityIndex": "0",
+        //     "winningOutcomeIndex": null,
+        //     "metadata": {
+        //         "fee": true,
+        //         "isBannered": false,
+        //         "isPolyArbitrage": true
+        //     },
+        //     "trends": {
+        //         "hourly": {
+        //             "value": "3",
+        //             "rank": "2604"
+        //         }
+        //     },
+        //     "settings": {
+        //         "minSize": "100000000",
+        //         "maxSpread": "0.035",
+        //         "dailyReward": "5",
+        //         "rewardsEpoch": "0.003472222222222222",
+        //         "c": "3",
+        //         "rebateRate": "0"
+        //     },
+        //     "imageUrl": "https://cdn.limitless.exchange/markets-logo/36814/9daba01d-6bcd-4a2c-9187-f4264b7191da.png",
+        //     "logo": "https://cdn.limitless.exchange/markets-logo/36814/9daba01d-6bcd-4a2c-9187-f4264b7191da.png"
+        // }
         const endDate = this.safeString (raw, 'deadline', this.safeString (raw, 'expiresAt'));
         return this.extend ({
             'id': groupId,
