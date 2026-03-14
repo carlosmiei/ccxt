@@ -46,14 +46,21 @@ const version = '4.3.54';
 
 //-----------------------------------------------------------------------------
 
-import polymarket from './src/polymarket.js'
+import kalshi from  './src/kalshi.js'
+import limitless from  './src/limitless.js'
+import myriad from  './src/myriad.js'
+import polymarket from  './src/polymarket.js'
 
 
 const exchanges = {
-    'polymarket': polymarket,
+    'kalshi':                 kalshi,
+    'limitless':              limitless,
+    'myriad':                 myriad,
+    'polymarket':             polymarket,
 }
 
 const pro = {
+
 }
 
 for (const exchange in pro) {
@@ -138,6 +145,9 @@ export {
     Market,
     Currency,
     Dictionary,
+    PredictionEvent,
+    PredictionOutcome,
+    PredictionMarket,
     MinMax,
     FeeInterface,
     TradingFeeInterface,
@@ -191,7 +201,10 @@ export {
     CrossBorrowRates,
     TransferEntries,
     LeverageTiers,
-    polymarket
+    kalshi,
+    limitless,
+    myriad,
+    polymarket,    
 }
 
 export default ccxt;
