@@ -147,7 +147,7 @@ export default class polymarketPro extends polymarket {
             'takerOrMaker': 'taker',
             'price': price,
             'amount': amount,
-            'cost': price * amount,
+            'cost': undefined,
             'fee': undefined,
         }, market);
         if (!this.trades) {
