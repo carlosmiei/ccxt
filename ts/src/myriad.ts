@@ -5,9 +5,10 @@
 //
 // Hierarchy:  Questions (events) → Markets (multi-chain, multi-outcome)
 //
-// Each market outcome becomes one CCXT market:
-//   id:     {networkId}:{marketId}/{outcomeId}
-//   symbol: {networkId}:{marketId}/{outcomeLabel}:USDC
+// Each market becomes one CCXT market with an outcomes list:
+//   market.id:     {networkId}:{marketId}
+//   market.symbol: SLUG_SHORT
+//   outcomes[i].symbol: SLUG_SHORT:OUTCOME_LABEL
 //
 // Supports Abstract (2741), Linea (59144), BNB Chain (56).
 //
@@ -118,11 +119,12 @@ export default class Myriad extends Exchange {
     }
 
     // -----------------------------------------------------------------------
-    // Markets — each market outcome → one CCXT market
+    // Markets — one CCXT market per raw market, outcomes list inside
     // -----------------------------------------------------------------------
 
     /**
-     * Fetches all Myriad markets paginated and flattens each multi-outcome market into one CCXT market per outcome.
+     * Fetches all Myriad markets paginated and returns one CCXT market per raw market,
+     * each containing a list of outcome objects.
      * @param params
      * @see https://docs.myriad.markets/api-reference/markets/list-markets
      */
@@ -181,16 +183,14 @@ export default class Myriad extends Exchange {
             for (const raw of rawMarkets) {
                 const networkId = this.safeString (raw, 'networkId');
                 const eventKey = networkId ? this.shortenSlug (networkId) : undefined;
-                const parsed = this.parseMarketOutcomes (raw);
-                for (const m of parsed) {
-                    flatMarkets.push (m);
-                    if (eventKey) {
-                        if (!networkGroups[eventKey]) {
-                            const networkName = (this.options as Dict)['networks'] ? ((this.options as Dict)['networks'] as Dict)[networkId] || networkId : networkId;
-                            networkGroups[eventKey] = { 'networkId': networkId, 'title': networkName, 'markets': [] };
-                        }
-                        (networkGroups[eventKey] as Dict)['markets'].push (m);
+                const m = this.parseMarket (raw);
+                flatMarkets.push (m);
+                if (eventKey) {
+                    if (!networkGroups[eventKey]) {
+                        const networkName = (this.options as Dict)['networks'] ? ((this.options as Dict)['networks'] as Dict)[networkId] || networkId : networkId;
+                        networkGroups[eventKey] = { 'networkId': networkId, 'title': networkName, 'markets': [] };
                     }
+                    (networkGroups[eventKey] as Dict)['markets'].push (m);
                 }
             }
             hasMore = rawMarkets.length >= limit;
@@ -225,69 +225,32 @@ export default class Myriad extends Exchange {
     }
 
     /**
-     * Converts a single raw Myriad market into one CCXT market per outcome entry.
+     * Converts a single raw Myriad market into one CCXT market with a list of outcome objects.
      * @param raw
      * @param eventSlug
      */
-    parseMarketOutcomes (raw: Dict, eventSlug: string = undefined): Market[] {
+    parseMarket (raw: Dict, eventSlug: string = undefined): Market {
         const networkId = this.safeString (raw, 'networkId');
         const marketId = this.safeString (raw, 'id');
         const slug = this.safeString (raw, 'slug', marketId);
-        const outcomes = this.safeList (raw, 'outcomes', []) as any[];
+        const rawOutcomes = this.safeList (raw, 'outcomes', []) as any[];
         const endDate = this.safeString (raw, 'expiresAt');
         const state = this.safeString (raw, 'state', 'open');
         const active = state === 'open';
         const volume24h = this.safeNumber (raw, 'volume24h');
-        const result: Market[] = [];
-        for (const outcome of outcomes) {
+        const marketSymbol = this.slugToMarketSymbol (eventSlug || networkId, slug);
+        const outcomes: any[] = [];
+        for (const outcome of rawOutcomes) {
             const outcomeId = this.safeString (outcome, 'outcomeId');
             const outcomeLabel = this.safeString (outcome, 'label', outcomeId);
             const price = this.safeNumber (outcome, 'price');
-            // id: {networkId}:{marketId}/{outcomeId}
-            const id = networkId + ':' + marketId + '/' + outcomeId;
-            // symbol: EVENT_SLUG:MARKET_SLUG:OUTCOME
-            const symbol = this.slugToMarketId (eventSlug || networkId, slug, outcomeLabel);
-            result.push ({
-                'id': id,
-                'symbol': symbol,
-                'base': outcomeLabel,
-                'quote': 'USDC',
-                'settle': undefined,
-                'baseId': id,
-                'quoteId': 'USDC',
-                'settleId': undefined,
-                'type': 'prediction',
-                'spot': false,
-                'margin': false,
-                'swap': false,
-                'future': false,
-                'option': false,
-                'prediction': true,
+            outcomes.push ({
+                'id': networkId + ':' + marketId + '/' + outcomeId,
+                'symbol': this.slugToOutcomeSymbol (eventSlug || networkId, slug, outcomeLabel),
+                'marketSymbol': marketSymbol,
+                'label': outcomeLabel,
                 'active': active,
-                'contract': false,
-                'linear': undefined,
-                'inverse': undefined,
-                'contractSize': undefined,
-                'expiry': endDate ? this.parse8601 (endDate) : undefined,
-                'expiryDatetime': endDate,
-                'strike': undefined,
-                'optionType': undefined,
-                'taker': 0.02,
-                'maker': 0.02,
-                'percentage': true,
-                'tierBased': false,
-                'feeSide': 'get',
-                'precision': {
-                    'amount': 0.01,
-                    'price': 0.001,
-                },
-                'limits': {
-                    'leverage': { 'min': 1, 'max': 1 },
-                    'amount': { 'min': 0, 'max': undefined },
-                    'price': { 'min': 0.001, 'max': 0.999 },
-                    'cost': { 'min': undefined, 'max': undefined },
-                },
-                'info': this.extend (raw, {
+                'info': {
                     'networkId': networkId,
                     'marketId': marketId,
                     'slug': slug,
@@ -296,11 +259,59 @@ export default class Myriad extends Exchange {
                     'outcomePrice': price,
                     'volume24h': volume24h,
                     'state': state,
-                }),
-                'created': undefined,
-            } as unknown as Market);
+                },
+            });
         }
-        return result;
+        return {
+            'id': networkId + ':' + marketId,
+            'symbol': marketSymbol,
+            'base': slug,
+            'quote': 'USDC',
+            'settle': undefined,
+            'baseId': networkId + ':' + marketId,
+            'quoteId': 'USDC',
+            'settleId': undefined,
+            'type': 'prediction',
+            'spot': false,
+            'margin': false,
+            'swap': false,
+            'future': false,
+            'option': false,
+            'prediction': true,
+            'active': active,
+            'contract': false,
+            'linear': undefined,
+            'inverse': undefined,
+            'contractSize': undefined,
+            'expiry': endDate ? this.parse8601 (endDate) : undefined,
+            'expiryDatetime': endDate,
+            'strike': undefined,
+            'optionType': undefined,
+            'taker': 0.02,
+            'maker': 0.02,
+            'percentage': true,
+            'tierBased': false,
+            'feeSide': 'get',
+            'precision': {
+                'amount': 0.01,
+                'price': 0.001,
+            },
+            'limits': {
+                'leverage': { 'min': 1, 'max': 1 },
+                'amount': { 'min': 0, 'max': undefined },
+                'price': { 'min': 0.001, 'max': 0.999 },
+                'cost': { 'min': undefined, 'max': undefined },
+            },
+            'outcomes': outcomes,
+            'info': this.extend (raw, {
+                'networkId': networkId,
+                'marketId': marketId,
+                'slug': slug,
+                'volume24h': volume24h,
+                'state': state,
+            }),
+            'created': undefined,
+        } as unknown as Market;
     }
 
     // -----------------------------------------------------------------------
@@ -309,26 +320,26 @@ export default class Myriad extends Exchange {
 
     /**
      * Fetches the current price for a single Myriad outcome by loading the parent market.
-     * @param symbol
+     * @param symbol  outcome symbol, e.g. "TRUMP_WIN:YES"
      * @param params
      * @see https://docs.myriad.markets/api-reference/markets/get-market
      */
     async fetchTicker (symbol: Str, params: Dict = {}): Promise<Ticker> {
         await this.loadMarkets ();
-        const market = this.market (symbol);
-        const networkId = this.safeString (market['info'], 'networkId');
-        const marketId = this.safeString (market['info'], 'marketId');
+        const outcomeObj = this.outcome (symbol);
+        const networkId = this.safeString (outcomeObj['info'], 'networkId');
+        const marketId = this.safeString (outcomeObj['info'], 'marketId');
         const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
             'networkId': networkId,
             'id': marketId,
         }, params));
-        return this.parseTicker (response, market);
+        return this.parseTicker (response, outcomeObj);
     }
 
     /**
      * Parses a raw Myriad market object into a unified CCXT Ticker for the specified outcome.
      * @param raw
-     * @param market
+     * @param market  outcome object
      */
     parseTicker (raw: Dict, market: Market = undefined): Ticker {
         const outcomeId = market ? this.safeString (market['info'], 'outcomeId') : undefined;
@@ -373,17 +384,17 @@ export default class Myriad extends Exchange {
 
     /**
      * Fetches a synthesized AMM order book for a single Myriad outcome using the market price.
-     * @param symbol
+     * @param symbol  outcome symbol, e.g. "TRUMP_WIN:YES"
      * @param limit
      * @param params
      * @see https://docs.myriad.markets/api-reference/markets/get-market
      */
     async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
-        const market = this.market (symbol);
-        const networkId = this.safeString (market['info'], 'networkId');
-        const marketId = this.safeString (market['info'], 'marketId');
-        const outcomeId = this.safeString (market['info'], 'outcomeId');
+        const outcomeObj = this.outcome (symbol);
+        const networkId = this.safeString (outcomeObj['info'], 'networkId');
+        const marketId = this.safeString (outcomeObj['info'], 'marketId');
+        const outcomeId = this.safeString (outcomeObj['info'], 'outcomeId');
         const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
             'networkId': networkId,
             'id': marketId,
@@ -416,7 +427,7 @@ export default class Myriad extends Exchange {
 
     /**
      * Fetches OHLCV data for a Myriad outcome from the price_charts bucket embedded in the market response.
-     * @param symbol
+     * @param symbol  outcome symbol, e.g. "TRUMP_WIN:YES"
      * @param timeframe
      * @param since
      * @param limit
@@ -425,10 +436,10 @@ export default class Myriad extends Exchange {
      */
     async fetchOHLCV (symbol: Str, timeframe = '1d', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
-        const market = this.market (symbol);
-        const networkId = this.safeString (market['info'], 'networkId');
-        const marketId = this.safeString (market['info'], 'marketId');
-        const outcomeId = this.safeString (market['info'], 'outcomeId');
+        const outcomeObj = this.outcome (symbol);
+        const networkId = this.safeString (outcomeObj['info'], 'networkId');
+        const marketId = this.safeString (outcomeObj['info'], 'marketId');
+        const outcomeId = this.safeString (outcomeObj['info'], 'outcomeId');
         const bucketKey = this.safeString (this.timeframes, timeframe, '30d');
         const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
             'networkId': networkId,
@@ -438,7 +449,7 @@ export default class Myriad extends Exchange {
         const bucket = this.safeValue (priceCharts, bucketKey, {});
         // Each bucket may be keyed by outcomeId
         const points = (this.safeList (bucket, outcomeId, this.safeList (bucket, 'data', [])) || []) as any[];
-        return this.parseOHLCVs (points, market, timeframe, since, limit);
+        return this.parseOHLCVs (points, outcomeObj, timeframe, since, limit);
     }
 
     /**
@@ -520,7 +531,8 @@ export default class Myriad extends Exchange {
     }
 
     /**
-     * Parses a raw Myriad question object into the unified CCXT event shape with a nested markets dict.
+     * Parses a raw Myriad question object into the unified CCXT event shape with a nested markets list.
+     * Each market in the list contains its own outcomes array.
      * @param rawEvent
      */
     parseEvent (rawEvent: Dict): PredictionEvent {
@@ -528,10 +540,7 @@ export default class Myriad extends Exchange {
         const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
         const marketsList: Market[] = [];
         for (const rawMarket of rawMarkets) {
-            const outcomes = this.parseMarketOutcomes (rawMarket, questionSlug);
-            for (const m of outcomes) {
-                marketsList.push (m);
-            }
+            marketsList.push (this.parseMarket (rawMarket, questionSlug));
         }
         const endDate = this.safeString (rawEvent, 'expiresAt', this.safeString (rawEvent, 'endDate'));
         return this.extend (rawEvent, {
