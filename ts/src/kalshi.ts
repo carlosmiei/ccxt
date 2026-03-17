@@ -1,18 +1,3 @@
-/// <reference lib="es2015" />
-// ---------------------------------------------------------------------------
-//
-// Kalshi CCXT Exchange adapter
-//
-// Hierarchy:  Series → Events → Markets (binary YES/NO)
-//
-// Each binary Kalshi market produces TWO CCXT markets:
-//   id:     {ticker}      symbol: {ticker}/YES:USD
-//   id:     {ticker}-NO   symbol: {ticker}/NO:USD
-//
-// Prices are in US cents (0–99); CCXT exposes them as 0–1 decimals.
-//
-// ---------------------------------------------------------------------------
-
 import Exchange from './abstract/kalshi.js';
 import { rsa } from './base/functions/rsa.js';
 import type {
