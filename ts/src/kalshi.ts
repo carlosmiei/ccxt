@@ -204,7 +204,7 @@ export default class kalshi extends Exchange {
         return flatMarkets;
     }
 
-    parseBinaryMarketToOutcomes (raw: Dict): Market[] {
+    parseMarket (raw: Dict): Market {
         // {
         //    "can_close_early":true,
         //    "close_time":"2029-07-01T14:00:00Z",
@@ -292,7 +292,7 @@ export default class kalshi extends Exchange {
                 },
             });
         }
-        return [ {
+        return {
             'id': ticker,
             'symbol': marketSymbol,
             'base': 'USD',
@@ -343,7 +343,7 @@ export default class kalshi extends Exchange {
                 'openInterest': openInt,
             }),
             'created': undefined,
-        } as unknown as Market ];
+        };
     }
 
     // -----------------------------------------------------------------------
@@ -1002,10 +1002,8 @@ export default class kalshi extends Exchange {
         const rawMarkets = this.safeList (rawEvent, 'markets', []) as any[];
         const marketsList: any[] = [];
         for (const rawMarket of rawMarkets) {
-            const parsed = this.parseBinaryMarketToOutcomes (rawMarket);
-            for (const m of parsed) {
-                marketsList.push (m);
-            }
+            const parsed = this.parseMarket (rawMarket);
+            marketsList.push (parsed);
         }
         const ticker = this.safeString (rawEvent, 'event_ticker');
         const title = this.safeString (rawEvent, 'title');

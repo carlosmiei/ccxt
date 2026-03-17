@@ -350,35 +350,260 @@ export default class Limitless extends Exchange {
         };
     }
 
-    /**
-     * Parses a group of Limitless markets for a single group market into the unified PredictionEvent shape.
-     * @param groupId
-     * @param title
-     * @param raw
-     * @param markets
-     */
-    parseEvent (groupId: string, title: string, raw: Dict, markets: Market[]): PredictionEvent {
-        const endDate = this.safeString (raw, 'deadline', this.safeString (raw, 'expiresAt'));
+    parseEvent (event: Dict): PredictionEvent {
+        // {
+        //    "groupId":"trump-out-as-president-before-2027-1768933068297",
+        //    "title":"💎 Trump out as President before 2027?",
+        //    "raw":{
+        //       "id":"36814",
+        //       "automationType":"manual",
+        //       "conditionId":"0x11287d02d8067ff3d3d8bd21b212ebcfdc20b638f7f6440e4115f649e6b57015",
+        //       "negRiskRequestId":null,
+        //       "description":"<p>This market will resolve to “Yes” if Donald Trump resigns or is removed as President or otherwise ceases to be the President of the United States for any period of time by December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to “No”.</p><p>An announcement of Donald Trump's resignation/removal before this market's end date will immediately resolve this market to \\""Yes\\"", regardless of when the announced resignation/removal goes into effect.</p><p>Only permanent removal from office will qualify. Temporary removal (e.g. temporary invocation of the 25th Amendment under Section 3 or a Section 4 invocation not sustained by both Houses of Congress) or impeachment without removal will not count.</p><p>A sustained invocation of the Twenty-Fifth Amendment, Section 4 (i.e., if both Houses of Congress, by two-thirds vote, uphold the Vice President and Cabinet’s determination of presidential inability) will qualify for a \\""Yes\\"" resolution.</p><p>The resolution source for this market will be a consensus of credible reporting.</p>",
+        //       "collateralToken":{
+        //          "address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        //          "decimals":"6",
+        //          "symbol":"USDC"
+        //       },
+        //       "title":"💎 Trump out as President before 2027?",
+        //       "proxyTitle":null,
+        //       "expirationDate":"Jan 1, 2027",
+        //       "expirationTimestamp":"1798779540000",
+        //       "createdAt":"2026-01-20T18:17:48.298Z",
+        //       "updatedAt":"2026-02-24T17:00:11.833Z",
+        //       "categories":[
+        //          "Politics"
+        //       ],
+        //       "status":"FUNDED",
+        //       "expired":false,
+        //       "hidden":false,
+        //       "creator":{
+        //          "name":"Limitless",
+        //          "imageURI":"https://limitless.exchange/assets/images/logo.svg",
+        //          "link":"https://x.com/trylimitless"
+        //       },
+        //       "tags":[
+        //          "Limitless"
+        //       ],
+        //       "volume":"290091252",
+        //       "volumeFormatted":"290.091252",
+        //       "tokens":{
+        //          "yes":"56154308742753982686710750162015444986563701968079760676518531584453506363044",
+        //          "no":"32572248812801208874557774576516861470423415416073401354576860825663488568217"
+        //       },
+        //       "prices":[
+        //          0.164,
+        //          0.836
+        //       ],
+        //       "isOther":false,
+        //       "isRewardable":true,
+        //       "slug":"trump-out-as-president-before-2027-1768933068297",
+        //       "tradeType":"clob",
+        //       "venue":{
+        //          "exchange":"0x05c748E2f4DcDe0ec9Fa8DDc40DE6b867f923fa5",
+        //          "adapter":null
+        //       },
+        //       "marketType":"single",
+        //       "priorityIndex":"0",
+        //       "winningOutcomeIndex":null,
+        //       "metadata":{
+        //          "fee":true,
+        //          "isBannered":false,
+        //          "isPolyArbitrage":true
+        //       },
+        //       "trends":{
+        //          "hourly":{
+        //             "value":"3",
+        //             "rank":"395"
+        //          }
+        //       },
+        //       "settings":{
+        //          "minSize":"100000000",
+        //          "maxSpread":"0.035",
+        //          "dailyReward":"5",
+        //          "rewardsEpoch":"0.003472222222222222",
+        //          "c":"3",
+        //          "rebateRate":"0"
+        //       },
+        //       "imageUrl":"https://cdn.limitless.exchange/markets-logo/36814/9daba01d-6bcd-4a2c-9187-f4264b7191da.png",
+        //       "logo":"https://cdn.limitless.exchange/markets-logo/36814/9daba01d-6bcd-4a2c-9187-f4264b7191da.png"
+        //    },
+        //    "markets":[
+        //       {
+        //          "id":"trump-out-as-president-before-2027-1768933068297",
+        //          "symbol":"TRUMP_OUT_PRESIDENT_2027_1768933068297",
+        //          "base":"trump-out-as-president-before-2027-1768933068297",
+        //          "quote":"USDC",
+        //          "baseId":"trump-out-as-president-before-2027-1768933068297",
+        //          "quoteId":"USDC",
+        //          "type":"prediction",
+        //          "spot":false,
+        //          "margin":false,
+        //          "swap":false,
+        //          "future":false,
+        //          "option":false,
+        //          "prediction":true,
+        //          "active":true,
+        //          "contract":false,
+        //          "taker":0.02,
+        //          "maker":0.02,
+        //          "percentage":true,
+        //          "tierBased":false,
+        //          "feeSide":"get",
+        //          "precision":{
+        //             "amount":0.000001,
+        //             "price":0.001
+        //          },
+        //          "limits":{
+        //             "leverage":{
+        //                "min":1,
+        //                "max":1
+        //             },
+        //             "amount":{
+        //                "min":0
+        //             },
+        //             "price":{
+        //                "min":0.001,
+        //                "max":0.999
+        //             },
+        //             "cost":{
+
+        //             }
+        //          },
+        //          "outcomes":[
+        //             {
+        //                "id":"trump-out-as-president-before-2027-1768933068297/yes",
+        //                "symbol":"TRUMP_OUT_PRESIDENT_2027_1768933068297:YES",
+        //                "marketSymbol":"TRUMP_OUT_PRESIDENT_2027_1768933068297",
+        //                "label":"yes",
+        //                "active":true,
+        //                "info":{
+        //                   "slug":"trump-out-as-president-before-2027-1768933068297",
+        //                   "address":"trump-out-as-president-before-2027-1768933068297",
+        //                   "outcomeLabel":"yes",
+        //                   "tokenId":"trump-out-as-president-before-2027-1768933068297/yes"
+        //                }
+        //             },
+        //             {
+        //                "id":"trump-out-as-president-before-2027-1768933068297/no",
+        //                "symbol":"TRUMP_OUT_PRESIDENT_2027_1768933068297:NO",
+        //                "marketSymbol":"TRUMP_OUT_PRESIDENT_2027_1768933068297",
+        //                "label":"no",
+        //                "active":true,
+        //                "info":{
+        //                   "slug":"trump-out-as-president-before-2027-1768933068297",
+        //                   "address":"trump-out-as-president-before-2027-1768933068297",
+        //                   "outcomeLabel":"no",
+        //                   "tokenId":"trump-out-as-president-before-2027-1768933068297/no"
+        //                }
+        //             }
+        //          ],
+        //          "info":{
+        //             "id":"36814",
+        //             "automationType":"manual",
+        //             "conditionId":"0x11287d02d8067ff3d3d8bd21b212ebcfdc20b638f7f6440e4115f649e6b57015",
+        //             "negRiskRequestId":null,
+        //             "description":"<p>This market will resolve to “Yes” if Donald Trump resigns or is removed as President or otherwise ceases to be the President of the United States for any period of time by December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to “No”.</p><p>An announcement of Donald Trump's resignation/removal before this market's end date will immediately resolve this market to \\""Yes\\"", regardless of when the announced resignation/removal goes into effect.</p><p>Only permanent removal from office will qualify. Temporary removal (e.g. temporary invocation of the 25th Amendment under Section 3 or a Section 4 invocation not sustained by both Houses of Congress) or impeachment without removal will not count.</p><p>A sustained invocation of the Twenty-Fifth Amendment, Section 4 (i.e., if both Houses of Congress, by two-thirds vote, uphold the Vice President and Cabinet’s determination of presidential inability) will qualify for a \\""Yes\\"" resolution.</p><p>The resolution source for this market will be a consensus of credible reporting.</p>",
+        //             "collateralToken":{
+        //                "address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        //                "decimals":"6",
+        //                "symbol":"USDC"
+        //             },
+        //             "title":"💎 Trump out as President before 2027?",
+        //             "proxyTitle":null,
+        //             "expirationDate":"Jan 1, 2027",
+        //             "expirationTimestamp":"1798779540000",
+        //             "createdAt":"2026-01-20T18:17:48.298Z",
+        //             "updatedAt":"2026-02-24T17:00:11.833Z",
+        //             "categories":[
+        //                "Politics"
+        //             ],
+        //             "status":"FUNDED",
+        //             "expired":false,
+        //             "hidden":false,
+        //             "creator":{
+        //                "name":"Limitless",
+        //                "imageURI":"https://limitless.exchange/assets/images/logo.svg",
+        //                "link":"https://x.com/trylimitless"
+        //             },
+        //             "tags":[
+        //                "Limitless"
+        //             ],
+        //             "volume":"290091252",
+        //             "volumeFormatted":"290.091252",
+        //             "tokens":{
+        //                "yes":"56154308742753982686710750162015444986563701968079760676518531584453506363044",
+        //                "no":"32572248812801208874557774576516861470423415416073401354576860825663488568217"
+        //             },
+        //             "prices":[
+        //                0.164,
+        //                0.836
+        //             ],
+        //             "isOther":false,
+        //             "isRewardable":true,
+        //             "slug":"trump-out-as-president-before-2027-1768933068297",
+        //             "tradeType":"clob",
+        //             "venue":{
+        //                "exchange":"0x05c748E2f4DcDe0ec9Fa8DDc40DE6b867f923fa5",
+        //                "adapter":null
+        //             },
+        //             "marketType":"single",
+        //             "priorityIndex":"0",
+        //             "winningOutcomeIndex":null,
+        //             "metadata":{
+        //                "fee":true,
+        //                "isBannered":false,
+        //                "isPolyArbitrage":true
+        //             },
+        //             "trends":{
+        //                "hourly":{
+        //                   "value":"3",
+        //                   "rank":"395"
+        //                }
+        //             },
+        //             "settings":{
+        //                "minSize":"100000000",
+        //                "maxSpread":"0.035",
+        //                "dailyReward":"5",
+        //                "rewardsEpoch":"0.003472222222222222",
+        //                "c":"3",
+        //                "rebateRate":"0"
+        //             },
+        //             "imageUrl":"https://cdn.limitless.exchange/markets-logo/36814/9daba01d-6bcd-4a2c-9187-f4264b7191da.png",
+        //             "logo":"https://cdn.limitless.exchange/markets-logo/36814/9daba01d-6bcd-4a2c-9187-f4264b7191da.png",
+        //             "address":"trump-out-as-president-before-2027-1768933068297"
+        //          }
+        //       }
+        //    ]
+        // }
+        const groupId = this.safeString (event, 'address');
+        const endDate = this.safeString (event, 'deadline', this.safeString (event, 'expiresAt'));
+        const title = this.safeString (event, 'title', groupId);
+        const markets = [];
+        const rawMarkets = this.safeList (event, 'markets', []);
+        for (let i = 0; i < rawMarkets.length; i++) {
+            markets.push (this.parseMarket (rawMarkets[i]));
+        }
         return this.extend ({
             'id': groupId,
             'slug': groupId,
             'symbol': groupId ? this.shortenSlug (groupId) : undefined,
             'title': title,
-            'description': this.safeString (raw, 'description'),
+            'description': this.safeString (event, 'description'),
             'markets': markets,
-            'url': this.safeString (raw, 'url'),
-            'image': this.safeString (raw, 'imageUrl', this.safeString (raw, 'image')),
-            'active': this.safeBool (raw, 'active', true),
-            'resolved': this.safeBool (raw, 'resolved', false),
-            'category': this.safeString (raw, 'category'),
-            'tags': this.safeList (raw, 'tags'),
-            'created': this.parse8601 (this.safeString (raw, 'createdAt')),
-            'createdDatetime': this.safeString (raw, 'createdAt'),
+            'url': this.safeString (event, 'url'),
+            'image': this.safeString (event, 'imageUrl', this.safeString (event, 'image')),
+            'active': this.safeBool (event, 'active', true),
+            'resolved': this.safeBool (event, 'resolved', false),
+            'category': this.safeString (event, 'category'),
+            'tags': this.safeList (event, 'tags'),
+            'created': this.parse8601 (this.safeString (event, 'createdAt')),
+            'createdDatetime': this.safeString (event, 'createdAt'),
             'end': endDate ? this.parse8601 (endDate) : undefined,
             'endDatetime': endDate,
-            'lastUpdatedAt': this.parse8601 (this.safeString (raw, 'updatedAt')),
-            'resolutionSource': this.safeString (raw, 'resolutionSource'),
-            'info': raw,
+            'lastUpdatedAt': this.parse8601 (this.safeString (event, 'updatedAt')),
+            'resolutionSource': this.safeString (event, 'resolutionSource'),
+            'info': event,
         }) as unknown as PredictionEvent;
     }
 
@@ -782,7 +1007,7 @@ export default class Limitless extends Exchange {
         const result: PredictionEvent[] = [];
         for (const eventKey of Object.keys (eventGroups)) {
             const g = eventGroups[eventKey] as Dict;
-            const ev = this.parseEvent (g['groupId'] as string, g['title'] as string, g['raw'] as Dict, g['markets'] as Market[]);
+            const ev = this.parseEvent (g);
             (this.events as Dict)[eventKey] = ev;
             result.push (ev);
         }
