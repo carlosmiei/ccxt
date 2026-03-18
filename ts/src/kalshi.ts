@@ -118,10 +118,6 @@ export default class kalshi extends Exchange {
         });
     }
 
-    // -----------------------------------------------------------------------
-    // Markets — each binary Kalshi market → YES + NO CCXT markets
-    // -----------------------------------------------------------------------
-
     /**
      * Fetches all Kalshi markets via cursor pagination and maps each binary market to YES and NO CCXT markets.
      * @param params
@@ -331,10 +327,6 @@ export default class kalshi extends Exchange {
         };
     }
 
-    // -----------------------------------------------------------------------
-    // Ticker
-    // -----------------------------------------------------------------------
-
     /**
      * Fetches the current market price and bid/ask for a single Kalshi outcome.
      * @param outcome
@@ -398,10 +390,6 @@ export default class kalshi extends Exchange {
             'info': raw,
         }, market);
     }
-
-    // -----------------------------------------------------------------------
-    // Order book
-    // -----------------------------------------------------------------------
 
     /**
      * Fetches the order book for a single Kalshi outcome, converting YES-side cents to decimal prices.
@@ -471,10 +459,6 @@ export default class kalshi extends Exchange {
         } as unknown as OrderBook;
     }
 
-    // -----------------------------------------------------------------------
-    // OHLCV
-    // -----------------------------------------------------------------------
-
     /**
      * Fetches OHLCV candlesticks for a single Kalshi outcome from the candlesticks endpoint.
      * @param outcome
@@ -534,10 +518,6 @@ export default class kalshi extends Exchange {
         ];
     }
 
-    // -----------------------------------------------------------------------
-    // Trades
-    // -----------------------------------------------------------------------
-
     /**
      * Fetches public trade history for a single Kalshi market ticker.
      * @param outcome
@@ -594,10 +574,6 @@ export default class kalshi extends Exchange {
         }, market);
     }
 
-    // -----------------------------------------------------------------------
-    // Balance
-    // -----------------------------------------------------------------------
-
     /**
      * Fetches the authenticated user's USD portfolio balance from Kalshi.
      * @param params
@@ -620,10 +596,6 @@ export default class kalshi extends Exchange {
         result['USD'] = { 'free': total, 'used': 0, 'total': total };
         return result as Balances;
     }
-
-    // -----------------------------------------------------------------------
-    // Positions
-    // -----------------------------------------------------------------------
 
     /**
      * Fetches open market positions for the authenticated Kalshi user.
@@ -678,10 +650,6 @@ export default class kalshi extends Exchange {
             'info': position,
         } as Position;
     }
-
-    // -----------------------------------------------------------------------
-    // Orders
-    // -----------------------------------------------------------------------
 
     /**
      * Fetches resting (open) orders for the authenticated Kalshi user, optionally filtered by ticker.
@@ -830,10 +798,6 @@ export default class kalshi extends Exchange {
         const response = await this.kalshiPrivateDeletePortfolioOrders (this.extend (request, params));
         return this.parseOrders (this.safeList (response, 'orders', []) as any[]);
     }
-
-    // -----------------------------------------------------------------------
-    // Events
-    // -----------------------------------------------------------------------
 
     /**
      * Fetches Kalshi events via cursor-paginated /events, filters client-side by query strings,
@@ -1012,10 +976,6 @@ export default class kalshi extends Exchange {
             'info': rawEvent,
         });
     }
-
-    // -----------------------------------------------------------------------
-    // RSA-PSS signing
-    // -----------------------------------------------------------------------
 
     /**
      * Builds the request URL and attaches RSA-PSS SHA-256 authentication headers for private endpoints.
