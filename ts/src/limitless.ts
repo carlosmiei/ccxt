@@ -619,6 +619,7 @@ export default class Limitless extends Exchange {
      */
     async fetchTicker (symbol: Str, params: Dict = {}): Promise<Ticker> {
         await this.loadMarkets ();
+        await this.checkEventsAndMarkets (symbol);
         const outcomeObj = this.outcome (symbol);
         const slug = this.safeString (outcomeObj['info'], 'slug');
         const response = await this.limitlessPublicGetMarketsAddressOrSlug (this.extend ({
@@ -675,6 +676,7 @@ export default class Limitless extends Exchange {
      */
     async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
+        await this.checkEventsAndMarkets (symbol);
         const outcomeObj = this.outcome (symbol);
         const slug = this.safeString (outcomeObj['info'], 'slug');
         const response = await this.limitlessPublicGetMarketsSlugOrderbook (this.extend ({
@@ -723,6 +725,7 @@ export default class Limitless extends Exchange {
      */
     async fetchOHLCV (symbol: Str, timeframe = '1d', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
+        await this.checkEventsAndMarkets (symbol);
         const outcomeObj = this.outcome (symbol);
         const slug = this.safeString (outcomeObj['info'], 'slug');
         const fidelity = this.safeInteger (this.timeframes, timeframe, 1440);
@@ -762,6 +765,11 @@ export default class Limitless extends Exchange {
      * @see https://docs.limitless.exchange/api-reference/orders/get-user-orders
      */
     async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+        if (symbol !== undefined) {
+            await this.checkEventsAndMarkets (symbol);
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const request: Dict = {};
         let outcomeObj: any = undefined;
         if (symbol !== undefined) {
@@ -848,6 +856,7 @@ export default class Limitless extends Exchange {
      */
     async createOrder (symbol: Str, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
         await this.loadMarkets ();
+        await this.checkEventsAndMarkets (symbol);
         const outcomeObj = this.outcome (symbol);
         const slug = this.safeString (outcomeObj['info'], 'slug');
         const outcomeLabel = this.safeString (outcomeObj['info'], 'outcomeLabel');
@@ -871,6 +880,11 @@ export default class Limitless extends Exchange {
      * @see https://docs.limitless.exchange/api-reference/orders/cancel-order
      */
     async cancelOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
+        if (symbol !== undefined) {
+            await this.checkEventsAndMarkets (symbol);
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const response = await this.limitlessPrivateDeleteOrdersOrderId (this.extend ({ 'order_id': id }, params));
         return this.parseOrder (response);
     }
@@ -882,6 +896,11 @@ export default class Limitless extends Exchange {
      * @see https://docs.limitless.exchange/api-reference/orders/cancel-all-orders
      */
     async cancelAllOrders (symbol: Str = undefined, params: Dict = {}): Promise<Order[]> {
+        if (symbol !== undefined) {
+            await this.checkEventsAndMarkets (symbol);
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const request: Dict = {};
         if (symbol !== undefined) {
             await this.loadMarkets ();
@@ -903,6 +922,13 @@ export default class Limitless extends Exchange {
      * @see https://docs.limitless.exchange/api-reference/portfolio/get-positions
      */
     async fetchPositions (symbols?: Str[], params: Dict = {}): Promise<Position[]> {
+        if (symbols && symbols.length > 0) {
+            for (let i = 0; i < symbols.length; i++) {
+                await this.checkEventsAndMarkets (symbols[i]);
+            }
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const response = await this.limitlessPrivateGetPortfolioPositions (params);
         const positions = this.safeList (response, 'data', []) as any[];
         return this.parsePositions (positions, symbols);

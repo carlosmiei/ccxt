@@ -52,6 +52,7 @@ export interface PredictionOutcome {
     id: string;           // exchange-native identifier (clobTokenId, kalshi ticker)
     symbol: string;       // unified outcome symbol (e.g. TRUMP_BALANCE_BUDGET:YES)
     marketSymbol: string; // parent market symbol (e.g. TRUMP_BALANCE_BUDGET)
+    marketId: string;     // parent market ID
     label: string;        // outcome label (e.g. 'YES', 'NO')
     price?: number;       // current price (optional)
     active?: boolean;

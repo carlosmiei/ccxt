@@ -457,15 +457,18 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/market-data/get-order-book
      */
     async fetchTicker (outcome: string, params: Dict = {}): Promise<Ticker> {
-        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
-        const tokenId = outcomeObj['id'] as string;
-        // Sequential to avoid Promise.all (not in lib scope)
-        const midpointResponse = await this.clobPublicGetMidpoint ({ 'token_id': tokenId });
-        const bookResponse = await this.clobPublicGetBook ({ 'token_id': tokenId });
+        const tokenId = outcomeObj['id'];
+        const promises = [
+            this.clobPublicGetMidpoint ({ 'token_id': tokenId }),
+            this.clobPublicGetBook ({ 'token_id': tokenId }),
+        ];
+        const [ midpointResponse, bookResponse ] = await Promise.all (promises);
+        const response = { 'midpoint': midpointResponse, 'book': bookResponse };
         return this.parseTicker (
-            { 'midpoint': midpointResponse, 'book': bookResponse },
-            outcomeObj as any
+            response,
+            outcomeObj
         );
     }
 
@@ -476,7 +479,13 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/data/get-midpoint-price
      */
     async fetchTickers (outcomes?: Str[], params: Dict = {}): Promise<Tickers> {
-        await this.loadMarkets ();
+        if (outcomes && outcomes.length > 0) {
+            for (let i = 0; i < outcomes.length; i++) {
+                await this.checkEventsAndMarkets (outcomes[i]);
+            }
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const targets: string[] = outcomes ? (outcomes as string[]) : Object.keys (this.outcomes || {});
         const result: Tickers = {};
         for (const outcomeSymbol of targets) {
@@ -533,7 +542,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/market-data/get-order-book
      */
     async fetchOrderBook (outcome: string, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
-        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
         const request: Dict = {
@@ -554,7 +563,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/markets/get-prices-history
      */
     async fetchOHLCV (outcome: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
-        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
         const fidelity = this.safeString (this.timeframes, timeframe, '1');
@@ -604,7 +613,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/trade/get-trades
      */
     async fetchTrades (outcome: string, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Trade[]> {
-        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
         const request: Dict = { 'asset_id': tokenId };
@@ -652,6 +661,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/core/get-total-value-of-a-users-positions
      */
     async fetchBalance (params: Dict = {}): Promise<Balances> {
+        await this.checkEventsAndMarkets ();
         const request: Dict = {
             'user': this.walletAddress,
         };
@@ -681,6 +691,13 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/core/get-current-positions-for-a-user
      */
     async fetchPositions (outcomes: Strings = undefined, params: Dict = {}): Promise<Position[]> {
+        if (outcomes && outcomes.length > 0) {
+            for (let i = 0; i < outcomes.length; i++) {
+                await this.checkEventsAndMarkets (outcomes[i]);
+            }
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         if (this.walletAddress === undefined) {
             throw new ArgumentsRequired (this.id + ' walletAddress is required to fetchPositions');
         }
@@ -744,6 +761,11 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/trade/get-user-orders
      */
     async fetchOpenOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+        if (outcome !== undefined) {
+            await this.checkEventsAndMarkets (outcome);
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const request: Dict = {};
         let outcomeObj: any = undefined;
         if (outcome !== undefined) {
@@ -763,6 +785,11 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/trade/get-single-order-by-id
      */
     async fetchOrder (id: Str, outcome: Str = undefined, params: Dict = {}): Promise<Order> {
+        if (outcome !== undefined) {
+            await this.checkEventsAndMarkets (outcome);
+        } else {
+            await this.checkEventsAndMarkets ();
+        }
         const request: Dict = { 'id': id };
         const response = await this.clobPrivateGetDataOrderId (this.extend (request, params));
         return this.parseOrder (response);
@@ -834,7 +861,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/trade/post-a-new-order
      */
     async createOrder (outcome: string, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
-        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
         const sideStr = (side as string).toUpperCase ();
@@ -858,6 +885,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/trade/cancel-single-order
      */
     async cancelOrder (id: Str, outcome: Str = undefined, params: Dict = {}): Promise<Order> {
+        await this.checkEventsAndMarkets (outcome);
         const request: Dict = { 'order_id': id };
         const response = await this.clobPrivateDeleteOrder (this.extend (request, params));
         return this.parseOrder (response);
@@ -870,6 +898,7 @@ export default class polymarket extends Exchange {
      * @see https://docs.polymarket.com/api-reference/trade/cancel-all-orders
      */
     async cancelAllOrders (outcome: Str = undefined, params: Dict = {}): Promise<Order[]> {
+        await this.checkEventsAndMarkets (outcome);
         const request: Dict = {};
         if (outcome !== undefined) {
             const outcomeObj = this.outcome (outcome);
@@ -938,7 +967,7 @@ export default class polymarket extends Exchange {
             for (const m of ccxtMarkets) {
                 this.markets[m['symbol'] as string] = m;
             }
-            const parsedEvent = this.parseEvent (rawEvent, ccxtMarkets);
+            const parsedEvent = this.parseEvent (rawEvent);
             const eventSlug = this.safeString (rawEvent, 'slug');
             if (eventSlug) {
                 const eventKey = this.shortenSlug (eventSlug as string);

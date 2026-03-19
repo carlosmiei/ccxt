@@ -50,6 +50,7 @@ import kalshi from  './src/kalshi.js'
 import limitless from  './src/limitless.js'
 import myriad from  './src/myriad.js'
 import polymarket from  './src/polymarket.js'
+import polymarketPro from  './src/pro/polymarket.js'
 
 
 const exchanges = {
@@ -60,7 +61,7 @@ const exchanges = {
 }
 
 const pro = {
-
+    'polymarket':             polymarketPro,
 }
 
 for (const exchange in pro) {
