@@ -963,15 +963,48 @@ export default class polymarket extends Exchange {
             this.markets = {};
         }
         for (const rawEvent of rawEvents) {
-            const ccxtMarkets = this.parseEventToMarkets (rawEvent);
+            let eventForParsing = rawEvent;
+            let ccxtMarkets = this.parseEventToMarkets (eventForParsing);
+            if (ccxtMarkets.length === 0) {
+                const eventId = this.safeString (rawEvent, 'id');
+                const eventSlug = this.safeString (rawEvent, 'slug');
+                let detailedEvent = undefined;
+                if (eventId !== undefined) {
+                    detailedEvent = await this.gammaPublicGetEventsId ({ 'id': eventId });
+                } else if (eventSlug !== undefined) {
+                    detailedEvent = await this.gammaPublicGetEventsSlugSlug ({ 'slug': eventSlug });
+                }
+                if (detailedEvent !== undefined) {
+                    eventForParsing = this.safeValue (detailedEvent, 'event', detailedEvent) as Dict;
+                    ccxtMarkets = this.parseEventToMarkets (eventForParsing);
+                }
+            }
             for (const m of ccxtMarkets) {
                 this.markets[m['symbol'] as string] = m;
             }
-            const parsedEvent = this.parseEvent (rawEvent);
-            const eventSlug = this.safeString (rawEvent, 'slug');
+            const parsedEvent = this.parseEvent (eventForParsing);
+            const eventSlug = this.safeString (eventForParsing, 'slug', this.safeString (rawEvent, 'slug'));
             if (eventSlug) {
                 const eventKey = this.shortenSlug (eventSlug as string);
                 this.events[eventKey] = parsedEvent;
+            }
+        }
+        this.outcomes = {};
+        this.outcomes_by_id = {};
+        const marketKeys = Object.keys (this.markets);
+        for (let i = 0; i < marketKeys.length; i++) {
+            const market = this.markets[marketKeys[i]] as Dict;
+            const outcomesList = this.safeList (market, 'outcomes', []) as any[];
+            for (let j = 0; j < outcomesList.length; j++) {
+                const oc = outcomesList[j];
+                const ocSymbol = this.safeString (oc, 'symbol');
+                if (ocSymbol !== undefined) {
+                    this.outcomes[ocSymbol] = oc;
+                }
+                const ocId = this.safeString (oc, 'id');
+                if (ocId !== undefined) {
+                    this.outcomes_by_id[ocId] = oc;
+                }
             }
         }
         return Object.values (this.events);

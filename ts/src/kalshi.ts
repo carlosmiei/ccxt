@@ -896,6 +896,33 @@ export default class kalshi extends Exchange {
         for (let di = 0; di < detailResponses.length; di++) {
             const detail = detailResponses[di];
             const fullEvent = this.safeValue (detail, 'event', detail) as Dict;
+            const rawNestedMarkets = this.safeList (fullEvent, 'markets', []) as any[];
+            if (rawNestedMarkets.length === 0) {
+                const eventTicker = this.safeString (fullEvent, 'event_ticker');
+                if (eventTicker !== undefined) {
+                    const eventMarkets: any[] = [];
+                    let marketCursor: string | undefined = undefined;
+                    const marketsLimit = this.safeInteger (this.options, 'maxFetchMarketsLimit', 1000);
+                    let hasMoreMarkets = true;
+                    while (hasMoreMarkets) {
+                        const marketRequest: Dict = {
+                            'event_ticker': eventTicker,
+                            'limit': marketsLimit,
+                        };
+                        if (marketCursor !== undefined) {
+                            marketRequest['cursor'] = marketCursor;
+                        }
+                        const marketResponse = await this.kalshiPublicGetMarkets (marketRequest);
+                        const pageMarkets = this.safeList (marketResponse, 'markets', []) as any[];
+                        for (let mi = 0; mi < pageMarkets.length; mi++) {
+                            eventMarkets.push (pageMarkets[mi]);
+                        }
+                        marketCursor = this.safeString (marketResponse, 'cursor');
+                        hasMoreMarkets = !!marketCursor && (pageMarkets.length >= marketsLimit);
+                    }
+                    fullEvent['markets'] = eventMarkets;
+                }
+            }
             const parsedEvent = this.parseEvent (fullEvent);
             const eventTitle = this.safeString (fullEvent, 'title');
             const eventKey = eventTitle ? this.shortenSlug (eventTitle) : undefined;
@@ -906,6 +933,24 @@ export default class kalshi extends Exchange {
                 for (let mi = 0; mi < parsedMarkets.length; mi++) {
                     const m = parsedMarkets[mi];
                     this.markets[m['symbol']] = m;
+                }
+            }
+        }
+        this.outcomes = {};
+        this.outcomes_by_id = {};
+        const marketKeys = Object.keys (this.markets);
+        for (let i = 0; i < marketKeys.length; i++) {
+            const market = this.markets[marketKeys[i]] as Dict;
+            const outcomesList = this.safeList (market, 'outcomes', []) as any[];
+            for (let j = 0; j < outcomesList.length; j++) {
+                const oc = outcomesList[j];
+                const ocSymbol = this.safeString (oc, 'symbol');
+                if (ocSymbol !== undefined) {
+                    this.outcomes[ocSymbol] = oc;
+                }
+                const ocId = this.safeString (oc, 'id');
+                if (ocId !== undefined) {
+                    this.outcomes_by_id[ocId] = oc;
                 }
             }
         }
