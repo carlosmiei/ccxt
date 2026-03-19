@@ -5852,6 +5852,9 @@ export default class Exchange {
         if (outcomeSymbol in this.outcomes) {
             return this.outcomes[outcomeSymbol];
         }
+        if (outcomeSymbol in this.outcomes_by_id) {
+            return this.outcomes_by_id[outcomeSymbol];
+        }
         throw new BadSymbol (this.id + ' does not have outcome symbol ' + outcomeSymbol);
     }
 
