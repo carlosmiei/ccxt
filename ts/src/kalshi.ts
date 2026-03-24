@@ -482,14 +482,19 @@ export default class kalshi extends Exchange {
             'ticker': ticker,
             'period_interval': periodMin,
         };
+        const now = this.seconds ();
+        const tf = this.parseTimeframe (timeframe);
         if (since !== undefined) {
             request['start_ts'] = this.parseToInt (since / 1000);
-        }
-        if (limit !== undefined && since !== undefined) {
-            const tf = this.parseTimeframe (timeframe);
-            const end = (since / 1000) + limit * tf;
-            const now = this.seconds ();
-            request['end_ts'] = end < now ? end : now;
+            if (limit !== undefined) {
+                const end = (since / 1000) + limit * tf;
+                request['end_ts'] = end < now ? end : now;
+            }
+        } else {
+            const defaultLimit = this.safeInteger (this.options, 'defaultFetchOHLCVLimit', 200);
+            const candlesCount = (limit !== undefined) ? limit : defaultLimit;
+            request['end_ts'] = now;
+            request['start_ts'] = now - (candlesCount * tf);
         }
         const response = await this.kalshiPublicGetSeriesSeriesTickerMarketsTickerCandlesticks (
             this.extend (request, params)

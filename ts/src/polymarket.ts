@@ -554,7 +554,9 @@ export default class polymarket extends Exchange {
     }
 
     /**
-     * Fetches price history ticks for a single outcome token and maps them to OHLCV format.
+     * Fetches price history ticks for a single outcome token, buckets them client-side
+     * into true OHLCV candles (snapping tick timestamps to the candle boundary), and returns
+     * a sorted array of OHLCV tuples.
      * @param outcome
      * @param timeframe
      * @param since
@@ -566,42 +568,57 @@ export default class polymarket extends Exchange {
         await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
-        const fidelity = this.safeString (this.timeframes, timeframe, '1');
+        const fidelityMin = this.safeInteger (this.timeframes, timeframe, 1); // fidelity in minutes
+        const nowS = this.seconds ();
+        let startS: number;
+        let endS: number = nowS;
+        if (since !== undefined) {
+            startS = this.parseToInt (since / 1000);
+            if (limit !== undefined) {
+                const endBound = startS + limit * fidelityMin * 60;
+                endS = endBound < nowS ? endBound : nowS;
+            }
+        } else {
+            const count = (limit !== undefined) ? limit : 100;
+            startS = nowS - (count * fidelityMin * 60);
+        }
         const request: Dict = {
             'market': tokenId,
-            'fidelity': fidelity,
+            'fidelity': fidelityMin,
+            'startTs': startS,
+            'endTs': endS,
         };
-        if (since !== undefined) {
-            request['startTs'] = this.parseToInt (since / 1000);
-        }
-        if (limit !== undefined && since !== undefined) {
-            const tf = this.parseTimeframe (timeframe);
-            const endS = (since / 1000) + limit * tf;
-            const nowS = this.seconds ();
-            request['endTs'] = endS < nowS ? endS : nowS;
-        }
         const response = await this.clobPublicGetPricesHistory (this.extend (request, params));
         const history = this.safeList (response, 'history', []) as any[];
-        return this.parseOHLCVs (history, outcomeObj as any, timeframe, since, limit);
+        // Client-side bucket aggregation: snap each tick to its candle boundary and
+        // build open/high/low/close/volume. Assumes history is sorted ascending by time.
+        const resolutionMs = fidelityMin * 60 * 1000;
+        const buckets = new Map<number, OHLCV> ();
+        for (let i = 0; i < history.length; i++) {
+            const item = history[i];
+            const rawMs = this.safeInteger (item, 't') as number * 1000;
+            const snappedMs = Math.floor (rawMs / resolutionMs) * resolutionMs;
+            const price = this.safeNumber (item, 'p') as number;
+            const vol = (this.safeNumber (item, 's') ?? this.safeNumber (item, 'v') ?? 0) as number;
+            if (!buckets.has (snappedMs)) {
+                buckets.set (snappedMs, [ snappedMs, price, price, price, price, vol ]);
+            } else {
+                const candle = buckets.get (snappedMs) as OHLCV;
+                candle[2] = Math.max (candle[2] as number, price); // high
+                candle[3] = Math.min (candle[3] as number, price); // low
+                candle[4] = price;                                  // close (last tick wins)
+                candle[5] = ((candle[5] as number) || 0) + vol;    // volume
+            }
+        }
+        const candles = Array.from (buckets.values ()).sort ((a, b) => (a[0] as number) - (b[0] as number));
+        return (limit !== undefined && candles.length > limit) ? candles.slice (-limit) : candles;
     }
 
-    /**
-     * Parses a single Polymarket prices-history tick `{ t, p }` into a CCXT OHLCV tuple.
-     * @param ohlcv
-     * @param market
-     */
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
-        // Polymarket prices-history tick: { t: unix_seconds, p: price }
+        // Unused: fetchOHLCV performs client-side bucket aggregation directly.
         const ts = this.safeInteger (ohlcv, 't');
         const price = this.safeNumber (ohlcv, 'p');
-        return [
-            ts !== undefined ? ts * 1000 : undefined,
-            price,   // open  (raw tick — no OHLCV disaggregation available)
-            price,   // high
-            price,   // low
-            price,   // close
-            undefined, // volume (not provided per-tick)
-        ];
+        return [ ts !== undefined ? ts * 1000 : undefined, price, price, price, price, undefined ];
     }
 
     /**
