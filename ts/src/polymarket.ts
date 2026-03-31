@@ -108,10 +108,14 @@ export default class polymarket extends Exchange {
                     },
                 },
                 'data': {
+                    'public': {
+                        'get': {
+                            'trades': 1,
+                        },
+                    },
                     'private': {
                         'get': {
                             'positions': 1,
-                            'trades': 1,
                             'value': 1,
                         },
                     },
@@ -627,18 +631,18 @@ export default class polymarket extends Exchange {
      * @param since
      * @param limit
      * @param params
-     * @see https://docs.polymarket.com/api-reference/trade/get-trades
+     * @see https://docs.polymarket.com/api-reference/core/get-trades-for-a-user-or-markets
      */
     async fetchTrades (outcome: string, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Trade[]> {
         await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
-        const request: Dict = { 'asset_id': tokenId };
+        const request: Dict = { 'market': [ tokenId ] };
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        const response = await this.clobPublicGetDataTrades (this.extend (request, params));
-        const trades = this.safeList (response, 'data', []);
+        const response = await (this as any).dataPublicGetTrades (this.extend (request, params));
+        const trades = Array.isArray (response) ? response : this.safeList (response, 'data', []);
         return this.parseTrades (trades, outcomeObj, since, limit);
     }
 
@@ -648,7 +652,7 @@ export default class polymarket extends Exchange {
      * @param market
      */
     parseTrade (trade: Dict, market: Market = undefined): Trade {
-        const id = this.safeString (trade, 'id');
+        const id = this.safeString2 (trade, 'transactionHash', 'id');
         const timestamp = this.safeIntegerProduct (trade, 'timestamp', 1000);
         const price = this.safeNumber (trade, 'price');
         const amount = this.safeNumber (trade, 'size');
@@ -660,7 +664,8 @@ export default class polymarket extends Exchange {
             'info': trade,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'symbol': symbol,
+            'outcome': symbol,
+            'outcomeId': this.safeString (trade, 'asset'),
             'order': this.safeString (trade, 'orderId'),
             'type': undefined,
             'side': side,
