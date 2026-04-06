@@ -694,6 +694,90 @@ Lastly, just because the signature dictates that some argument like `symbol` is 
 
 You can check different examples in the `examples/go` folder.
 
+### Java
+
+```Java
+import io.github.ccxt.Exchange;
+import io.github.ccxt.ExchangeTyped;
+import io.github.ccxt.types.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class Example {
+    public static void main(String[] args) {
+        // Create exchange instances
+        ExchangeTyped kraken = new ExchangeTyped(Exchange.dynamicallyCreateInstance("kraken", null));
+        ExchangeTyped bitfinex = new ExchangeTyped(Exchange.dynamicallyCreateInstance("bitfinex", null));
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("apiKey", "YOUR_API_KEY");
+        config.put("secret", "YOUR_SECRET");
+        ExchangeTyped binance = new ExchangeTyped(Exchange.dynamicallyCreateInstance("binance", config));
+
+        // Load markets
+        kraken.loadMarkets();
+        binance.loadMarkets();
+
+        // Public API
+        OrderBook orderBook = kraken.fetchOrderBook("BTC/USDT");
+        Ticker ticker = bitfinex.fetchTicker("BTC/USD");
+        System.out.println(ticker.symbol + " last=" + ticker.last);
+
+        // Fetch OHLCV
+        var candles = binance.fetchOHLCV("BTC/USDT", "1h", null, 10L, null);
+        System.out.println("Got " + candles.size() + " candles");
+
+        // Private API (requires API keys)
+        Balances balance = binance.fetchBalance();
+        System.out.println("BTC free: " + balance.free.get("BTC"));
+
+        // Place a limit buy order
+        Order order = binance.createLimitBuyOrder("BTC/USDT", 0.001, 50000.0);
+        System.out.println("Order id: " + order.id + " status: " + order.status);
+
+        // Cancel it
+        binance.cancelOrder(order.id, "BTC/USDT", null);
+    }
+}
+```
+
+#### Async
+
+All methods are also available as async variants returning `CompletableFuture`:
+
+```Java
+import java.util.concurrent.CompletableFuture;
+
+// Fire multiple requests concurrently
+CompletableFuture<Ticker> btc = exchange.fetchTickerAsync("BTC/USDT", null);
+CompletableFuture<Ticker> eth = exchange.fetchTickerAsync("ETH/USDT", null);
+CompletableFuture.allOf(btc, eth).join();
+System.out.println("BTC: " + btc.get().last + " ETH: " + eth.get().last);
+```
+
+#### WebSocket
+
+WebSocket support is available via the pro exchange classes:
+
+```Java
+import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.pro.Binance;
+
+import java.util.concurrent.TimeUnit;
+
+Exchange exchange = new Binance();
+exchange.loadMarkets().join();
+
+// Stream live ticker updates
+for (int i = 0; i < 10; i++) {
+    Object ticker = exchange.watchTicker("BTC/USDT").get(30, TimeUnit.SECONDS);
+    System.out.println(ticker);
+}
+```
+
+You can check different examples in the `java/examples` folder.
+
 ## Rate limiting
 
 Crypto exchanges enforce rate limits to protect their infrastructure, ensure fair usage across all clients, and prevent abuse that could degrade performance or availability for other users. That means you can't make an unlimited amount of requests to the exchange, there is a rate that needs to be respected.
