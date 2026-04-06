@@ -14,3 +14,4 @@ rootProject.name = "ccxt"
 include("lib")
 include("cli")
 include("tests")
+include("examples")

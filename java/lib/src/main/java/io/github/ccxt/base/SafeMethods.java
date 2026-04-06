@@ -347,7 +347,7 @@ public final class SafeMethods {
                 String k = String.valueOf(k2);
                 if (dict.containsKey(k)) {
                     Object returnValue = dict.get(k);
-                    if (returnValue == null || String.valueOf(returnValue).length() == 0) continue;
+                    if (returnValue == null || (returnValue instanceof String s && s.isEmpty())) continue;
                     return returnValue;
                 }
             }
@@ -401,6 +401,18 @@ public final class SafeMethods {
                 }
             }
             return defaultValue;
+        }
+
+        // Arbitrary Java objects: use reflection to read fields (e.g. WsOrderBook)
+        for (Object k2 : keys) {
+            if (k2 == null) continue;
+            String k = String.valueOf(k2);
+            try {
+                java.lang.reflect.Field f = obj.getClass().getField(k);
+                f.setAccessible(true);
+                Object val = f.get(obj);
+                if (val != null) return val;
+            } catch (Exception ignored) {}
         }
 
         return defaultValue;
