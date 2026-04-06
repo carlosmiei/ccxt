@@ -43,7 +43,7 @@ The structure of the library can be outlined as follows:
     +=============================================================+
 ```
 
-Full public and private HTTP REST APIs for all exchanges are implemented. WebSocket implementations in JavaScript, PHP, Python are available in [CCXT Pro](https://ccxt.pro), which is a professional addon to CCXT with support for WebSocket streams.
+Full public and private HTTP REST APIs for all exchanges are implemented in JavaScript, Python, PHP, C#, Go and Java. WebSocket implementations are available in [CCXT Pro](https://ccxt.pro), with support for WebSocket streams.
 
 - [**Exchanges**](#exchanges)
 - [**Markets**](#markets)
@@ -210,6 +210,11 @@ print (ccxt.exchanges)
 include 'ccxt.php';
 var_dump (\ccxt\Exchange::$exchanges);
 ```
+#### **Java**
+```java
+import io.github.ccxt.Exchange;
+// use Exchange.dynamicallyCreateInstance(id, config) to create exchanges
+```
 <!-- tabs:end -->
 
 An exchange can be instantiated like shown in the examples below:
@@ -272,6 +277,23 @@ $exchange = new $exchange_class(array(
     'apiKey' => 'YOUR_API_KEY',
     'secret' => 'YOUR_SECRET',
 ));
+```
+#### **Java**
+```java
+import io.github.ccxt.Exchange;
+import io.github.ccxt.ExchangeTyped;
+import java.util.HashMap;
+import java.util.Map;
+
+Exchange raw = Exchange.dynamicallyCreateInstance("kraken", null);
+ExchangeTyped kraken = new ExchangeTyped(raw);
+
+// from variable id with config
+Map<String, Object> config = new HashMap<>();
+config.put("apiKey", "YOUR_API_KEY");
+config.put("secret", "YOUR_SECRET");
+Exchange rawBinance = Exchange.dynamicallyCreateInstance("binance", config);
+ExchangeTyped binance = new ExchangeTyped(rawBinance);
 ```
 <!-- tabs:end -->
 
@@ -1268,6 +1290,14 @@ $markets = $huobipro->load_markets();
 var_dump($huobipro->id, $markets);
 ```
 
+#### **Java**
+```java
+Exchange raw = Exchange.dynamicallyCreateInstance("kraken", null);
+ExchangeTyped kraken = new ExchangeTyped(raw);
+Map<String, MarketInterface> markets = kraken.loadMarkets();
+System.out.println(raw.id + " " + markets.size() + " markets");
+```
+
 <!-- tabs:end -->
 
 Apart from the market info, the `loadMarkets()` call will also load the currencies from the exchange and will cache the info in the `.markets` and the `.currencies` properties respectively.
@@ -1879,6 +1909,31 @@ while (true) {
 
 See further examples in the `examples/php` directory; look for filenames that include the `async` word. Also, make sure you have installed the required dependencies using `composer require recoil/recoil clue/buzz-react react/event-loop recoil/react react/http`. Lastly, [this article](https://sergeyzhuk.me/2018/10/26/from-promise-to-coroutines/) provides a good introduction to the methods used here. While syntactically the change is simple (i.e., just using a `yield` keyword before relevant methods), concurrency has significant implications for the overall design of your code.
 
+#### **Java**
+
+In Java, the `ExchangeTyped` wrapper provides synchronous methods that block until the result is available, as well as async variants returning `CompletableFuture`:
+
+```java
+// Java
+
+import io.github.ccxt.Exchange;
+import io.github.ccxt.ExchangeTyped;
+import io.github.ccxt.types.Ticker;
+import java.util.concurrent.CompletableFuture;
+
+Exchange raw = Exchange.dynamicallyCreateInstance("kraken", null);
+ExchangeTyped kraken = new ExchangeTyped(raw);
+kraken.loadMarkets();
+
+// Synchronous
+Ticker ticker = kraken.fetchTicker("BTC/USDT");
+System.out.println(ticker.last);
+
+// Asynchronous
+CompletableFuture<Ticker> future = kraken.fetchTickerAsync("BTC/USDT", null);
+future.thenAccept(t -> System.out.println(t.last));
+```
+
 <!-- tabs:end -->
 
 ### Returned JSON Objects
@@ -2445,6 +2500,14 @@ foreach ($exchange->markets as $symbol => $market) {
 }
 ```
 
+#### **Java**
+```java
+ExchangeTyped exchange = new ExchangeTyped(Exchange.dynamicallyCreateInstance("binance", null));
+exchange.loadMarkets();
+OrderBook ob = exchange.fetchOrderBook("BTC/USDT", 10L, null);
+System.out.println("bids: " + ob.bids.size() + " asks: " + ob.asks.size());
+```
+
 <!-- tabs:end -->
 
 ### Order Book Structure
@@ -2698,6 +2761,11 @@ if ($exchange->has['fetchTicker']) {
     var_dump ($exchange->fetch_ticker ($symbols[$random])); // ticker for a random symbol
 }
 ```
+#### **Java**
+```java
+Ticker ticker = exchange.fetchTicker("BTC/USDT");
+System.out.println(ticker.symbol + " last=" + ticker.last + " bid=" + ticker.bid + " ask=" + ticker.ask);
+```
 <!-- tabs:end -->
 
 ### All At Once
@@ -2808,6 +2876,13 @@ if ($exchange->has['fetchOHLCV']) {
         usleep ($exchange->rateLimit * 1000); // usleep wants microseconds
         var_dump ($exchange->fetch_ohlcv ($symbol, '1M')); // one month
     }
+}
+```
+#### **Java**
+```java
+List<OHLCV> candles = exchange.fetchOHLCV("BTC/USDT", "1h", null, 10L, null);
+for (OHLCV c : candles) {
+    System.out.println(c.timestamp + " O=" + c.open + " H=" + c.high + " L=" + c.low + " C=" + c.close);
 }
 ```
 <!-- tabs:end -->
@@ -4255,6 +4330,12 @@ print (exchange.fetch_balance ())
 #### **PHP**
 ```php
 var_dump ($exchange->fetch_balance ());
+```
+#### **Java**
+```java
+Balances balance = exchange.fetchBalance();
+System.out.println("BTC free: " + balance.free.get("BTC"));
+System.out.println("USDT total: " + balance.total.get("USDT"));
 ```
 <!-- tabs:end -->
 
