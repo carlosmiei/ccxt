@@ -76,7 +76,7 @@ export default class kalshi extends Exchange {
                             'markets': 1,
                             'markets/{ticker}': 1,
                             'markets/{ticker}/orderbook': 1,
-                            'markets/{ticker}/trades': 1,
+                            'markets/trades': 1,
                             'series/{series_ticker}/markets/{ticker}/candlesticks': 1,
                         },
                     },
@@ -183,6 +183,10 @@ export default class kalshi extends Exchange {
         }
         this.events = eventsDict;
         return flatMarkets;
+    }
+
+    parseBinaryMarketToOutcomes (raw: Dict): Market[] {
+        return [ this.parseMarket (raw) ];
     }
 
     parseMarket (raw: Dict): Market {
@@ -532,7 +536,7 @@ export default class kalshi extends Exchange {
      * @param since
      * @param limit
      * @param params
-     * @see https://trading-api.readme.io/reference/getmarkettrades
+     * @see https://docs.kalshi.com/api-reference/market/get-trades
      */
     async fetchTrades (outcome: Str, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Trade[]> {
         await this.loadMarkets ();
@@ -543,9 +547,17 @@ export default class kalshi extends Exchange {
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        const response = await this.kalshiPublicGetMarketsTickerTrades (this.extend (request, params));
+        const response = await this.kalshiPublicGetMarketsTrades (this.extend (request, params));
         const trades = this.safeList (response, 'trades', []) as any[];
-        return this.parseTrades (trades, outcomeObj as any, since, limit);
+        const filteredTrades: any[] = [];
+        for (let i = 0; i < trades.length; i++) {
+            const trade = trades[i];
+            const tradeTicker = this.safeString2 (trade, 'ticker', 'market_ticker');
+            if (tradeTicker === undefined || tradeTicker === ticker) {
+                filteredTrades.push (trade);
+            }
+        }
+        return this.parseTrades (filteredTrades, outcomeObj as any, since, limit);
     }
 
     /**
@@ -556,15 +568,24 @@ export default class kalshi extends Exchange {
     parseTrade (trade: Dict, market: Market = undefined): Trade {
         const id = this.safeString (trade, 'trade_id');
         const ts = this.parse8601 (this.safeString (trade, 'created_time'));
-        const priceCents = this.safeNumber (trade, 'yes_price');
-        const price = priceCents !== undefined ? priceCents / 100 : undefined;
-        const amount = this.safeNumber (trade, 'count');
+        const priceDollars = this.safeNumber2 (trade, 'yes_price_dollars', 'price_dollars');
+        const priceCents = this.safeNumber2 (trade, 'yes_price', 'price');
+        const price = (priceDollars !== undefined) ? priceDollars : ((priceCents !== undefined) ? priceCents / 100 : undefined);
+        const amountFp = this.safeNumber2 (trade, 'count_fp', 'size_fp');
+        const amount = this.safeNumber (trade, 'count', amountFp);
         const rawSide = this.safeStringLower (trade, 'taker_side');
+        const marketAny = market as any;
+        const marketInfo = this.safeDict (marketAny, 'info', {});
+        const requestedOutcomeLabel = this.safeStringLower (marketAny, 'label', this.safeStringLower (marketInfo, 'outcomeLabel'));
+        const outcomeSymbol = this.safeString (marketAny, 'symbol', this.safeSymbol (undefined, market));
+        const outcomeId = this.safeString (marketAny, 'id');
         let side: string | undefined;
-        if (rawSide === 'yes') {
-            side = 'buy';
-        } else if (rawSide === 'no') {
-            side = 'sell';
+        if (rawSide === 'yes' || rawSide === 'no') {
+            if (requestedOutcomeLabel === 'yes' || requestedOutcomeLabel === 'no') {
+                side = (rawSide === requestedOutcomeLabel) ? 'buy' : 'sell';
+            } else {
+                side = (rawSide === 'yes') ? 'buy' : 'sell';
+            }
         }
         return this.safeTrade ({
             'id': id,
@@ -572,6 +593,8 @@ export default class kalshi extends Exchange {
             'timestamp': ts,
             'datetime': this.iso8601 (ts),
             'symbol': this.safeSymbol (undefined, market),
+            'outcome': outcomeSymbol,
+            'outcomeId': outcomeId,
             'order': undefined,
             'type': undefined,
             'side': side,

@@ -6,7 +6,7 @@ import type {
     Order, Balances, Position,
     Strings,
 } from './base/types.js';
-import { ArgumentsRequired } from '../ccxt.js';
+import { ArgumentsRequired, BadRequest } from '../ccxt.js';
 
 // ---------------------------------------------------------------------------
 
@@ -637,13 +637,27 @@ export default class polymarket extends Exchange {
         await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const tokenId = outcomeObj['id'] as string;
-        const request: Dict = { 'market': [ tokenId ] };
+        const outcomeInfo = this.safeDict (outcomeObj, 'info', {});
+        const conditionId = this.safeString (outcomeInfo, 'conditionId');
+        if (conditionId === undefined) {
+            throw new BadRequest (this.id + ' fetchTrades() requires outcome.info.conditionId for an outcome ' + tokenId);
+        }
+        // the endpoint requires a market conditionId, then its filtered down to the requested outcome
+        const request: Dict = { 'market': conditionId };
         if (limit !== undefined) {
             request['limit'] = limit;
         }
         const response = await (this as any).dataPublicGetTrades (this.extend (request, params));
-        const trades = Array.isArray (response) ? response : this.safeList (response, 'data', []);
-        return this.parseTrades (trades, outcomeObj, since, limit);
+        const rawTrades = Array.isArray (response) ? response : this.safeList (response, 'data', []);
+        const filteredTrades: any[] = [];
+        for (let i = 0; i < rawTrades.length; i++) {
+            const trade = rawTrades[i];
+            const tradeAsset = this.safeString (trade, 'asset');
+            if (tradeAsset === tokenId) {
+                filteredTrades.push (trade);
+            }
+        }
+        return this.parseTrades (filteredTrades, outcomeObj, since, limit);
     }
 
     /**

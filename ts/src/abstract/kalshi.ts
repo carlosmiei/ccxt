@@ -14,7 +14,7 @@ interface Exchange {
     kalshiPublicGetMarkets (params?: {}): Promise<implicitReturnType>;
     kalshiPublicGetMarketsTicker (params?: {}): Promise<implicitReturnType>;
     kalshiPublicGetMarketsTickerOrderbook (params?: {}): Promise<implicitReturnType>;
-    kalshiPublicGetMarketsTickerTrades (params?: {}): Promise<implicitReturnType>;
+    kalshiPublicGetMarketsTrades (params?: {}): Promise<implicitReturnType>;
     kalshiPublicGetSeriesSeriesTickerMarketsTickerCandlesticks (params?: {}): Promise<implicitReturnType>;
 
     // Private portfolio endpoints
