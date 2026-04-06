@@ -843,6 +843,13 @@ if ($exchange->has['watchTickers']) {
     });
 }
 ```
+#### **Java**
+```java
+while (true) {
+    Object tickers = exchange.watchTickers(symbols).get(30, TimeUnit.SECONDS);
+    System.out.println(tickers);
+}
+```
 <!-- tabs:end -->
 
 ### watchOHLCV
@@ -929,6 +936,13 @@ if ($exchange->has['watchOHLCV']) {
     });
 }
 ```
+#### **Java**
+```java
+while (true) {
+    Object ohlcv = exchange.watchOHLCV(symbol, "1m").get(30, TimeUnit.SECONDS);
+    System.out.println(ohlcv);
+}
+```
 <!-- tabs:end -->
 
 
@@ -972,6 +986,13 @@ if exchange.has['watchOHLCVForSymbols']:
             print(e)
             # stop the loop on exception or leave it commented to retry
             # raise e
+```
+#### **Java**
+```java
+while (true) {
+    Object ohlcv = exchange.watchOHLCVForSymbols(symbols, "1m").get(30, TimeUnit.SECONDS);
+    System.out.println(ohlcv);
+}
 ```
 <!-- tabs:end -->
 
@@ -1021,6 +1042,13 @@ if ($exchange->has['watchTrades']) {
     });
 }
 ```
+#### **Java**
+```java
+while (true) {
+    Object trades = exchange.watchTrades(symbol).get(30, TimeUnit.SECONDS);
+    System.out.println(trades);
+}
+```
 <!-- tabs:end -->
 ### watchTradesForSymbols
 
@@ -1053,6 +1081,13 @@ if exchange.has['watchTradesForSymbols']:
             print(e)
             # stop the loop on exception or leave it commented to retry
             # raise e
+```
+#### **Java**
+```java
+while (true) {
+    Object trades = exchange.watchTradesForSymbols(symbols).get(30, TimeUnit.SECONDS);
+    System.out.println(trades);
+}
 ```
 <!-- tabs:end -->
 
@@ -1104,6 +1139,13 @@ if ($exchange->has['watchBalance']) {
     });
 }
 ```
+#### **Java**
+```java
+while (true) {
+    Object balance = exchange.watchBalance().get(30, TimeUnit.SECONDS);
+    System.out.println(balance);
+}
+```
 <!-- tabs:end -->
 
 ### watchOrders
@@ -1127,6 +1169,13 @@ watch_orders($symbol = null, $since = null, $lmit = null, $params = array());
 ```c#
 public async Task<List<Order>> WatchOrders(string symbol = null, Int64? since2 = 0, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
 ```
+#### **Java**
+```java
+while (true) {
+    Object orders = exchange.watchOrders(symbol).get(30, TimeUnit.SECONDS);
+    System.out.println(orders);
+}
+```
 <!-- tabs:end -->
 
 ### watchMyTrades
@@ -1149,6 +1198,13 @@ watch_my_trades($symbol = null, $since = null, $lmit = null, $params = array());
 ```c#
 public async Task<List<Trade>> WatchMyTrades(string symbol = null, Int64? since2 = 0, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
 
+```
+#### **Java**
+```java
+while (true) {
+    Object trades = exchange.watchMyTrades(symbol).get(30, TimeUnit.SECONDS);
+    System.out.println(trades);
+}
 ```
 <!-- tabs:end -->
 
@@ -1174,6 +1230,13 @@ watch_positions($symbols = null, $since = null, $lmit = null, $params = array())
 ```c#
 public async Task<List<Position>> WatchPositions(List<string> symbols = null, Int64? since2 = 0, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
 ```
+#### **Java**
+```java
+while (true) {
+    Object positions = exchange.watchPositions(symbols).get(30, TimeUnit.SECONDS);
+    System.out.println(positions);
+}
+```
 <!-- tabs:end -->
 
 ### createOrderWs
@@ -1196,6 +1259,11 @@ create_order_ws(string $symbol, string $type, string $side, float $amount, ?floa
 ```c#
     public async Task<Order> CreateOrderWs(string symbol, string type, string side, float amount, float? price2 = 0, Dictionary<string, object> parameters = null)
 ```
+#### **Java**
+```java
+Object order = exchange.createOrderWs("BTC/USDT", "limit", "buy", 0.001, 50000.0).get(30, TimeUnit.SECONDS);
+System.out.println(order);
+```
 <!-- tabs:end -->
 ### editOrderWs
 <!-- tabs:start -->
@@ -1211,6 +1279,11 @@ edit_order_ws(self, id, symbol: str, type: OrderType, side: OrderSide, amount: f
 #### **PHP**
 ```php
 edit_order_ws(string id, string $symbol, string $type, string $side, float $amount, ?float $price = null, $params = array ())
+```
+#### **Java**
+```java
+Object order = exchange.editOrderWs(orderId, "BTC/USDT", "limit", "buy", 0.002, 51000.0).get(30, TimeUnit.SECONDS);
+System.out.println(order);
 ```
 <!-- tabs:end -->
 
@@ -1229,6 +1302,11 @@ cancel_order_ws(self, id, symbol: str, params={})
 ```php
 cancel_order_ws(string $id, string $symbol, $params = array ())
 ```
+#### **Java**
+```java
+Object result = exchange.cancelOrderWs(orderId, "BTC/USDT").get(30, TimeUnit.SECONDS);
+System.out.println(result);
+```
 <!-- tabs:end -->
 
 ### cancelOrdersWs
@@ -1246,6 +1324,11 @@ cancel_orders_ws(self, ids, symbol: str, params={})
 ```php
 cancel_orders_ws(string[] $ids, string $symbol, $params = array ())
 ```
+#### **Java**
+```java
+Object result = exchange.cancelOrdersWs(orderIds, "BTC/USDT").get(30, TimeUnit.SECONDS);
+System.out.println(result);
+```
 <!-- tabs:end -->
 
 ### cancelAllOrdersWs
@@ -1261,6 +1344,11 @@ cancel_all_orders_ws(self, symbol: str, params={})
 #### **PHP**
 ```php
 cancel_all_orders_ws(string $symbol, $params = array ())
+```
+#### **Java**
+```java
+Object result = exchange.cancelAllOrdersWs("BTC/USDT").get(30, TimeUnit.SECONDS);
+System.out.println(result);
 ```
 <!-- tabs:end -->
 
