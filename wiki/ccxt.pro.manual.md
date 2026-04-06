@@ -7,6 +7,7 @@ The CCXT Pro stack is built upon [CCXT](https://ccxt.com) and extends the core C
 - JavaScript prototype-level mixins
 - Python multiple inheritance
 - PHP Traits
+- Java class inheritance (pro exchange classes extend base exchange classes)
 
 The CCXT Pro heavily relies on the transpiler of CCXT for [multilanguage support](https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#multilanguage-support).
 
@@ -442,6 +443,11 @@ use \ccxt\pro; // optional, since you can use fully qualified names
 echo 'CCXT version ', \ccxt\pro\Exchange::VERSION, "\n";
 echo 'Supported exchanges: ', json_encode(\ccxt\pro\Exchange::$exchanges), "\n";
 ```
+#### **Java**
+```java
+import io.github.ccxt.exchanges.pro.Binance;
+// Pro exchange classes are in the io.github.ccxt.exchanges.pro package
+```
 <!-- tabs:end -->
 
 The imported CCXT Pro module wraps the CCXT inside itself – every exchange instantiated via CCXT Pro has all the CCXT methods as well as the additional functionality.
@@ -503,6 +509,21 @@ using ccxt.pro;
             Console.WriteLine("Trades: " + JsonConvert.SerializeObject(trades, Formatting.Indented));
         }
     }
+```
+
+#### **Java**
+```java
+import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.pro.Binance;
+import java.util.concurrent.TimeUnit;
+
+Exchange exchange = new Binance();
+exchange.loadMarkets().join();
+
+while (true) {
+    Object ticker = exchange.watchTicker("BTC/USDT").get(30, TimeUnit.SECONDS);
+    System.out.println(ticker);
+}
 ```
 
 <!-- tabs:end -->
@@ -674,6 +695,19 @@ if ($exchange->has['watchOrderBook']) {
     });
 }
 ```
+#### **Java**
+```java
+Exchange exchange = new Binance();
+exchange.loadMarkets().join();
+while (true) {
+    try {
+        Object orderbook = exchange.watchOrderBook(symbol).get(30, TimeUnit.SECONDS);
+        System.out.println(orderbook);
+    } catch (Exception e) {
+        System.out.println(e.getMessage());
+    }
+}
+```
 <!-- tabs:end -->
 
 #### watchOrderBookForSymbols
@@ -753,6 +787,13 @@ if ($exchange->has['watchTicker']) {
             }
         }
     });
+}
+```
+#### **Java**
+```java
+while (true) {
+    Object ticker = exchange.watchTicker(symbol).get(30, TimeUnit.SECONDS);
+    System.out.println(ticker);
 }
 ```
 <!-- tabs:end -->

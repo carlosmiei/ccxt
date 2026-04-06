@@ -446,6 +446,14 @@ $exchange = new $exchange_class(array(
 ));
 $exchange->options['adjustForTimeDifference'] = false;
 ```
+#### **Java**
+```java
+Map<String, Object> config = new HashMap<>();
+config.put("rateLimit", 10000);
+config.put("options", Map.of("adjustForTimeDifference", true));
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", config);
+((Map<String, Object>) exchange.options).put("adjustForTimeDifference", false);
+```
 <!-- tabs:end -->
 
 ### Overriding Exchange Methods
@@ -510,6 +518,11 @@ exchange.set_sandbox_mode(True)  # enable sandbox mode
 ```php
 $exchange = new \ccxt\binance($config);
 $exchange->set_sandbox_mode(true); // enable sandbox mode
+```
+#### **Java**
+```java
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", config);
+exchange.setSandboxMode(true); // enable sandbox mode
 ```
 
 <!-- tabs:end -->
@@ -757,6 +770,13 @@ $exchange = new \ccxt\bitfinex (array (
 // or switch the built-in rate-limiter on or off later after instantiation
 $exchange->enableRateLimit = true; // enable
 $exchange->enableRateLimit = false; // disable
+```
+#### **Java**
+```java
+// enabled by default
+Exchange exchange = Exchange.dynamicallyCreateInstance("bitfinex", null);
+exchange.enableRateLimit = true;  // enable
+exchange.enableRateLimit = false; // disable
 ```
 
 <!-- tabs:end -->
@@ -1534,6 +1554,14 @@ $okcoin->markets_by_id['btc_usd'][0];              // id → market (get market 
 
 $okcoin->markets['BTC/USD']['id'];              // symbol → id (get id by symbol)
 $okcoin->markets_by_id['btc_usd'][0]['symbol']; // id → symbol (get symbol by id)
+```
+#### **Java**
+```java
+ExchangeTyped exchange = new ExchangeTyped(Exchange.dynamicallyCreateInstance("kraken", null));
+Map<String, MarketInterface> markets = exchange.loadMarkets();
+
+MarketInterface btcUsd = markets.get("BTC/USD");  // symbol → market
+String marketId = btcUsd.id;                       // symbol → id
 ```
 
 <!-- tabs:end -->
@@ -2631,6 +2659,14 @@ $spread = ($bid && $ask) ? $ask - $bid : null;
 $result = array ('bid' => $bid, 'ask' => $ask, 'spread' => $spread);
 var_dump ($exchange->id, 'market price', $result);
 ```
+#### **Java**
+```java
+OrderBook ob = exchange.fetchOrderBook("BTC/USDT");
+Double bid = !ob.bids.isEmpty() ? ob.bids.get(0).get(0) : null;
+Double ask = !ob.asks.isEmpty() ? ob.asks.get(0).get(0) : null;
+Double spread = (bid != null && ask != null) ? ask - bid : null;
+System.out.println("bid=" + bid + " ask=" + ask + " spread=" + spread);
+```
 <!-- tabs:end -->
 
 ## Price Tickers
@@ -2790,6 +2826,13 @@ if ($exchange->has['fetchTickers']) {
     var_dump ($exchange->fetch_tickers ()); // all tickers indexed by their symbols
 }
 ```
+#### **Java**
+```java
+Tickers tickers = exchange.fetchTickers();
+for (var entry : tickers.tickers.entrySet()) {
+    System.out.println(entry.getKey() + " last=" + entry.getValue().last);
+}
+```
 <!-- tabs:end -->
 
 Fetching all tickers requires more traffic than fetching a single ticker. Also, note that some exchanges impose higher rate-limits on subsequent fetches of all tickers (see their docs on corresponding endpoints for details). **The cost of the `fetchTickers()` call in terms of rate limit is often higher than average**. If you only need one ticker, fetching by a particular symbol is faster as well. You probably want to fetch all tickers only if you really need all of them and, most likely, you don't want to fetchTickers more frequently than once in a minute or so.
@@ -2814,6 +2857,10 @@ if (exchange.has['fetchTickers']):
 if ($exchange->has['fetchTickers']) {
     var_dump ($exchange->fetch_tickers (array ('ETH/BTC', 'LTC/BTC'))); // listed tickers indexed by their symbols
 }
+```
+#### **Java**
+```java
+Tickers tickers = exchange.fetchTickers(List.of("ETH/BTC", "LTC/BTC"), null);
 ```
 <!-- tabs:end -->
 
@@ -3084,6 +3131,13 @@ if ($exchange->has['fetchTrades']) {
     foreach ($exchange->markets as $symbol => $market) {
         var_dump ($exchange->fetch_trades ($symbol));
     }
+}
+```
+#### **Java**
+```java
+List<Trade> trades = exchange.fetchTrades("BTC/USDT", null, 20L, null);
+for (Trade t : trades) {
+    System.out.println(t.datetime + " " + t.side + " " + t.amount + " @ " + t.price);
 }
 ```
 <!-- tabs:end -->
@@ -4019,6 +4073,11 @@ $exchange = new \ccxt\bittrex ();
 var_dump($exchange->requiredCredentials); // prints required credentials
 $exchange->check_required_credentials(); // throws AuthenticationError
 ```
+#### **Java**
+```java
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", null);
+exchange.checkRequiredCredentials(); // throws AuthenticationError
+```
 <!-- tabs:end -->
 
 #### Configuring API Keys
@@ -4094,6 +4153,18 @@ $exchange = new $exchange_class (array (
     'apiKey' => 'YOUR_API_KEY',
     'secret' => 'YOUR_SECRET',
 ));
+```
+#### **Java**
+```java
+// upon instantiation
+Map<String, Object> config = new HashMap<>();
+config.put("apiKey", "YOUR_API_KEY");
+config.put("secret", "YOUR_SECRET");
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", config);
+
+// or set later
+exchange.apiKey = "YOUR_API_KEY";
+exchange.secret = "YOUR_SECRET";
 ```
 <!-- tabs:end -->
 
@@ -4511,6 +4582,11 @@ if ($exchange->has['fetchOrder']) {
     $order = $exchange->fetch_order($id);
     var_dump($order);
 }
+```
+#### **Java**
+```java
+Order order = exchange.fetchOrder(orderId, "BTC/USDT", null);
+System.out.println("Order " + order.id + " status=" + order.status + " filled=" + order.filled);
 ```
 <!-- tabs:end -->
 
@@ -5505,6 +5581,13 @@ if exchange.has['fetchMyTrades']:
 
 if ($exchange->has['fetchMyTrades']) {
     $trades = $exchange->fetch_my_trades($symbol, $since, $limit, $params);
+}
+```
+#### **Java**
+```java
+List<Trade> myTrades = exchange.fetchMyTrades("BTC/USDT", null, 20L, null);
+for (Trade t : myTrades) {
+    System.out.println(t.datetime + " " + t.side + " " + t.amount + " @ " + t.price);
 }
 ```
 <!-- tabs:end -->
@@ -7336,6 +7419,25 @@ try {
 } catch (Exception $e) {
     echo $exchange->id . ' fetch_trades failed with: ' . $e->getMessage () . "\n";
     // retry or whatever
+}
+```
+#### **Java**
+```java
+import io.github.ccxt.errors.*;
+import java.util.concurrent.CompletionException;
+
+try {
+    Ticker ticker = exchange.fetchTicker("ETH/BTC");
+    System.out.println(ticker.last);
+} catch (CompletionException e) {
+    Throwable cause = e.getCause();
+    if (cause instanceof NetworkError) {
+        System.out.println("Network error: " + cause.getMessage());
+    } else if (cause instanceof ExchangeError) {
+        System.out.println("Exchange error: " + cause.getMessage());
+    } else {
+        System.out.println("Error: " + cause.getMessage());
+    }
 }
 ```
 <!-- tabs:end -->
