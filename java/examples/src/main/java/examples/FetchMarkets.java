@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.MarketInterface;
 
 import java.util.List;
@@ -24,10 +23,9 @@ public class FetchMarkets {
         if (filterType != null) System.out.println("Filter:   " + filterType);
         System.out.println();
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        Map<String, MarketInterface> markets = exchange.loadMarkets();
+        Map<String, MarketInterface> markets = exchange.loadMarkets(false);
 
         System.out.printf("%-16s %-8s %-6s %-8s %-12s %-14s %-14s%n",
                 "Symbol", "Type", "Active", "Base", "Quote", "Price Prec", "Amount Prec");

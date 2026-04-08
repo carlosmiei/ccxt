@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.errors.*;
 import io.github.ccxt.types.Ticker;
 
@@ -18,10 +17,9 @@ public class ErrorHandling {
     public static void main(String[] args) {
         String exchangeId = args.length > 0 ? args[0] : "binance";
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        exchange.loadMarkets();
+        exchange.loadMarkets(false);
 
         // 1. Handle bad symbol
         System.out.println("--- Test 1: Invalid symbol ---");
@@ -41,7 +39,7 @@ public class ErrorHandling {
         // 2. Handle authentication error
         System.out.println("\n--- Test 2: Auth required without credentials ---");
         try {
-            exchange.fetchBalance(null);
+            exchange.fetchBalance();
         } catch (CompletionException e) {
             Throwable cause = unwrap(e);
             if (cause instanceof AuthenticationError) {

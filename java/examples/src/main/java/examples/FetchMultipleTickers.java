@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.Ticker;
 import io.github.ccxt.types.Tickers;
 
@@ -22,10 +21,9 @@ public class FetchMultipleTickers {
         System.out.println("Exchange: " + exchangeId);
         System.out.println();
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        exchange.loadMarkets();
+        exchange.loadMarkets(false);
 
         List<String> symbols = List.of(
                 "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT"

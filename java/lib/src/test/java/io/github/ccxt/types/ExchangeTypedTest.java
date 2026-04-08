@@ -3,7 +3,6 @@ package io.github.ccxt.types;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.errors.*;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -28,20 +27,18 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 class ExchangeTypedTest {
 
-    static Exchange rawExchange;
-    static ExchangeTyped exchange;
+    static Exchange exchange;
 
     @BeforeAll
     static void setup() {
-        rawExchange = Exchange.dynamicallyCreateInstance("binance", null);
-        rawExchange.verbose = false;
+        exchange = Exchange.dynamicallyCreateInstance("binance", null);
+        exchange.verbose = false;
         String proxy = System.getenv("CCXT_HTTPS_PROXY");
         if (proxy != null && !proxy.isEmpty()) {
-            rawExchange.httpsProxy = proxy;
+            exchange.httpsProxy = proxy;
         }
-        exchange = new ExchangeTyped(rawExchange);
         try {
-            exchange.loadMarkets();
+            exchange.loadMarkets(false);
         } catch (Exception e) {
             assumeTrue(false, "Skipping: exchange not reachable (" + e.getMessage() + ")");
         }
@@ -79,7 +76,7 @@ class ExchangeTypedTest {
     void testAuthenticationErrorOnPrivateEndpoint() {
         // Calling a private endpoint without credentials should throw AuthenticationError
         Exception ex = assertThrows(CompletionException.class, () -> {
-            exchange.fetchBalance(null);
+            exchange.fetchBalance((Map<String, Object>) null);
         });
         Throwable cause = unwrap(ex);
         assertTrue(cause instanceof AuthenticationError || cause instanceof ExchangeError,
@@ -159,7 +156,7 @@ class ExchangeTypedTest {
     @Test
     void testRateLimiterThrottlesRealRequests() throws Exception {
         // Binance rateLimit is 50ms. Fire 10 rapid requests and verify they don't all complete instantly.
-        assertTrue(rawExchange.enableRateLimit, "Rate limiting should be enabled");
+        assertTrue(exchange.enableRateLimit, "Rate limiting should be enabled");
 
         long start = System.currentTimeMillis();
         int requestCount = 10;
@@ -244,7 +241,7 @@ class ExchangeTypedTest {
 
     @Test
     void testMarketFieldsFromLoadMarkets() {
-        Map<String, MarketInterface> markets = exchange.loadMarkets();
+        Map<String, MarketInterface> markets = exchange.loadMarkets(false);
         MarketInterface btc = markets.get("BTC/USDT");
         assertNotNull(btc);
         assertEquals("BTC/USDT", btc.symbol);

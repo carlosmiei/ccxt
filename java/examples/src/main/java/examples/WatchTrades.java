@@ -2,10 +2,9 @@ package examples;
 
 import io.github.ccxt.Exchange;
 import io.github.ccxt.exchanges.pro.Binance;
+import io.github.ccxt.types.Trade;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -18,7 +17,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class WatchTrades {
 
-    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         String symbol = args.length > 0 ? args[0] : "BTC/USDT";
 
@@ -35,21 +33,18 @@ public class WatchTrades {
 
         int totalTrades = 0;
         for (int i = 0; i < 10; i++) {
-            CompletableFuture<Object> future = exchange.watchTrades(symbol);
-            Object result = future.get(30, TimeUnit.SECONDS);
-
-            List<Map<String, Object>> trades = (List<Map<String, Object>>) result;
+            List<Trade> trades = exchange.watchTrades(symbol);
 
             // Print only the latest trades from this batch
             int start = Math.max(0, trades.size() - 5);
             for (int j = start; j < trades.size(); j++) {
-                Map<String, Object> t = trades.get(j);
+                Trade t = trades.get(j);
                 System.out.printf("%-26s %-5s %12s %12s %14s%n",
-                        t.get("datetime"),
-                        t.get("side"),
-                        t.get("price"),
-                        t.get("amount"),
-                        t.get("cost"));
+                        t.datetime,
+                        t.side,
+                        t.price,
+                        t.amount,
+                        t.cost);
             }
             totalTrades += trades.size();
         }

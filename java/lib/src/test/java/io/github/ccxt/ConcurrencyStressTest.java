@@ -87,7 +87,7 @@ class ConcurrencyStressTest {
 
         long start = System.currentTimeMillis();
         for (int i = 0; i < concurrentRequests; i++) {
-            futures[i] = exchange.fetchTicker("BTC/USDT")
+            futures[i] = exchange.fetchTickerAsync("BTC/USDT", null)
                     .thenAccept(result -> completed.incrementAndGet());
         }
 
@@ -161,7 +161,7 @@ class ConcurrencyStressTest {
         int threadCountBefore = Thread.activeCount();
 
         for (int i = 0; i < concurrentRequests; i++) {
-            futures[i] = exchange.fetchTicker("BTC/USDT");
+            futures[i] = exchange.fetchTickerAsync("BTC/USDT", null);
         }
 
         CompletableFuture.allOf(futures).join();
@@ -199,7 +199,7 @@ class ConcurrencyStressTest {
         CompletableFuture<?>[] futures = new CompletableFuture[concurrentRequests];
 
         for (int i = 0; i < concurrentRequests; i++) {
-            futures[i] = exchange.fetchTicker("INVALID/NOTEXIST_" + i)
+            futures[i] = exchange.fetchTickerAsync("INVALID/NOTEXIST_" + i, null)
                     .exceptionally(ex -> {
                         exceptions.incrementAndGet();
                         return null;

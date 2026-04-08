@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.OHLCV;
 
 import java.time.Instant;
@@ -31,10 +30,9 @@ public class FetchOHLCV {
         System.out.println("Timeframe: " + timeframe);
         System.out.println();
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        exchange.loadMarkets();
+        exchange.loadMarkets(false);
 
         List<OHLCV> candles = exchange.fetchOHLCV(symbol, timeframe, null, 20L, null);
 

@@ -24,7 +24,7 @@ public class TestFetchLastPrices extends BaseTest {
             response = (exchange.fetchLastPrices()).join();
         } catch(Exception e)
         {
-            response = (exchange.fetchLastPrices(new java.util.ArrayList<Object>(java.util.Arrays.asList(symbol)))).join();
+            response = (exchange.fetchLastPrices((Object) new java.util.ArrayList<Object>(java.util.Arrays.asList(symbol)))).join();
             checkedSymbol = symbol;
         }
         Assert((response instanceof java.util.Map), Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(exchange.id, " "), method), " "), checkedSymbol), " must return an object. "), exchange.json(response)));

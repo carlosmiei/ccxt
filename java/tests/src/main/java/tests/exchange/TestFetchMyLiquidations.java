@@ -20,7 +20,7 @@ public class TestFetchMyLiquidations extends BaseTest {
         {
             return true;
         }
-        Object items = (exchange.fetchMyLiquidations(code)).join();
+        Object items = (exchange.fetchMyLiquidations((Object) code)).join();
         Assert(((items instanceof java.util.List) || (items.getClass().isArray())), Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(exchange.id, " "), method), " "), code), " must return an array. "), exchange.json(items)));
         // const now = exchange.milliseconds ();
         for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(items)); i++)

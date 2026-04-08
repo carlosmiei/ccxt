@@ -27,7 +27,7 @@ public class TestFetchOHLCV extends BaseTest {
         Object limit = 10;
         Object duration = exchange.parseTimeframe(chosenTimeframeKey);
         Object since = Helpers.subtract(Helpers.subtract(exchange.milliseconds(), Helpers.multiply(Helpers.multiply(duration, limit), 1000)), 1000);
-        Object ohlcvs = (exchange.fetchOHLCV(symbol, chosenTimeframeKey, since, limit)).join();
+        Object ohlcvs = (exchange.fetchOHLCV((Object) symbol, (Object) chosenTimeframeKey, (Object) since, (Object) limit)).join();
         TestSharedMethods.AssertNonEmtpyArray(exchange, skippedProperties, method, ohlcvs, symbol);
         Object now = exchange.milliseconds();
         for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(ohlcvs)); i++)

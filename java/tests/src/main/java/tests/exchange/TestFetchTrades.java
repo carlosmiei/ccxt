@@ -16,7 +16,7 @@ public class TestFetchTrades extends BaseTest {
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
         Object method = "fetchTrades";
-        Object trades = (exchange.fetchTrades(symbol)).join();
+        Object trades = (exchange.fetchTrades((Object) symbol)).join();
         TestSharedMethods.AssertNonEmtpyArray(exchange, skippedProperties, method, trades);
         Object now = exchange.milliseconds();
         for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(trades)); i++)

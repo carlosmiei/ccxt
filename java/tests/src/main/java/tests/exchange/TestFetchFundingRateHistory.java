@@ -16,7 +16,7 @@ public class TestFetchFundingRateHistory extends BaseTest {
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
         Object method = "fetchFundingRateHistory";
-        Object fundingRatesHistory = (exchange.fetchFundingRateHistory(symbol)).join();
+        Object fundingRatesHistory = (exchange.fetchFundingRateHistory((Object) symbol)).join();
         TestSharedMethods.AssertNonEmtpyArray(exchange, skippedProperties, method, fundingRatesHistory, symbol);
         for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(fundingRatesHistory)); i++)
         {

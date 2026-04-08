@@ -1,7 +1,6 @@
 package io.github.ccxt.types;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 
 import java.util.List;
 import java.util.Map;
@@ -24,14 +23,13 @@ public class LiveTest {
         String exchangeId = args.length > 0 ? args[0] : "binance";
         System.out.println("=== CCXT Java Typed Wrapper - Live Test (" + exchangeId + ") ===\n");
 
-        // 1. Create exchange instance and typed wrapper
-        var raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        raw.verbose = false;
-        var exchange = new ExchangeTyped(raw);
+        // 1. Create exchange instance
+        var exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        exchange.verbose = false;
 
         // 2. Load markets
         System.out.println("[1] Loading markets...");
-        Map<String, MarketInterface> markets = exchange.loadMarkets();
+        Map<String, MarketInterface> markets = exchange.loadMarkets(false);
         check(markets.size() > 0, "markets should not be empty");
         System.out.println("    Loaded " + markets.size() + " markets");
         MarketInterface btcUsdt = markets.get("BTC/USDT");

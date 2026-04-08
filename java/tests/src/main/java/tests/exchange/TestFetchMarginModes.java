@@ -16,7 +16,7 @@ public class TestFetchMarginModes extends BaseTest {
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
         Object method = "fetchMarginModes";
-        Object marginModes = (exchange.fetchMarginModes(new java.util.ArrayList<Object>(java.util.Arrays.asList("symbol")))).join();
+        Object marginModes = (exchange.fetchMarginModes((Object) new java.util.ArrayList<Object>(java.util.Arrays.asList("symbol")))).join();
         Assert((marginModes instanceof java.util.Map), Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(exchange.id, " "), method), " "), symbol), " must return an object. "), exchange.json(marginModes)));
         Object marginModeKeys = new java.util.ArrayList<Object>(((java.util.Map<String, Object>)marginModes).keySet());
         TestSharedMethods.AssertNonEmtpyArray(exchange, skippedProperties, method, marginModes, symbol);

@@ -16,7 +16,7 @@ public class TestFetchOrderBook extends BaseTest {
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
         Object method = "fetchOrderBook";
-        Object orderbook = (exchange.fetchOrderBook(symbol)).join();
+        Object orderbook = (exchange.fetchOrderBook((Object) symbol)).join();
         TestOrderBook.testOrderBook(exchange, skippedProperties, method, orderbook, symbol);
         return true;
         }, io.github.ccxt.Exchange.VIRTUAL_EXECUTOR);

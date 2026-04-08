@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.Currencies;
 import io.github.ccxt.types.CurrencyInterface;
 
@@ -24,12 +23,11 @@ public class FetchCurrencies {
         System.out.println("Exchange: " + exchangeId);
         System.out.println();
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        exchange.loadMarkets();
+        exchange.loadMarkets(false);
 
-        Currencies currencies = exchange.fetchCurrencies();
+        Currencies currencies = exchange.fetchCurrencies((Map<String, Object>) null);
 
         if (currencies.currencies.isEmpty()) {
             System.out.println("No currencies returned (this exchange may require API keys for fetchCurrencies).");

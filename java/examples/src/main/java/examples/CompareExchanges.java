@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.Ticker;
 
 /**
@@ -24,9 +23,8 @@ public class CompareExchanges {
 
         for (String id : exchangeIds) {
             try {
-                Exchange raw = Exchange.dynamicallyCreateInstance(id, null);
-                ExchangeTyped exchange = new ExchangeTyped(raw);
-                exchange.loadMarkets();
+                Exchange exchange = Exchange.dynamicallyCreateInstance(id, null);
+                exchange.loadMarkets(false);
 
                 Ticker ticker = exchange.fetchTicker(symbol);
 

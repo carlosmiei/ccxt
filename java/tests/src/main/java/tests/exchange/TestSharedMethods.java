@@ -497,7 +497,7 @@ public class TestSharedMethods extends BaseTest {
         if (Helpers.isTrue(Helpers.GetValue(exchange.has, "fetchOrderBook")))
         {
             usedMethod = "fetchOrderBook";
-            Object orderbook = (exchange.fetchOrderBook(symbol)).join();
+            Object orderbook = (exchange.fetchOrderBook((Object) symbol)).join();
             Object bids = exchange.safeList(orderbook, "bids");
             Object asks = exchange.safeList(orderbook, "asks");
             Object bestBidArray = exchange.safeList(bids, 0);
@@ -507,20 +507,20 @@ public class TestSharedMethods extends BaseTest {
         } else if (Helpers.isTrue(Helpers.GetValue(exchange.has, "fetchBidsAsks")))
         {
             usedMethod = "fetchBidsAsks";
-            Object tickers = (exchange.fetchBidsAsks(new java.util.ArrayList<Object>(java.util.Arrays.asList(symbol)))).join();
+            Object tickers = (exchange.fetchBidsAsks((Object) new java.util.ArrayList<Object>(java.util.Arrays.asList(symbol)))).join();
             Object ticker = exchange.safeDict(tickers, symbol);
             bestBid = exchange.safeNumber(ticker, "bid");
             bestAsk = exchange.safeNumber(ticker, "ask");
         } else if (Helpers.isTrue(Helpers.GetValue(exchange.has, "fetchTicker")))
         {
             usedMethod = "fetchTicker";
-            Object ticker = (exchange.fetchTicker(symbol)).join();
+            Object ticker = (exchange.fetchTicker((Object) symbol)).join();
             bestBid = exchange.safeNumber(ticker, "bid");
             bestAsk = exchange.safeNumber(ticker, "ask");
         } else if (Helpers.isTrue(Helpers.GetValue(exchange.has, "fetchTickers")))
         {
             usedMethod = "fetchTickers";
-            Object tickers = (exchange.fetchTickers(new java.util.ArrayList<Object>(java.util.Arrays.asList(symbol)))).join();
+            Object tickers = (exchange.fetchTickers((Object) new java.util.ArrayList<Object>(java.util.Arrays.asList(symbol)))).join();
             Object ticker = exchange.safeDict(tickers, symbol);
             bestBid = exchange.safeNumber(ticker, "bid");
             bestAsk = exchange.safeNumber(ticker, "ask");

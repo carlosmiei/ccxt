@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.MarketInterface;
 
 import java.util.Map;
@@ -21,15 +20,14 @@ public class ListExchanges {
 
         System.out.println("--- " + exchangeId + " details ---\n");
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        System.out.println("ID:          " + raw.id);
-        System.out.println("Version:     " + raw.version);
-        System.out.println("Rate limit:  " + (int) raw.rateLimit + " ms");
+        System.out.println("ID:          " + exchange.id);
+        System.out.println("Version:     " + exchange.version);
+        System.out.println("Rate limit:  " + (int) exchange.rateLimit + " ms");
 
         // Load and summarize markets
-        Map<String, MarketInterface> markets = exchange.loadMarkets();
+        Map<String, MarketInterface> markets = exchange.loadMarkets(false);
         long spotCount = markets.values().stream().filter(m -> Boolean.TRUE.equals(m.spot)).count();
         long futuresCount = markets.values().stream().filter(m -> "swap".equals(m.type)).count();
         long optionCount = markets.values().stream().filter(m -> "option".equals(m.type)).count();
@@ -41,7 +39,7 @@ public class ListExchanges {
 
         // Show feature support
         System.out.println("\nSupported features:");
-        Map<String, Object> has = (Map<String, Object>) raw.has;
+        Map<String, Object> has = (Map<String, Object>) exchange.has;
         String[] features = {"fetchTicker", "fetchOrderBook", "fetchOHLCV", "fetchTrades",
                 "fetchBalance", "createOrder", "cancelOrder", "fetchOpenOrders",
                 "fetchMyTrades", "watchTicker", "watchOrderBook", "watchTrades"};

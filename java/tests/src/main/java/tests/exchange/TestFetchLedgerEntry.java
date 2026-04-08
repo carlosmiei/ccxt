@@ -16,14 +16,14 @@ public class TestFetchLedgerEntry extends BaseTest {
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
         Object method = "fetchLedgerEntry";
-        Object items = (exchange.fetchLedger(code)).join();
+        Object items = (exchange.fetchLedger((Object) code)).join();
         Object length = Helpers.getArrayLength(items);
         TestSharedMethods.AssertNonEmtpyArray(exchange, skippedProperties, method, items, code);
         if (Helpers.isTrue(Helpers.isGreaterThan(length, 0)))
         {
             Object firstItem = Helpers.GetValue(items, 0);
             Object id = Helpers.GetValue(firstItem, "id");
-            Object item = (exchange.fetchLedgerEntry(id)).join();
+            Object item = (exchange.fetchLedgerEntry((Object) id)).join();
             Object now = exchange.milliseconds();
             TestLedgerEntry.testLedgerEntry(exchange, skippedProperties, method, item, code, now);
         }

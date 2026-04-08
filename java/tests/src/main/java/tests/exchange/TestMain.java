@@ -320,7 +320,7 @@ public class TestMain extends BaseTest
             // exceptionally for `loadMarkets` call, we call it before it's even checked for "skip" as we need it to be called anyway (but can skip "test.loadMarket" for it)
             if (Helpers.isTrue(isLoadMarkets))
             {
-                (exchange.loadMarkets(true)).join();
+                (exchange.loadMarkets((Object) true)).join();
             }
             Object name = exchange.id;
             if (Helpers.isTrue(skipMessage))
@@ -1000,7 +1000,7 @@ public class TestMain extends BaseTest
                 return false;  // this test is only for binance exchange for now
             }
             exchange.returnResponseHeaders = true;
-            Object ticker = (exchange.fetchTicker("BTC/USDT")).join();
+            Object ticker = (exchange.fetchTicker((Object) "BTC/USDT")).join();
             Object info = Helpers.GetValue(ticker, "info");
             Object headers = Helpers.GetValue(info, "responseHeaders");
             Object headersKeys = new java.util.ArrayList<Object>(((java.util.Map<String, Object>)headers).keySet());
@@ -1974,7 +1974,7 @@ public class TestMain extends BaseTest
             Object spotOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 spotOrderRequest = this.urlencodedToDict(exchange.last_request_body);
@@ -1985,7 +1985,7 @@ public class TestMain extends BaseTest
             Object swapOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 swapOrderRequest = this.urlencodedToDict(exchange.last_request_body);
@@ -1993,7 +1993,7 @@ public class TestMain extends BaseTest
             Object swapInverseOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USD:BTC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USD:BTC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 swapInverseOrderRequest = this.urlencodedToDict(exchange.last_request_body);
@@ -2009,7 +2009,7 @@ public class TestMain extends BaseTest
             Object swapAlgoOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 0.002, 102000, new java.util.HashMap<String, Object>() {{
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 0.002, (Object) 102000, (Object) new java.util.HashMap<String, Object>() {{
                     put( "triggerPrice", 101000 );
                 }})).join();
                 Object checkOrderRequest = this.urlencodedToDict(exchange.last_request_body);
@@ -2037,7 +2037,7 @@ public class TestMain extends BaseTest
         put( "side", "buy" );
         put( "amount", 1 );
     }}));
-                (exchange.createOrders(orders)).join();
+                (exchange.createOrders((Object) orders)).join();
             } catch(Exception e)
             {
                 createOrdersRequest = this.urlencodedToDict(exchange.last_request_body);
@@ -2068,7 +2068,7 @@ public class TestMain extends BaseTest
             Object spotOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 spotOrderRequest = jsonParse(exchange.last_request_body);
@@ -2081,7 +2081,7 @@ public class TestMain extends BaseTest
             Object swapOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 swapOrderRequest = jsonParse(exchange.last_request_body);
@@ -2110,7 +2110,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2137,7 +2137,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(Helpers.GetValue(exchange.options, "brokerId"), id), "id not in options");
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers
@@ -2171,7 +2171,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(futureKey, "1b327198-f30c-4f14-a0ac-918871282f15"), Helpers.add(Helpers.add("kucoin - key: ", futureKey), " not in options."));
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers
@@ -2181,7 +2181,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(Helpers.GetValue(reqHeaders, "KC-API-PARTNER"), id), Helpers.add(Helpers.add("kucoin - id: ", id), " not in headers for spot orders."));
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000, new java.util.HashMap<String, Object>() {{
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000, (Object) new java.util.HashMap<String, Object>() {{
                     put( "uta", true );
                 }})).join();
             } catch(Exception e)
@@ -2192,7 +2192,7 @@ public class TestMain extends BaseTest
             id = "ccxtfutures";
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 reqHeaders = exchange.last_request_headers;
@@ -2200,7 +2200,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(Helpers.GetValue(reqHeaders, "KC-API-PARTNER"), id), Helpers.add(Helpers.add("kucoin - id: ", id), " not in headers for swap orders."));
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000, new java.util.HashMap<String, Object>() {{
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000, (Object) new java.util.HashMap<String, Object>() {{
                     put( "uta", true );
                 }})).join();
             } catch(Exception e)
@@ -2231,7 +2231,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(futureKey, "1b327198-f30c-4f14-a0ac-918871282f15"), Helpers.add(Helpers.add("kucoinfutures - key: ", futureKey), " not in options."));
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 reqHeaders = exchange.last_request_headers;
@@ -2239,7 +2239,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(Helpers.GetValue(reqHeaders, "KC-API-PARTNER"), id), Helpers.add(Helpers.add("kucoinfutures - id: ", id), " not in headers."));
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000, new java.util.HashMap<String, Object>() {{
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000, (Object) new java.util.HashMap<String, Object>() {{
                     put( "uta", true );
                 }})).join();
             } catch(Exception e)
@@ -2267,7 +2267,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(Helpers.GetValue(exchange.options, "broker"), id), Helpers.add(Helpers.add("bitget - id: ", id), " not in options"));
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 reqHeaders = exchange.last_request_headers;
@@ -2294,7 +2294,7 @@ public class TestMain extends BaseTest
             (exchange.loadMarkets()).join();
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 reqHeaders = exchange.last_request_headers;
@@ -2320,7 +2320,7 @@ public class TestMain extends BaseTest
             Object spotOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 spotOrderRequest = jsonParse(exchange.last_request_body);
@@ -2332,7 +2332,7 @@ public class TestMain extends BaseTest
             Object swapOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 swapOrderRequest = jsonParse(exchange.last_request_body);
@@ -2340,7 +2340,7 @@ public class TestMain extends BaseTest
             Object swapInverseOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USD:BTC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USD:BTC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 swapInverseOrderRequest = jsonParse(exchange.last_request_body);
@@ -2369,7 +2369,7 @@ public class TestMain extends BaseTest
             Object spotOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 spotOrderRequest = jsonParse(exchange.last_request_body);
@@ -2381,7 +2381,7 @@ public class TestMain extends BaseTest
             Object stopOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000, new java.util.HashMap<String, Object>() {{
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000, (Object) new java.util.HashMap<String, Object>() {{
                     put( "stopPrice", 30000 );
                 }})).join();
             } catch(Exception e)
@@ -2411,7 +2411,7 @@ public class TestMain extends BaseTest
             (exchange.loadMarkets()).join();
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 reqHeaders = exchange.last_request_headers;
@@ -2437,7 +2437,7 @@ public class TestMain extends BaseTest
             Object spotOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 spotOrderRequest = jsonParse(exchange.last_request_body);
@@ -2465,7 +2465,7 @@ public class TestMain extends BaseTest
             Assert(Helpers.isEqual(Helpers.GetValue(exchange.options, "broker"), id), Helpers.add(Helpers.add("bingx - id: ", id), " not in options"));
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers
@@ -2491,7 +2491,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2518,7 +2518,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("LTC/USDT:USDT", "market", "buy", 1)).join();
+                (exchange.createOrder((Object) "LTC/USDT:USDT", (Object) "market", (Object) "buy", (Object) 1)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2563,7 +2563,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDC:USDC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDC:USDC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2590,7 +2590,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2622,7 +2622,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDC:USDC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDC:USDC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2650,7 +2650,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USD:OX", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USD:OX", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2674,7 +2674,7 @@ public class TestMain extends BaseTest
             Object spotOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 spotOrderRequest = jsonParse(exchange.last_request_body);
@@ -2684,7 +2684,7 @@ public class TestMain extends BaseTest
             Object swapOrderRequest = null;
             try
             {
-                (exchange.createOrder("BTC/USDT:USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT:USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 swapOrderRequest = jsonParse(exchange.last_request_body);
@@ -2743,7 +2743,7 @@ public class TestMain extends BaseTest
             (exchange.loadMarkets()).join();
             try
             {
-                (exchange.createOrder("BTC/USD:USDC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USD:USDC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 reqHeaders = exchange.last_request_headers;
@@ -2768,7 +2768,7 @@ public class TestMain extends BaseTest
             Object id = "10000700011";
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers
@@ -2794,7 +2794,7 @@ public class TestMain extends BaseTest
             Object id = "47cfy";
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers
@@ -2819,7 +2819,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "sell", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "sell", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2857,7 +2857,7 @@ public class TestMain extends BaseTest
                 }};
                 exchange.walletAddress = "0x0ad42b8e602c2d3d475ae52d678cf63d84ab2749";
                 exchange.privateKey = "0x7b77bb7b20e92bbb85f2a22b330b896959229a5790e35f2f290922de3fb22ad5";
-                (exchange.createOrder("LBTC/USDC", "limit", "sell", 0.01, 3000, parameters)).join();
+                (exchange.createOrder((Object) "LBTC/USDC", (Object) "limit", (Object) "sell", (Object) 0.01, (Object) 3000, (Object) parameters)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2888,7 +2888,7 @@ public class TestMain extends BaseTest
             Object request = null;
             try
             {
-                (exchange.createOrder("BTC/USDC:USDC", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDC:USDC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 request = jsonParse(exchange.last_request_body);
@@ -2916,7 +2916,7 @@ public class TestMain extends BaseTest
             Object id = "1400";
             try
             {
-                (exchange.createOrder("ETH/USDC", "limit", "buy", 1, 5000)).join();
+                (exchange.createOrder((Object) "ETH/USDC", (Object) "limit", (Object) "buy", (Object) 1, (Object) 5000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers
@@ -2942,7 +2942,7 @@ public class TestMain extends BaseTest
             Object id = "177321641268789";
             try
             {
-                (exchange.createOrder("BTC/USDT", "limit", "buy", 1, 20000)).join();
+                (exchange.createOrder((Object) "BTC/USDT", (Object) "limit", (Object) "buy", (Object) 1, (Object) 20000)).join();
             } catch(Exception e)
             {
                 // we expect an error here, we're only interested in the headers

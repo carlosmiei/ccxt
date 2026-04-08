@@ -217,11 +217,11 @@ public class TestCreateOrder extends BaseTest {
         if (Helpers.isTrue(Helpers.isTrue(Helpers.GetValue(exchange.has, "cancelOrder")) && Helpers.isTrue(!Helpers.isEqual(orderId, null))))
         {
             usedMethod = "cancelOrder";
-            cancelResult = (exchange.cancelOrder(orderId, symbol)).join();
+            cancelResult = (exchange.cancelOrder((Object) orderId, (Object) symbol)).join();
         } else if (Helpers.isTrue(Helpers.GetValue(exchange.has, "cancelAllOrders")))
         {
             usedMethod = "cancelAllOrders";
-            cancelResult = (exchange.cancelAllOrders(symbol)).join();
+            cancelResult = (exchange.cancelAllOrders((Object) symbol)).join();
         } else if (Helpers.isTrue(Helpers.GetValue(exchange.has, "cancelOrders")))
         {
             throw new Error((String)Helpers.add(logPrefix, " cancelOrders method is not unified yet, coming soon...")) ;
@@ -245,7 +245,7 @@ public class TestCreateOrder extends BaseTest {
         Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
         Object skippedProperties = Helpers.getArg(optionalArgs, 2, new java.util.HashMap<String, Object>() {{}});
         tcoDebug(exchange, symbol, Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add(Helpers.add("Executing createOrder ", orderType), " "), side), " "), amount), " "), price), " "), exchange.json(parameters)));
-        Object order = (exchange.createOrder(symbol, orderType, side, amount, price, parameters)).join();
+        Object order = (exchange.createOrder((Object) symbol, (Object) orderType, (Object) side, (Object) amount, (Object) price, (Object) parameters)).join();
         try
         {
             TestOrder.testOrder(exchange, skippedProperties, "createOrder", order, symbol, System.currentTimeMillis());

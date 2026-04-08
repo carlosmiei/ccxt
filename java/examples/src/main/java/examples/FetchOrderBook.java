@@ -1,7 +1,6 @@
 package examples;
 
 import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
 import io.github.ccxt.types.OrderBook;
 
 import java.util.List;
@@ -23,10 +22,9 @@ public class FetchOrderBook {
         System.out.println("Symbol:   " + symbol);
         System.out.println();
 
-        Exchange raw = Exchange.dynamicallyCreateInstance(exchangeId, null);
-        ExchangeTyped exchange = new ExchangeTyped(raw);
+        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
 
-        exchange.loadMarkets();
+        exchange.loadMarkets(false);
 
         OrderBook ob = exchange.fetchOrderBook(symbol, 10L, null);
 

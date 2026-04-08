@@ -16,7 +16,7 @@ public class TestFetchOrders extends BaseTest {
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
         Object method = "fetchOrders";
-        Object orders = (exchange.fetchOrders(symbol)).join();
+        Object orders = (exchange.fetchOrders((Object) symbol)).join();
         Assert(((orders instanceof java.util.List) || (orders.getClass().isArray())), Helpers.add(Helpers.add(Helpers.add(Helpers.add(exchange.id, " "), method), " must return an array, returned "), exchange.json(orders)));
         TestSharedMethods.AssertNonEmtpyArray(exchange, skippedProperties, method, orders, symbol);
         Object now = exchange.milliseconds();

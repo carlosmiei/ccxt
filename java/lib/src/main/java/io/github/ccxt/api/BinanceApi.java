@@ -11,6 +11,14 @@ import io.github.ccxt.Exchange;
 public class BinanceApi extends Exchange
 {
 
+    public BinanceApi () {
+        super();
+    }
+
+    public BinanceApi (Object options) {
+        super(options);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  sapiGetCopyTradingFuturesUserStatus (Object... optionalArgs)
     {
         return this.callAsync ("sapiGetCopyTradingFuturesUserStatus", optionalArgs);
@@ -1116,6 +1124,11 @@ public class BinanceApi extends Exchange
         return this.callAsync ("sapiGetPortfolioEarnAssetBalance", optionalArgs);
     }
 
+    public java.util.concurrent.CompletableFuture<Object>  sapiGetPortfolioDeltaMode (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiGetPortfolioDeltaMode", optionalArgs);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  sapiGetStakingProductList (Object... optionalArgs)
     {
         return this.callAsync ("sapiGetStakingProductList", optionalArgs);
@@ -1296,6 +1309,21 @@ public class BinanceApi extends Exchange
         return this.callAsync ("sapiGetDciProductAccounts", optionalArgs);
     }
 
+    public java.util.concurrent.CompletableFuture<Object>  sapiGetAccumulatorProductList (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiGetAccumulatorProductList", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  sapiGetAccumulatorProductPositionList (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiGetAccumulatorProductPositionList", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  sapiGetAccumulatorProductSumHolding (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiGetAccumulatorProductSumHolding", optionalArgs);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  sapiPostAssetDust (Object... optionalArgs)
     {
         return this.callAsync ("sapiPostAssetDust", optionalArgs);
@@ -1474,6 +1502,11 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  sapiPostUserDataStreamIsolated (Object... optionalArgs)
     {
         return this.callAsync ("sapiPostUserDataStreamIsolated", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  sapiPostUserListenToken (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiPostUserListenToken", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  sapiPostFuturesTransfer (Object... optionalArgs)
@@ -1831,6 +1864,11 @@ public class BinanceApi extends Exchange
         return this.callAsync ("sapiPostPortfolioEarnAssetTransfer", optionalArgs);
     }
 
+    public java.util.concurrent.CompletableFuture<Object>  sapiPostPortfolioDeltaMode (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiPostPortfolioDeltaMode", optionalArgs);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  sapiPostLendingAutoInvestPlanAdd (Object... optionalArgs)
     {
         return this.callAsync ("sapiPostLendingAutoInvestPlanAdd", optionalArgs);
@@ -1899,6 +1937,11 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  sapiPostDciProductAutoCompoundEdit (Object... optionalArgs)
     {
         return this.callAsync ("sapiPostDciProductAutoCompoundEdit", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  sapiPostAccumulatorProductSubscribe (Object... optionalArgs)
+    {
+        return this.callAsync ("sapiPostAccumulatorProductSubscribe", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  sapiPutUserDataStream (Object... optionalArgs)
@@ -2416,6 +2459,11 @@ public class BinanceApi extends Exchange
         return this.callAsync ("fapiPublicGetDepth", optionalArgs);
     }
 
+    public java.util.concurrent.CompletableFuture<Object>  fapiPublicGetRpiDepth (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPublicGetRpiDepth", optionalArgs);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  fapiPublicGetTrades (Object... optionalArgs)
     {
         return this.callAsync ("fapiPublicGetTrades", optionalArgs);
@@ -2524,6 +2572,16 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  fapiPublicGetInsuranceBalance (Object... optionalArgs)
     {
         return this.callAsync ("fapiPublicGetInsuranceBalance", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPublicGetSymbolAdlRisk (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPublicGetSymbolAdlRisk", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPublicGetTradingSchedule (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPublicGetTradingSchedule", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  fapiDataGetDeliveryPrice (Object... optionalArgs)
@@ -2751,6 +2809,26 @@ public class BinanceApi extends Exchange
         return this.callAsync ("fapiPrivateGetConvertOrderStatus", optionalArgs);
     }
 
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivateGetAlgoOrder (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivateGetAlgoOrder", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivateGetOpenAlgoOrders (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivateGetOpenAlgoOrders", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivateGetAllAlgoOrders (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivateGetAllAlgoOrders", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivateGetStockContract (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivateGetStockContract", optionalArgs);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  fapiPrivatePostBatchOrders (Object... optionalArgs)
     {
         return this.callAsync ("fapiPrivatePostBatchOrders", optionalArgs);
@@ -2774,6 +2852,11 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  fapiPrivatePostOrder (Object... optionalArgs)
     {
         return this.callAsync ("fapiPrivatePostOrder", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivatePostOrderTest (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivatePostOrderTest", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  fapiPrivatePostLeverage (Object... optionalArgs)
@@ -2821,6 +2904,11 @@ public class BinanceApi extends Exchange
         return this.callAsync ("fapiPrivatePostConvertAcceptQuote", optionalArgs);
     }
 
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivatePostAlgoOrder (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivatePostAlgoOrder", optionalArgs);
+    }
+
     public java.util.concurrent.CompletableFuture<Object>  fapiPrivatePutListenKey (Object... optionalArgs)
     {
         return this.callAsync ("fapiPrivatePutListenKey", optionalArgs);
@@ -2854,6 +2942,16 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  fapiPrivateDeleteListenKey (Object... optionalArgs)
     {
         return this.callAsync ("fapiPrivateDeleteListenKey", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivateDeleteAlgoOrder (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivateDeleteAlgoOrder", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  fapiPrivateDeleteAlgoOpenOrders (Object... optionalArgs)
+    {
+        return this.callAsync ("fapiPrivateDeleteAlgoOpenOrders", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  fapiPublicV2GetTickerPrice (Object... optionalArgs)
@@ -3034,6 +3132,11 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  eapiPrivateGetBlockTrades (Object... optionalArgs)
     {
         return this.callAsync ("eapiPrivateGetBlockTrades", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  eapiPrivateGetComission (Object... optionalArgs)
+    {
+        return this.callAsync ("eapiPrivateGetComission", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  eapiPrivatePostOrder (Object... optionalArgs)
@@ -3289,6 +3392,16 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  privatePostOrderListOtoco (Object... optionalArgs)
     {
         return this.callAsync ("privatePostOrderListOtoco", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  privatePostOrderListOpo (Object... optionalArgs)
+    {
+        return this.callAsync ("privatePostOrderListOpo", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  privatePostOrderListOpoco (Object... optionalArgs)
+    {
+        return this.callAsync ("privatePostOrderListOpoco", optionalArgs);
     }
 
     public java.util.concurrent.CompletableFuture<Object>  privatePostSorOrder (Object... optionalArgs)
@@ -3839,6 +3952,11 @@ public class BinanceApi extends Exchange
     public java.util.concurrent.CompletableFuture<Object>  papiDeleteListenKey (Object... optionalArgs)
     {
         return this.callAsync ("papiDeleteListenKey", optionalArgs);
+    }
+
+    public java.util.concurrent.CompletableFuture<Object>  papiV2GetUmAccount (Object... optionalArgs)
+    {
+        return this.callAsync ("papiV2GetUmAccount", optionalArgs);
     }
 
 }

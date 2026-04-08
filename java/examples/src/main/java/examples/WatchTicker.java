@@ -2,9 +2,8 @@ package examples;
 
 import io.github.ccxt.Exchange;
 import io.github.ccxt.exchanges.pro.Binance;
+import io.github.ccxt.types.Ticker;
 
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -17,7 +16,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class WatchTicker {
 
-    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         String symbol = args.length > 0 ? args[0] : "BTC/USDT";
 
@@ -33,16 +31,13 @@ public class WatchTicker {
         System.out.println("-".repeat(74));
 
         for (int i = 0; i < 20; i++) {
-            CompletableFuture<Object> future = exchange.watchTicker(symbol);
-            Object result = future.get(30, TimeUnit.SECONDS);
-
-            Map<String, Object> ticker = (Map<String, Object>) result;
+            Ticker ticker = exchange.watchTicker(symbol);
             System.out.printf("%-26s %12s %12s %12s %10s%n",
-                    ticker.get("datetime"),
-                    ticker.get("last"),
-                    ticker.get("bid"),
-                    ticker.get("ask"),
-                    ticker.get("baseVolume"));
+                    ticker.datetime,
+                    ticker.last,
+                    ticker.bid,
+                    ticker.ask,
+                    ticker.baseVolume);
         }
 
         System.out.println("\nDone!");
