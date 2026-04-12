@@ -14,7 +14,26 @@ public final class OrderBook {
 
     @SuppressWarnings("unchecked")
     public OrderBook(Object raw) {
+        // Handle WsOrderBook (WebSocket) — extract data directly from its typed fields
+        // Handle WsOrderBook (WebSocket) — copy live data from its OrderBookSide fields
+        if (raw instanceof io.github.ccxt.ws.WsOrderBook wsOb) {
+            // WsOrderBook.bids/asks are OrderBookSide (extends ArrayList<Object>)
+            // Each element is a List<Object> [price, amount]
+            // Copy them via parseEntries which converts to List<List<Double>>
+            this.bids = parseEntries(new java.util.ArrayList<>(wsOb.bids));
+            this.asks = parseEntries(new java.util.ArrayList<>(wsOb.asks));
+            this.symbol = wsOb.symbol;
+            this.timestamp = (wsOb.timestamp instanceof Number n) ? n.longValue() : null;
+            this.datetime = (wsOb.datetime instanceof String s) ? s : null;
+            this.nonce = (wsOb.nonce instanceof Number n) ? n.longValue() : null;
+            return;
+        }
         Map<String, Object> data = TypeHelper.toMap(raw);
+        if (data == null) {
+            this.bids = new ArrayList<>();
+            this.asks = new ArrayList<>();
+            return;
+        }
         this.bids = parseEntries(data.get("bids"));
         this.asks = parseEntries(data.get("asks"));
         this.symbol = TypeHelper.safeString(data, "symbol");

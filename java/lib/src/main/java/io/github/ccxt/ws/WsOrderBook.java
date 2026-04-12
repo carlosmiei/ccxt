@@ -89,10 +89,12 @@ public class WsOrderBook {
 
     /**
      * Truncate both sides to the configured depth.
+     * Returns this for chaining (matches TS behavior where orderbook.limit() returns the orderbook).
      */
-    public void limit() {
+    public WsOrderBook limit() {
         this.asks.limit();
         this.bids.limit();
+        return this;
     }
 
     /**
