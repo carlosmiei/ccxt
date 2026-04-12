@@ -1,12 +1,12 @@
 package examples;
 
 import io.github.ccxt.exchanges.pro.Binance;
+import io.github.ccxt.types.OHLCV;
 
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Watch real-time OHLCV (candlestick) updates via WebSocket.
@@ -21,7 +21,6 @@ public class WatchOHLCV {
     static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
             .withZone(ZoneId.systemDefault());
 
-    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         String symbol = args.length > 0 ? args[0] : "BTC/USDT";
         String timeframe = args.length > 1 ? args[1] : "1m";
@@ -30,7 +29,7 @@ public class WatchOHLCV {
         exchange.verbose = false;
 
         System.out.println("Loading markets...");
-        exchange.loadMarkets().join();
+        exchange.loadMarkets(false);
         System.out.println("Watching " + symbol + " OHLCV (" + timeframe + ", 15 updates)...\n");
 
         System.out.printf("%-18s %12s %12s %12s %12s %14s%n",
@@ -38,20 +37,14 @@ public class WatchOHLCV {
         System.out.println("-".repeat(82));
 
         for (int i = 0; i < 15; i++) {
-            List<List<Object>> candles = (List<List<Object>>) exchange.watchOHLCV(symbol, timeframe).join();
+            List<OHLCV> candles = exchange.watchOHLCV(symbol, timeframe, null, null, null);
 
             // Print the latest candle
             if (!candles.isEmpty()) {
-                List<Object> c = candles.get(candles.size() - 1);
-                long timestamp = ((Number) c.get(0)).longValue();
-                String date = FMT.format(Instant.ofEpochMilli(timestamp));
-                double open = ((Number) c.get(1)).doubleValue();
-                double high = ((Number) c.get(2)).doubleValue();
-                double low = ((Number) c.get(3)).doubleValue();
-                double close = ((Number) c.get(4)).doubleValue();
-                double volume = ((Number) c.get(5)).doubleValue();
+                OHLCV c = candles.get(candles.size() - 1);
+                String date = FMT.format(Instant.ofEpochMilli(c.timestamp));
                 System.out.printf("%-18s %12.2f %12.2f %12.2f %12.2f %14.4f%n",
-                        date, open, high, low, close, volume);
+                        date, c.open, c.high, c.low, c.close, c.volume);
             }
         }
 

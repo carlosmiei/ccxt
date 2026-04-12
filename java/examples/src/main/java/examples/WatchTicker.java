@@ -1,8 +1,7 @@
 package examples;
 
 import io.github.ccxt.exchanges.pro.Binance;
-
-import java.util.Map;
+import io.github.ccxt.types.Ticker;
 
 /**
  * Watch real-time ticker updates via WebSocket.
@@ -14,7 +13,6 @@ import java.util.Map;
  */
 public class WatchTicker {
 
-    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         String symbol = args.length > 0 ? args[0] : "BTC/USDT";
 
@@ -22,7 +20,7 @@ public class WatchTicker {
         exchange.verbose = false;
 
         System.out.println("Loading markets...");
-        exchange.loadMarkets().join();
+        exchange.loadMarkets(false);
         System.out.println("Watching " + symbol + " ticker (20 updates)...\n");
 
         System.out.printf("%-26s %12s %12s %12s %10s%n",
@@ -30,13 +28,13 @@ public class WatchTicker {
         System.out.println("-".repeat(74));
 
         for (int i = 0; i < 20; i++) {
-            Map<String, Object> ticker = (Map<String, Object>) exchange.watchTicker(symbol).join();
+            Ticker ticker = exchange.watchTicker(symbol);
             System.out.printf("%-26s %12s %12s %12s %10s%n",
-                    ticker.get("datetime"),
-                    ticker.get("last"),
-                    ticker.get("bid"),
-                    ticker.get("ask"),
-                    ticker.get("baseVolume"));
+                    ticker.datetime,
+                    ticker.last,
+                    ticker.bid,
+                    ticker.ask,
+                    ticker.baseVolume);
         }
 
         System.out.println("\nDone!");

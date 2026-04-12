@@ -1018,10 +1018,10 @@ class NewTranspiler {
         const javaImports = this.getJavaImports(name, ws).join("\n") + "\n\n";
         let content = javaVersion.content;
 
-        // For REST classes, append "Core" suffix so the typed wrapper can take the clean name.
-        // e.g., transpiled Binance class becomes BinanceCore, typed Binance extends BinanceCore.
-        const coreSuffix = ws ? '' : 'Core';
-        const className = this.capitalize(name) + coreSuffix;
+        // Append "Core" suffix so the typed wrapper can take the clean name.
+        // e.g., transpiled Binance becomes BinanceCore, typed Binance extends BinanceCore.
+        // Same for WS: pro.BinanceCore (transpiled WS), pro.Binance (typed WS wrapper).
+        const className = this.capitalize(name) + 'Core';
 
         // inject constructor
         const constructor = [
@@ -1044,10 +1044,8 @@ class NewTranspiler {
         // Rename the class to include Core suffix
         content = content.replace(/class\s+\w+\s+extends/, `class ${className} extends`);
         // Also rename self-references like ClassName.this in anonymous inner classes
-        if (coreSuffix) {
-            const origName = this.capitalize(name);
-            content = content.replace(new RegExp(`${origName}\\.this`, 'g'), `${className}.this`);
-        }
+        const origName = this.capitalize(name);
+        content = content.replace(new RegExp(`${origName}\\.this`, 'g'), `${className}.this`);
         content = content.replace(/, (sha1|sha384|sha512|sha256|md5|ed25519|keccak|p256|secp256k1)([,)])/g, `, $1()$2`);
         content = content.replace(/(\s+public Object describe\(\))/g, `${constructor}$1`)
         // cast callDynamically to CompletableFuture when .join() is called on the result
@@ -1068,11 +1066,12 @@ class NewTranspiler {
             const wsRegexes = this.getJavaWsRegexes();
             content = this.regexAll (content, wsRegexes);
             content = this.replaceImportedRestClasses (content, javaVersion.imports);
-            // For WS classes, use FQN for REST Core parent to avoid same-name conflict
-            const restCoreFqn = `io.github.ccxt.exchanges.${this.capitalize(name)}Core`;
-            content = content.replace(/extends\s\w+Api/g, `extends ${restCoreFqn}`);
-            content = content.replace(/extends\s(\w+)Rest/g, `extends io.github.ccxt.exchanges.$1Core`);
-            content = content.replace(/extends\s(\w+)\b(?!\.)/, `extends ${restCoreFqn}`);
+            // For WS classes, extend the typed REST class (not Core) so WS inherits REST typed methods.
+            // pro.BinanceCore extends io.github.ccxt.exchanges.Binance (the typed REST wrapper)
+            const restTypedFqn = `io.github.ccxt.exchanges.${this.capitalize(name)}`;
+            content = content.replace(/extends\s\w+Api/g, `extends ${restTypedFqn}`);
+            content = content.replace(/extends\s(\w+)Rest/g, `extends io.github.ccxt.exchanges.$1`);
+            content = content.replace(/extends\s(\w+)\b(?!\.)/, `extends ${restTypedFqn}`);
             content = this.postProcessWsJava(content, name);
         }
         content = this.createGeneratedHeader().join('\n') + '\n' + content;
@@ -1125,7 +1124,13 @@ class NewTranspiler {
     }
 
     postProcessWsJava(content: string, name: string): string {
-        const cap = this.capitalize(name);
+        const cap = this.capitalize(name) + 'Core'; // WS classes are now named *Core
+
+        // ── Fix broken method references: ClassName."methodName" → "methodName" ──
+        // The transpiler generates method references as ClassName."methodName" which is
+        // invalid Java (string template syntax). These are used as map values for
+        // message handler dispatch tables. Replace with just the string literal.
+        content = content.replace(new RegExp(`${cap}\\.("\\w+")`, 'gm'), '$1');
 
         // ── Pattern 12: Map casts for client.subscriptions/futures access ──
         content = content.replace(/\(\(Object\)client\)\.subscriptions/gm, '((java.util.Map)client.subscriptions)');
@@ -1951,9 +1956,8 @@ class NewTranspiler {
         const csharp = this.createJavaClass(fileNameNoExt, csharpResult, ws)
 
         if (javaFolder) {
-            // REST classes get Core suffix (e.g., BinanceCore.java); WS classes keep original name
-            const coreSuffix = ws ? '' : 'Core';
-            const outputName = this.capitalize(fileNameNoExt) + coreSuffix + '.java';
+            // Both REST and WS classes get Core suffix (e.g., BinanceCore.java, pro/BinanceCore.java)
+            const outputName = this.capitalize(fileNameNoExt) + 'Core.java';
             overwriteFileAndFolder(javaFolder + outputName, csharp)
         }
     }
