@@ -1,6 +1,5 @@
 package examples;
 
-import io.github.ccxt.Exchange;
 import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Ticker;
 import io.github.ccxt.types.Trade;
@@ -33,7 +32,7 @@ public class ImplicitApi {
         String symbol = "BTC/USDT";
 
         // ==========================================
-        // 1. Unified API — typed methods on Exchange
+        // 1. Unified API — typed methods on Binance
         // ==========================================
         System.out.println("=== Unified Typed API ===\n");
 

@@ -1,0 +1,610 @@
+---
+name: ccxt-java
+description: CCXT cryptocurrency exchange library for Java developers. Covers both REST API (standard) and WebSocket API (real-time). Helps install CCXT, connect to exchanges, fetch market data, place orders, stream live tickers/orderbooks, handle authentication, and manage errors in Java projects. Use when working with crypto exchanges in Java applications, trading systems, or financial software. Requires Java 21+.
+---
+
+# CCXT for Java
+
+A comprehensive guide to using CCXT in Java projects for cryptocurrency exchange integration.
+
+## Installation
+
+### Via Gradle
+```groovy
+// build.gradle
+repositories {
+    mavenCentral()
+}
+dependencies {
+    implementation 'io.github.ccxt:ccxt:latest.release'
+}
+```
+
+### Via Maven
+```xml
+<dependency>
+    <groupId>io.github.ccxt</groupId>
+    <artifactId>ccxt</artifactId>
+    <version>LATEST</version>
+</dependency>
+```
+
+### Requirements
+- Java 21 or higher (uses virtual threads)
+
+## Quick Start
+
+### REST API
+```java
+import io.github.ccxt.exchanges.Binance;
+import io.github.ccxt.types.Ticker;
+
+Binance exchange = new Binance();
+exchange.loadMarkets(false);
+Ticker ticker = exchange.fetchTicker("BTC/USDT");
+System.out.println(ticker.last);
+```
+
+### WebSocket API - Real-time Updates
+```java
+import io.github.ccxt.exchanges.pro.Binance;
+
+var exchange = new Binance();
+exchange.loadMarkets().join();
+while (true) {
+    Object ticker = exchange.watchTicker("BTC/USDT").join();
+    System.out.println(ticker);
+}
+```
+
+## Architecture: Typed Subclasses
+
+Each exchange has two classes following the Go pattern:
+- `BinanceCore` - transpiled untyped class (internal, extends `BinanceApi` extends `Exchange`)
+- `Binance` - typed wrapper extending Core with typed overloads (user-facing)
+
+```java
+// User-facing typed class (recommended)
+Binance exchange = new Binance();
+Ticker ticker = exchange.fetchTicker("BTC/USDT");       // returns Ticker
+List<Trade> trades = exchange.fetchTrades("BTC/USDT");   // returns List<Trade>
+
+// Exchange-specific implicit API methods are also accessible
+Object raw = exchange.publicGetTicker24hr(params).join(); // Binance-specific endpoint
+
+// Properties accessible directly
+exchange.apiKey = "...";
+exchange.secret = "...";
+```
+
+The typed methods use Java method overloading. They coexist safely with untyped methods because Java resolves overloads at compile time: `BinanceCore.java` is compiled without knowledge of `Binance.java`'s typed overloads, so internal calls always bind to untyped varargs.
+
+## REST vs WebSocket
+
+| Feature | REST API | WebSocket API |
+|---------|----------|---------------|
+| **Use for** | One-time queries, placing orders | Real-time monitoring, live price feeds |
+| **Import** | `io.github.ccxt.exchanges.Binance` | `io.github.ccxt.exchanges.pro.Binance` |
+| **Methods** | `fetch*` (fetchTicker, fetchOrderBook) | `watch*` (watchTicker, watchOrderBook) |
+| **Returns** | Typed objects (Ticker, List\<Trade\>) | `CompletableFuture<Object>` (call `.join()`) |
+| **Speed** | Slower (HTTP request/response) | Faster (persistent connection) |
+| **Rate limits** | Strict (1-2 req/sec) | More lenient (continuous stream) |
+| **Best for** | Trading, account management | Price monitoring, arbitrage detection |
+
+## Creating Exchange Instance
+
+### REST API
+```java
+import io.github.ccxt.exchanges.Binance;
+import java.util.Map;
+import java.util.HashMap;
+
+// Public API (no authentication)
+Binance exchange = new Binance();
+
+// Private API (with authentication)
+Map<String, Object> config = new HashMap<>();
+config.put("apiKey", "YOUR_API_KEY");
+config.put("secret", "YOUR_SECRET");
+Binance exchange = new Binance(config);
+```
+
+### WebSocket API
+```java
+import io.github.ccxt.exchanges.pro.Binance;
+
+// Public WebSocket
+var exchange = new Binance();
+
+// Private WebSocket (with authentication)
+Map<String, Object> config = new HashMap<>();
+config.put("apiKey", "YOUR_API_KEY");
+config.put("secret", "YOUR_SECRET");
+var exchange = new Binance(config);
+```
+
+### Dynamic Instantiation (generic, untyped)
+```java
+import io.github.ccxt.Exchange;
+
+// Returns Exchange type - no typed methods, but works for any exchange
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", config);
+Object ticker = exchange.fetchTicker("BTC/USDT").join(); // untyped, returns CompletableFuture
+```
+
+## Common REST Operations
+
+### Loading Markets
+```java
+// Load all available trading pairs (typed)
+Map<String, MarketInterface> markets = exchange.loadMarkets(false);
+
+// Access market information
+MarketInterface btcMarket = markets.get("BTC/USDT");
+System.out.println(btcMarket.base);    // "BTC"
+System.out.println(btcMarket.quote);   // "USDT"
+System.out.println(btcMarket.active);  // true
+```
+
+### Fetching Ticker
+```java
+// Single ticker (typed)
+Ticker ticker = exchange.fetchTicker("BTC/USDT");
+System.out.println(ticker.last);      // Last price
+System.out.println(ticker.bid);       // Best bid
+System.out.println(ticker.ask);       // Best ask
+System.out.println(ticker.baseVolume); // 24h volume
+
+// Async variant
+CompletableFuture<Ticker> future = exchange.fetchTickerAsync("BTC/USDT", null);
+```
+
+### Fetching Order Book
+```java
+// Full orderbook (typed)
+OrderBook orderbook = exchange.fetchOrderBook("BTC/USDT", null, null);
+System.out.println(orderbook.bids.get(0)); // [price, amount]
+System.out.println(orderbook.asks.get(0)); // [price, amount]
+
+// Limited depth
+OrderBook orderbook = exchange.fetchOrderBook("BTC/USDT", 5L, null);
+```
+
+### Fetching Trades
+```java
+// Recent public trades (typed)
+List<Trade> trades = exchange.fetchTrades("BTC/USDT");
+for (Trade t : trades) {
+    System.out.println(t.datetime + " " + t.side + " " + t.price + " x " + t.amount);
+}
+
+// With optional params (pass null to skip)
+List<Trade> trades = exchange.fetchTrades("BTC/USDT", null, 20L, null);
+```
+
+### Fetching OHLCV (Candlesticks)
+```java
+List<OHLCV> candles = exchange.fetchOHLCV("BTC/USDT", "1h", null, 10L, null);
+for (OHLCV c : candles) {
+    System.out.println(c.timestamp + " O:" + c.open + " H:" + c.high + " L:" + c.low + " C:" + c.close);
+}
+```
+
+### Creating Orders
+
+#### Limit Order
+```java
+// Buy limit order (typed)
+Order order = exchange.createOrder("BTC/USDT", "limit", "buy", 0.01, 50000.0, null);
+System.out.println(order.id);
+
+// Sell limit order
+Order order = exchange.createOrder("BTC/USDT", "limit", "sell", 0.01, 60000.0, null);
+```
+
+#### Market Order
+```java
+// Buy market order
+Order order = exchange.createOrder("BTC/USDT", "market", "buy", 0.01, null, null);
+
+// Sell market order
+Order order = exchange.createOrder("BTC/USDT", "market", "sell", 0.01, null, null);
+```
+
+### Fetching Balance
+```java
+Balances balance = exchange.fetchBalance((Map<String, Object>) null);
+// Access via the info map
+System.out.println(balance);
+```
+
+### Fetching Orders
+```java
+// Open orders
+List<Order> openOrders = exchange.fetchOpenOrders("BTC/USDT");
+
+// Closed orders
+List<Order> closedOrders = exchange.fetchClosedOrders("BTC/USDT");
+
+// Single order by ID
+Order order = exchange.fetchOrder("orderId123", "BTC/USDT", null);
+```
+
+### Canceling Orders
+```java
+// Cancel single order
+Order cancelled = exchange.cancelOrder("orderId123", "BTC/USDT", null);
+
+// Cancel all orders for a symbol
+List<Order> cancelled = exchange.cancelAllOrders("BTC/USDT", null);
+```
+
+## Exchange-Specific (Implicit) API
+
+Each exchange class inherits exchange-specific endpoint methods from its Api class. These return `CompletableFuture<Object>` (untyped):
+
+```java
+import io.github.ccxt.exchanges.Binance;
+
+Binance exchange = new Binance();
+exchange.loadMarkets(false);
+
+// Binance-specific public endpoints
+Map<String, Object> params = new HashMap<>();
+params.put("symbol", "BTCUSDT");
+Object rawTicker = exchange.publicGetTicker24hr(params).join();
+
+// Binance-specific private endpoints (requires auth)
+Object accountInfo = exchange.sapiGetAccountInfo(null).join();
+
+// Access raw exchange info
+Object exchangeInfo = exchange.publicGetExchangeInfo(null).join();
+```
+
+## WebSocket Operations (Real-time)
+
+WebSocket classes are in `io.github.ccxt.exchanges.pro`. They return `CompletableFuture<Object>`:
+
+### Watching Ticker
+```java
+import io.github.ccxt.exchanges.pro.Binance;
+
+var exchange = new Binance();
+exchange.loadMarkets().join();
+while (true) {
+    Map<String, Object> ticker = (Map<String, Object>) exchange.watchTicker("BTC/USDT").join();
+    System.out.println("Last: " + ticker.get("last"));
+}
+```
+
+### Watching Order Book
+```java
+var exchange = new Binance();
+exchange.loadMarkets().join();
+while (true) {
+    Map<String, Object> ob = (Map<String, Object>) exchange.watchOrderBook("BTC/USDT").join();
+    List<List<Object>> bids = (List<List<Object>>) ob.get("bids");
+    System.out.println("Best bid: " + bids.get(0));
+}
+```
+
+### Watching Trades
+```java
+var exchange = new Binance();
+exchange.loadMarkets().join();
+while (true) {
+    List<Map<String, Object>> trades = (List<Map<String, Object>>) exchange.watchTrades("BTC/USDT").join();
+    for (var t : trades) {
+        System.out.println(t.get("price") + " " + t.get("amount") + " " + t.get("side"));
+    }
+}
+```
+
+### Watching Your Orders (Private)
+```java
+Map<String, Object> config = Map.of("apiKey", "KEY", "secret", "SECRET");
+var exchange = new Binance(config);
+exchange.loadMarkets().join();
+while (true) {
+    var orders = exchange.watchOrders("BTC/USDT").join();
+    System.out.println(orders);
+}
+```
+
+## Sync vs Async
+
+Java CCXT provides three patterns:
+
+### 1. Typed Sync (blocking)
+```java
+Binance exchange = new Binance();
+Ticker ticker = exchange.fetchTicker("BTC/USDT");  // blocks until result
+```
+
+### 2. Typed Async (non-blocking)
+```java
+Binance exchange = new Binance();
+CompletableFuture<Ticker> future = exchange.fetchTickerAsync("BTC/USDT", null);
+future.thenAccept(ticker -> System.out.println(ticker.last));
+```
+
+### 3. Untyped (CompletableFuture\<Object\>)
+```java
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", null);
+Object result = exchange.fetchTicker("BTC/USDT").join();
+```
+
+## Complete Method Reference
+
+### Market Data Methods
+
+#### Tickers & Prices
+- `fetchTicker(symbol)` - Fetch ticker for one symbol
+- `fetchTickers(symbols, params)` - Fetch multiple tickers
+- `fetchBidsAsks(symbols, params)` - Fetch best bid/ask
+- `fetchLastPrices(symbols, params)` - Fetch last prices
+- `fetchMarkPrice(symbol, params)` - Fetch mark price (derivatives)
+
+#### Order Books
+- `fetchOrderBook(symbol, limit, params)` - Fetch order book
+
+#### Trades
+- `fetchTrades(symbol, since, limit, params)` - Fetch public trades
+- `fetchMyTrades(symbol, since, limit, params)` - Fetch your trades (auth required)
+
+#### OHLCV (Candlesticks)
+- `fetchOHLCV(symbol, timeframe, since, limit, params)` - Fetch candlestick data
+
+### Account & Balance
+- `fetchBalance(params)` - Fetch account balance (auth required)
+- `fetchAccounts(params)` - Fetch sub-accounts
+- `fetchLedger(code, since, limit, params)` - Fetch ledger history
+
+### Trading Methods
+
+#### Creating Orders
+- `createOrder(symbol, type, side, amount, price, params)` - Create order
+- `createOrders(orders, params)` - Create multiple orders
+- `editOrder(id, symbol, type, side, amount, price, params)` - Modify order
+
+#### Managing Orders
+- `fetchOrder(id, symbol, params)` - Fetch single order
+- `fetchOrders(symbol, since, limit, params)` - Fetch all orders
+- `fetchOpenOrders(symbol, since, limit, params)` - Fetch open orders
+- `fetchClosedOrders(symbol, since, limit, params)` - Fetch closed orders
+- `cancelOrder(id, symbol, params)` - Cancel single order
+- `cancelAllOrders(symbol, params)` - Cancel all orders
+
+### Derivatives & Futures
+- `fetchPosition(symbol, params)` - Fetch single position
+- `fetchPositions(symbols, params)` - Fetch all positions
+- `fetchFundingRate(symbol, params)` - Current funding rate
+- `fetchFundingRateHistory(symbol, since, limit, params)` - Funding rate history
+- `setLeverage(leverage, symbol, params)` - Set leverage
+- `setMarginMode(marginMode, symbol, params)` - Set margin mode
+
+### Deposits & Withdrawals
+- `fetchDepositAddress(code, params)` - Get deposit address
+- `withdraw(code, amount, address, tag, params)` - Withdraw funds
+- `transfer(code, amount, fromAccount, toAccount, params)` - Internal transfer
+- `fetchDeposits(code, since, limit, params)` - Fetch deposit history
+- `fetchWithdrawals(code, since, limit, params)` - Fetch withdrawal history
+
+### Fees
+- `fetchTradingFee(symbol, params)` - Trading fee for symbol
+- `fetchTradingFees(params)` - All trading fees
+
+### WebSocket Methods
+
+All REST methods have WebSocket equivalents with `watch*` prefix:
+- `watchTicker(symbol)` - Watch single ticker
+- `watchTickers(symbols)` - Watch multiple tickers
+- `watchOrderBook(symbol)` - Watch order book updates
+- `watchTrades(symbol)` - Watch public trades
+- `watchOHLCV(symbol, timeframe)` - Watch candlestick updates
+- `watchBalance()` - Watch balance updates (auth required)
+- `watchOrders(symbol)` - Watch your order updates (auth required)
+- `watchMyTrades(symbol)` - Watch your trade updates (auth required)
+
+### Optional Parameters
+
+Java typed methods use null for optional parameters:
+
+```java
+// Full params
+List<Trade> trades = exchange.fetchTrades("BTC/USDT", sinceTimestamp, 100L, extraParams);
+
+// Skip optional params with null
+List<Trade> trades = exchange.fetchTrades("BTC/USDT", null, 100L, null);
+
+// Convenience overload (required params only)
+List<Trade> trades = exchange.fetchTrades("BTC/USDT");
+```
+
+## Authentication
+
+### Setting API Keys
+```java
+Map<String, Object> config = new HashMap<>();
+config.put("apiKey", System.getenv("BINANCE_API_KEY"));
+config.put("secret", System.getenv("BINANCE_SECRET"));
+Binance exchange = new Binance(config);
+
+// Or set after creation
+exchange.apiKey = System.getenv("BINANCE_API_KEY");
+exchange.secret = System.getenv("BINANCE_SECRET");
+```
+
+### Testing Authentication
+```java
+try {
+    Balances balance = exchange.fetchBalance((Map<String, Object>) null);
+    System.out.println("Authentication successful!");
+} catch (CompletionException e) {
+    if (e.getCause() instanceof AuthenticationError) {
+        System.out.println("Invalid API credentials");
+    }
+}
+```
+
+## Error Handling
+
+### Exception Hierarchy
+```
+BaseError
++- NetworkError (recoverable - retry)
+|  +- RequestTimeout
+|  +- ExchangeNotAvailable
+|  +- RateLimitExceeded
+|  +- DDoSProtection
++- ExchangeError (non-recoverable - don't retry)
+   +- AuthenticationError
+   +- InsufficientFunds
+   +- InvalidOrder
+   +- BadSymbol
+   +- NotSupported
+```
+
+### Basic Error Handling
+```java
+import io.github.ccxt.errors.*;
+import java.util.concurrent.CompletionException;
+
+try {
+    Ticker ticker = exchange.fetchTicker("BTC/USDT");
+} catch (CompletionException e) {
+    Throwable cause = e.getCause();
+    if (cause instanceof NetworkError) {
+        System.out.println("Network error - retry: " + cause.getMessage());
+    } else if (cause instanceof ExchangeError) {
+        System.out.println("Exchange error - do not retry: " + cause.getMessage());
+    }
+}
+```
+
+Note: Typed sync methods wrap the `CompletableFuture.join()` call, so exceptions are wrapped in `CompletionException`. Unwrap with `.getCause()`.
+
+### Specific Exception Handling
+```java
+try {
+    Order order = exchange.createOrder("BTC/USDT", "limit", "buy", 0.01, 50000.0, null);
+} catch (CompletionException e) {
+    Throwable cause = e.getCause();
+    if (cause instanceof InsufficientFunds) {
+        System.out.println("Not enough balance");
+    } else if (cause instanceof InvalidOrder) {
+        System.out.println("Invalid order parameters");
+    } else if (cause instanceof AuthenticationError) {
+        System.out.println("Check your API credentials");
+    }
+}
+```
+
+## Rate Limiting
+
+### Built-in Rate Limiter (Enabled by Default)
+```java
+// Rate limiting is enabled by default
+Binance exchange = new Binance();
+System.out.println(exchange.enableRateLimit); // true
+System.out.println(exchange.rateLimit);       // milliseconds between requests
+```
+
+## Proxy Configuration
+
+```java
+// HTTP Proxy
+exchange.httpProxy = "http://your-proxy-host:port";
+
+// HTTPS Proxy
+exchange.httpsProxy = "https://your-proxy-host:port";
+
+// SOCKS Proxy
+exchange.socksProxy = "socks://your-proxy-host:port";
+```
+
+## Common Pitfalls
+
+### Typed vs Untyped Methods
+```java
+// Typed (recommended) - use concrete exchange class
+Binance exchange = new Binance();
+Ticker ticker = exchange.fetchTicker("BTC/USDT");  // returns Ticker
+
+// Untyped - generic Exchange reference
+Exchange exchange = Exchange.dynamicallyCreateInstance("binance", null);
+Object result = exchange.fetchTicker("BTC/USDT").join();  // returns Object
+```
+
+### Null for Optional Parameters
+```java
+// Wrong - ambiguous with varargs
+exchange.fetchBalance(null);
+
+// Correct - cast null to specific type
+exchange.fetchBalance((Map<String, Object>) null);
+```
+
+### Wrong Symbol Format
+```java
+// Wrong
+"BTCUSDT"    // No separator
+"BTC-USDT"   // Dash separator
+"btc/usdt"   // Lowercase
+
+// Correct
+"BTC/USDT"   // Unified CCXT format
+```
+
+### REST for Real-time Monitoring
+```java
+// Wrong - wastes rate limits
+while (true) {
+    Ticker ticker = exchange.fetchTicker("BTC/USDT");
+    Thread.sleep(1000);
+}
+
+// Correct - use WebSocket
+var wsExchange = new io.github.ccxt.exchanges.pro.Binance();
+wsExchange.loadMarkets().join();
+while (true) {
+    Object ticker = wsExchange.watchTicker("BTC/USDT").join();
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**1. "Java 21 required"**
+- Solution: CCXT Java requires Java 21+ for virtual threads
+
+**2. "RateLimitExceeded"**
+- Solution: Rate limiting is enabled by default. If you disabled it, re-enable with `exchange.enableRateLimit = true`
+
+**3. "AuthenticationError"**
+- Solution: Check API key and secret
+- Verify API key permissions on exchange
+- Check system clock is synced
+
+**4. "NotSupported"**
+- Solution: Check `exchange.has` map for method availability before calling
+
+**5. Typed methods not visible**
+- Solution: Use the concrete exchange type (`Binance exchange = new Binance()`) not the generic `Exchange` type
+
+### Debugging
+```java
+// Enable verbose logging
+exchange.verbose = true;
+
+// Check exchange capabilities
+System.out.println(exchange.has);
+```
+
+## Learn More
+
+- [CCXT Manual](https://docs.ccxt.com/)
+- [CCXT Pro Documentation](https://docs.ccxt.com/en/latest/ccxt.pro.html)
+- [Supported Exchanges](https://github.com/ccxt/ccxt#supported-cryptocurrency-exchange-markets)
+- [GitHub Repository](https://github.com/ccxt/ccxt)

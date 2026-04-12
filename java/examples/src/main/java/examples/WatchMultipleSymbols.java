@@ -1,12 +1,9 @@
 package examples;
 
-import io.github.ccxt.Exchange;
 import io.github.ccxt.exchanges.pro.Binance;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Watch tickers for multiple symbols simultaneously via WebSocket.
@@ -19,20 +16,17 @@ public class WatchMultipleSymbols {
 
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
-        Exchange exchange = new Binance();
+        Binance exchange = new Binance();
         exchange.verbose = false;
 
         System.out.println("Loading markets...");
-        exchange.loadMarkets().get(60, TimeUnit.SECONDS);
+        exchange.loadMarkets().join();
 
         List<String> symbols = List.of("BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT");
         System.out.println("Watching tickers for " + symbols + " (10 updates)...\n");
 
         for (int i = 0; i < 10; i++) {
-            CompletableFuture<Object> future = exchange.watchTickers(symbols);
-            Object result = future.get(30, TimeUnit.SECONDS);
-
-            Map<String, Map<String, Object>> tickers = (Map<String, Map<String, Object>>) result;
+            Map<String, Object> tickers = (Map<String, Object>) exchange.watchTickers(symbols).join();
 
             System.out.println("=== Update #" + (i + 1) + " ===");
             System.out.printf("%-12s %12s %12s %12s %10s%n",
@@ -40,7 +34,7 @@ public class WatchMultipleSymbols {
             System.out.println("-".repeat(60));
 
             for (String sym : symbols) {
-                Map<String, Object> t = tickers.get(sym);
+                Map<String, Object> t = (Map<String, Object>) tickers.get(sym);
                 if (t != null) {
                     System.out.printf("%-12s %12s %12s %12s %10s%n",
                             t.get("symbol"),

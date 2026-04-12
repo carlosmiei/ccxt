@@ -168,13 +168,11 @@ cd ccxt/java
 ```
 
 ```Java
-import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Ticker;
 
-Exchange raw = Exchange.dynamicallyCreateInstance("binance", null);
-ExchangeTyped exchange = new ExchangeTyped(raw);
-exchange.loadMarkets();
+Binance exchange = new Binance();
+exchange.loadMarkets(false);
 
 Ticker ticker = exchange.fetchTicker("BTC/USDT");
 System.out.println(ticker.symbol + " " + ticker.last);

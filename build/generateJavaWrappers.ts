@@ -1,16 +1,14 @@
 #!/usr/bin/env tsx
 /**
- * Java Typed Method Generator for CCXT
+ * Java Typed Wrapper Generator for CCXT
  *
- * Reads TypeScript Exchange.ts via ast-transpiler to extract method signatures,
- * then injects typed overloads directly into Exchange.java.
+ * Generates per-exchange typed subclasses that extend the transpiled Core classes.
+ * Each typed class (e.g., Binance extends BinanceCore) adds typed method overloads
+ * that delegate to the parent's untyped methods via super.method().
  *
- * The typed methods coexist with the untyped methods via Java overloading:
- * - fetchTrades(String, Long, Long, Map) → List<Trade>   (typed, user-facing)
- * - fetchTrades(Object, Object...)       → CompletableFuture<Object> (untyped, internal)
- *
- * Java's overload resolution correctly picks the typed version for user code
- * (String args) and the untyped version for internal transpiled code (Object args).
+ * This is safe because Java resolves overloads at compile time: BinanceCore.java
+ * is compiled without knowledge of Binance.java's typed overloads, so internal
+ * calls always bind to the untyped varargs methods.
  *
  * Usage: tsx build/generateJavaWrappers.ts
  */
@@ -19,14 +17,7 @@ import Transpiler from "ast-transpiler";
 import * as fs from 'fs';
 
 const TS_BASE_FILE = './ts/src/base/Exchange.ts';
-const EXCHANGE_JAVA_FILE = './java/lib/src/main/java/io/github/ccxt/Exchange.java';
-// Shared JSON file consumed by the Java transpiler (javaTranspiler.ts) to know which
-// methods have typed overloads and need (Object) casts in internal calls.
-const TYPED_METHODS_JSON = './build/java-typed-methods.json';
-
-// Marker comment used to find the injection point in Exchange.java
-const TYPED_METHODS_MARKER = '// === TYPED METHODS START (AUTO-GENERATED — DO NOT EDIT BELOW THIS LINE) ===';
-const TYPED_METHODS_END_MARKER = '// === TYPED METHODS END ===';
+const EXCHANGES_FOLDER = './java/lib/src/main/java/io/github/ccxt/exchanges/';
 
 // Known CCXT types that have Java equivalents in io.github.ccxt.types
 const KNOWN_TYPES = new Set([
@@ -66,42 +57,33 @@ function tsTypeToJavaType(tsType: string | undefined, isReturn = false): string 
 }
 
 function tsReturnTypeToJava(methodName: string, tsReturnType: string): { javaType: string, isArray: boolean, elementType: string | null } | null {
-    // Special cases
     if (methodName === 'fetchTime') return { javaType: 'Long', isArray: false, elementType: null };
     if (methodName.startsWith('watchOrderBook')) return { javaType: 'OrderBook', isArray: false, elementType: null };
-    if (methodName === 'watchOHLCVForSymbols') return null; // complex nested type, skip
+    if (methodName === 'watchOHLCVForSymbols') return null;
 
     const isPromise = tsReturnType.startsWith('Promise<') && tsReturnType.endsWith('>');
     let inner = isPromise ? tsReturnType.slice(8, -1) : tsReturnType;
 
-    // Array type
     if (inner.endsWith('[]')) {
         const elem = inner.slice(0, -2);
         if (KNOWN_TYPES.has(elem)) return { javaType: `List<${elem}>`, isArray: true, elementType: elem };
         if (elem === 'string') return { javaType: 'List<String>', isArray: true, elementType: null };
         return null;
     }
-
-    // Known type
     if (KNOWN_TYPES.has(inner)) return { javaType: inner, isArray: false, elementType: null };
-
-    // Primitive
     if (isIntegerType(inner) || inner === 'number' && methodName === 'fetchTime') return { javaType: 'Long', isArray: false, elementType: null };
     if (isNumberType(inner)) return { javaType: 'Double', isArray: false, elementType: null };
     if (isStringType(inner)) return { javaType: 'String', isArray: false, elementType: null };
     if (isBooleanType(inner)) return { javaType: 'Boolean', isArray: false, elementType: null };
-
-    // Dict/object - skip
     if (isObjectType(inner)) return null;
     if (inner === 'void') return null;
     if (inner.startsWith('Dictionary<')) return null;
     if (inner.startsWith('{')) return null;
     if (inner === 'string[][]') return null;
-
     return null;
 }
 
-// --- Allowed method filter (matches Go/C# transpiler logic) ---
+// --- Allowed method filter ---
 const ALLOWED_PREFIXES = ['fetch', 'create', 'edit', 'cancel', 'setP', 'setM', 'setL', 'transfer', 'withdraw', 'watch', 'unWatch'];
 const BLACKLIST = new Set([
     'fetch', 'fetchCurrenciesWs', 'fetchMarketsWs', 'setSandBoxMode', 'loadOrderBook',
@@ -116,45 +98,6 @@ const BLACKLIST = new Set([
     'fetchRestOrderBookSafe', 'fetchPortfolioDetails', 'unWatch', 'unWatchChannel', 'unWatchMultiple',
     'unWatchPrivate', 'unWatchPublic', 'unWatchPublicMultiple', 'unWatchTopics',
 ]);
-
-/**
- * Scan Exchange.java (and optionally exchange files) to find methods that are called
- * internally with zero args, e.g., this.fetchAccounts().join() or exchange.fetchBalance().
- * These must NOT get zero-arg typed convenience overloads.
- */
-function detectZeroArgInternalCalls(): Set<string> {
-    const result = new Set<string>();
-    const files = [EXCHANGE_JAVA_FILE];
-    // Also scan exchange implementation files
-    const exchangesDir = './java/lib/src/main/java/io/github/ccxt/exchanges/';
-    if (fs.existsSync(exchangesDir)) {
-        for (const f of fs.readdirSync(exchangesDir).filter(f => f.endsWith('.java'))) {
-            files.push(exchangesDir + f);
-        }
-    }
-    // Also scan test files
-    const testsDir = './java/tests/src/main/java/tests/exchange/';
-    if (fs.existsSync(testsDir)) {
-        for (const f of fs.readdirSync(testsDir).filter(f => f.endsWith('.java'))) {
-            files.push(testsDir + f);
-        }
-    }
-    // Match patterns like: this.fetchAccounts() or exchange.fetchBalance()
-    // where there are no arguments inside the parens
-    const pattern = /(?:this|exchange)\.(\w+)\(\)/g;
-    for (const file of files) {
-        try {
-            const content = fs.readFileSync(file, 'utf-8');
-            let match;
-            while ((match = pattern.exec(content)) !== null) {
-                result.add(match[1]);
-            }
-        } catch { /* skip missing files */ }
-    }
-    return result;
-}
-
-const ZERO_ARG_INTERNAL_CALLS = detectZeroArgInternalCalls();
 
 function shouldCreateWrapper(name: string): boolean {
     if (BLACKLIST.has(name)) return false;
@@ -203,7 +146,6 @@ function parseMethodsFromTS(): MethodInfo[] {
             const javaType = tsTypeToJavaType(p.type, false);
 
             if (isParams) {
-                // params always goes last and is Map<String, Object>
                 optionalParams.push({ name: 'params', javaType: 'Map<String, Object>', isOptional: true, defaultValue: 'null' });
             } else if (isOptional) {
                 let defaultValue: string | null = null;
@@ -216,7 +158,6 @@ function parseMethodsFromTS(): MethodInfo[] {
             }
         }
 
-        // Ensure params is always present at the end
         if (!optionalParams.some(p => p.name === 'params')) {
             optionalParams.push({ name: 'params', javaType: 'Map<String, Object>', isOptional: true, defaultValue: 'null' });
         }
@@ -244,6 +185,10 @@ function camelCase(name: string): string {
     return name.charAt(0).toLowerCase() + name.slice(1);
 }
 
+function capitalize(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function genReturnExpr(m: MethodInfo): string {
     if (m.isArray && m.elementType) return `toTypedList(res, ${m.elementType}::new)`;
     if (m.javaReturnType === 'Long') return '(res instanceof Number n) ? n.longValue() : null';
@@ -265,19 +210,13 @@ function genAsyncReturnExpr(m: MethodInfo): string {
 }
 
 /**
- * Generate the call expression that delegates to the untyped method.
- * ALL args are cast to (Object) to ensure Java picks the untyped varargs overload
- * instead of recursing into the typed overload. This is necessary because:
- * - Casting just the first arg works when the typed method's first param is specific (e.g., String)
- * - But fails when the typed method's first param is also Object (e.g., watchLiquidationsForSymbols)
- * - Casting all args guarantees the typed fixed-arity overload never matches
+ * Generate the super.method() delegation call.
+ * super.method() bypasses the current class and goes to the Core parent,
+ * which is exactly what we want — no overload confusion possible.
  */
 function genDelegateCall(methodName: string, allParams: ParamInfo[]): string {
-    if (allParams.length === 0) {
-        return `this.${methodName}((Object) null)`;
-    }
-    const args = allParams.map(p => `(Object) ${p.name}`).join(', ');
-    return `this.${methodName}(${args})`;
+    const args = allParams.map(p => p.name).join(', ');
+    return `super.${methodName}(${args})`;
 }
 
 function genMethod(m: MethodInfo): string {
@@ -289,37 +228,26 @@ function genMethod(m: MethodInfo): string {
     const lines: string[] = [];
 
     // Full sync method with all params
+    lines.push(`    @SuppressWarnings("unchecked")`);
     lines.push(`    public ${m.javaReturnType} ${methodName}(${fullParamDecl}) {`);
     lines.push(`        Object res = ${delegateCall}.join();`);
     lines.push(`        return ${genReturnExpr(m)};`);
     lines.push(`    }`);
 
-    // Convenience overload: required params only (optional params default to null)
-    // Skip when:
-    // 1. Zero-arg overloads for methods called internally with zero args
-    // 2. When all required params are Object type (indistinguishable from untyped varargs)
-    if (m.optionalParams.length > 0) {
-        const hasZeroArgConflict = ZERO_ARG_INTERNAL_CALLS.has(m.name) && m.requiredParams.length === 0;
-        const allRequiredAreObject = m.requiredParams.length > 0 && m.requiredParams.every(p => p.javaType === 'Object');
-        if (!hasZeroArgConflict && !allRequiredAreObject) {
-            const reqDecl = m.requiredParams.map(p => `${p.javaType} ${p.name}`).join(', ');
-            const reqArgs = m.requiredParams.map(p => p.name).join(', ');
-            // Cast nulls to their specific types to avoid ambiguity with Object... varargs
-            const defaults = m.optionalParams.map(p => {
-                if (p.defaultValue && p.defaultValue !== 'null') return p.defaultValue;
-                return `(${p.javaType}) null`;
-            }).join(', ');
-            const sep = reqArgs ? ', ' : '';
-            if (reqDecl) {
-                lines.push(`    public ${m.javaReturnType} ${methodName}(${reqDecl}) { return ${methodName}(${reqArgs}${sep}${defaults}); }`);
-            } else {
-                lines.push(`    public ${m.javaReturnType} ${methodName}() { return ${methodName}(${defaults}); }`);
-            }
-        }
+    // Convenience overload: required params only
+    if (m.optionalParams.length > 0 && m.requiredParams.length > 0) {
+        const reqDecl = m.requiredParams.map(p => `${p.javaType} ${p.name}`).join(', ');
+        const reqArgs = m.requiredParams.map(p => p.name).join(', ');
+        const defaults = m.optionalParams.map(p => {
+            if (p.defaultValue && p.defaultValue !== 'null') return p.defaultValue;
+            return `(${p.javaType}) null`;
+        }).join(', ');
+        lines.push(`    public ${m.javaReturnType} ${methodName}(${reqDecl}) { return ${methodName}(${reqArgs}, ${defaults}); }`);
     }
 
     // Async method (full params)
     if (!m.isWatch) {
+        lines.push(`    @SuppressWarnings("unchecked")`);
         lines.push(`    public CompletableFuture<${m.javaReturnType}> ${methodName}Async(${fullParamDecl}) {`);
         lines.push(`        return ${delegateCall}.thenApply(${genAsyncReturnExpr(m)});`);
         lines.push(`    }`);
@@ -328,106 +256,85 @@ function genMethod(m: MethodInfo): string {
     return lines.join('\n');
 }
 
-function categorize(name: string): string {
-    if (/^fetch(Ticker|OrderBook|Trade|OHLCV|Market|Currenc|BidsAsks|MarkPrice|L2|Time)/.test(name)) return 'Market Data';
-    if (/^(create|edit|cancel|fetchOrder|fetchOpen.*Order|fetchClosed|fetchCanceled|fetchMyTrade|fetchMyLiquid|fetchOrderTrade)/.test(name)) return 'Trading';
-    if (/^(fetchBalance|fetchAccount|loadAccount)/.test(name)) return 'Account';
-    if (/^(withdraw|transfer|fetchDeposit|fetchWithdraw|createDeposit|fetchTransaction)/.test(name)) return 'Funding';
-    if (/^(fetchPosition|fetchFunding|fetchOpenInterest|fetchLeverage|setLeverage|setMargin|setPosition|fetchLong|fetchMarginAdj|fetchMarginMode|closePosition|closeAllPosition)/.test(name)) return 'Derivatives';
-    if (/^fetchTrading(Fee)/.test(name)) return 'Fees';
-    if (/^fetchLedger/.test(name)) return 'Ledger';
-    if (/^(fetchBorrow|fetchCrossBorrow|fetchIsolatedBorrow)/.test(name)) return 'Borrow';
-    if (/^watch/.test(name)) return 'WebSocket';
-    return 'Other';
-}
+/**
+ * Generate a typed exchange wrapper class that extends the Core class.
+ *
+ * e.g., Binance extends BinanceCore with typed overloads.
+ */
+function generateTypedExchangeClass(exchangeId: string, methods: MethodInfo[]): string {
+    const className = capitalize(exchangeId);
+    const coreClassName = className + 'Core';
 
-function generateTypedMethodsBlock(methods: MethodInfo[]): string {
-    const cats: Record<string, MethodInfo[]> = {};
+    const lines: string[] = [];
+
+    // Header
+    lines.push(`package io.github.ccxt.exchanges;`);
+    lines.push(``);
+    lines.push(`import io.github.ccxt.types.*;`);
+    lines.push(``);
+    lines.push(`import java.util.List;`);
+    lines.push(`import java.util.Map;`);
+    lines.push(`import java.util.concurrent.CompletableFuture;`);
+    lines.push(`import java.util.stream.Collectors;`);
+    lines.push(``);
+    lines.push(`// PLEASE DO NOT EDIT THIS FILE, IT IS GENERATED AND WILL BE OVERWRITTEN:`);
+    lines.push(`// https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code`);
+    lines.push(``);
+    lines.push(`/**`);
+    lines.push(` * Typed wrapper for ${exchangeId}. Extends ${coreClassName} with typed method overloads.`);
+    lines.push(` */`);
+    lines.push(`public class ${className} extends ${coreClassName} {`);
+    lines.push(``);
+
+    // Constructors
+    lines.push(`    public ${className}() {`);
+    lines.push(`        super();`);
+    lines.push(`    }`);
+    lines.push(``);
+    lines.push(`    public ${className}(Object options) {`);
+    lines.push(`        super(options);`);
+    lines.push(`    }`);
+    lines.push(``);
+
+    // Helper
+    lines.push(`    @SuppressWarnings("unchecked")`);
+    lines.push(`    protected static <T> List<T> toTypedList(Object raw, java.util.function.Function<Object, T> ctor) {`);
+    lines.push(`        return ((List<Object>) raw).stream().map(ctor).collect(Collectors.toList());`);
+    lines.push(`    }`);
+    lines.push(``);
+
+    // loadMarkets special overloads
+    lines.push(`    // --- loadMarkets (special: first arg is boolean reload) ---`);
+    lines.push(`    @SuppressWarnings("unchecked")`);
+    lines.push(`    public Map<String, MarketInterface> loadMarkets(boolean reload) {`);
+    lines.push(`        Object res = super.loadMarkets(reload).join();`);
+    lines.push(`        java.util.LinkedHashMap<String, MarketInterface> result = new java.util.LinkedHashMap<>();`);
+    lines.push(`        for (Map.Entry<String, Object> entry : ((Map<String, Object>) res).entrySet()) {`);
+    lines.push(`            result.put(entry.getKey(), new MarketInterface(entry.getValue()));`);
+    lines.push(`        }`);
+    lines.push(`        return result;`);
+    lines.push(`    }`);
+    lines.push(`    @SuppressWarnings("unchecked")`);
+    lines.push(`    public CompletableFuture<Map<String, MarketInterface>> loadMarketsAsync(boolean reload) {`);
+    lines.push(`        return super.loadMarkets(reload).thenApply(res -> {`);
+    lines.push(`            java.util.LinkedHashMap<String, MarketInterface> result = new java.util.LinkedHashMap<>();`);
+    lines.push(`            for (Map.Entry<String, Object> entry : ((Map<String, Object>) res).entrySet()) {`);
+    lines.push(`                result.put(entry.getKey(), new MarketInterface(entry.getValue()));`);
+    lines.push(`            }`);
+    lines.push(`            return result;`);
+    lines.push(`        });`);
+    lines.push(`    }`);
+    lines.push(``);
+
+    // All typed methods
     for (const m of methods) {
-        const cat = categorize(m.name);
-        (cats[cat] = cats[cat] || []).push(m);
+        lines.push(genMethod(m));
+        lines.push('');
     }
 
-    const sections: string[] = [];
+    lines.push(`}`);
 
-    // Add the toTypedList helper
-    sections.push(`    @SuppressWarnings("unchecked")`);
-    sections.push(`    protected static <T> List<T> toTypedList(Object raw, java.util.function.Function<Object, T> ctor) {`);
-    sections.push(`        return ((List<Object>) raw).stream().map(ctor).collect(java.util.stream.Collectors.toList());`);
-    sections.push(`    }`);
-    sections.push('');
-
-    // Special: loadMarkets typed overloads
-    sections.push(`    // --- loadMarkets (special: first arg is boolean reload) ---`);
-    sections.push(`    @SuppressWarnings("unchecked")`);
-    sections.push(`    public Map<String, io.github.ccxt.types.MarketInterface> loadMarkets(boolean reload) {`);
-    sections.push(`        Object res = this.loadMarkets((Object) reload).join();`);
-    sections.push(`        java.util.LinkedHashMap<String, io.github.ccxt.types.MarketInterface> result = new java.util.LinkedHashMap<>();`);
-    sections.push(`        for (Map.Entry<String, Object> entry : ((Map<String, Object>) res).entrySet()) {`);
-    sections.push(`            result.put(entry.getKey(), new io.github.ccxt.types.MarketInterface(entry.getValue()));`);
-    sections.push(`        }`);
-    sections.push(`        return result;`);
-    sections.push(`    }`);
-    sections.push(`    @SuppressWarnings("unchecked")`);
-    sections.push(`    public CompletableFuture<Map<String, io.github.ccxt.types.MarketInterface>> loadMarketsAsync(boolean reload) {`);
-    sections.push(`        return this.loadMarkets((Object) reload).thenApply(res -> {`);
-    sections.push(`            java.util.LinkedHashMap<String, io.github.ccxt.types.MarketInterface> result = new java.util.LinkedHashMap<>();`);
-    sections.push(`            for (Map.Entry<String, Object> entry : ((Map<String, Object>) res).entrySet()) {`);
-    sections.push(`                result.put(entry.getKey(), new io.github.ccxt.types.MarketInterface(entry.getValue()));`);
-    sections.push(`            }`);
-    sections.push(`            return result;`);
-    sections.push(`        });`);
-    sections.push(`    }`);
-    sections.push('');
-
-    for (const [cat, ms] of Object.entries(cats)) {
-        sections.push(`    // ==========================================`);
-        sections.push(`    // ${cat}`);
-        sections.push(`    // ==========================================\n`);
-        for (const m of ms) {
-            sections.push(`    @SuppressWarnings("unchecked")`);
-            sections.push(genMethod(m));
-            sections.push('');
-        }
-    }
-
-    return sections.join('\n');
-}
-
-function injectIntoExchangeJava(typedMethodsBlock: string) {
-    let content = fs.readFileSync(EXCHANGE_JAVA_FILE, 'utf-8');
-
-    // Check if markers already exist (from a previous run)
-    const startIdx = content.indexOf(TYPED_METHODS_MARKER);
-    const endIdx = content.indexOf(TYPED_METHODS_END_MARKER);
-
-    if (startIdx !== -1 && endIdx !== -1) {
-        // Replace existing typed methods block
-        const beforeMarker = content.substring(0, startIdx);
-        const afterEndMarker = content.substring(endIdx + TYPED_METHODS_END_MARKER.length);
-        content = beforeMarker + TYPED_METHODS_MARKER + '\n\n' + typedMethodsBlock + '\n\n' + TYPED_METHODS_END_MARKER + afterEndMarker;
-    } else {
-        // First time: inject before the closing } of the class
-        const lastBrace = content.lastIndexOf('}');
-        if (lastBrace === -1) {
-            throw new Error('Could not find closing } in Exchange.java');
-        }
-        const before = content.substring(0, lastBrace);
-        const after = content.substring(lastBrace);
-        content = before + '\n    ' + TYPED_METHODS_MARKER + '\n\n' + typedMethodsBlock + '\n\n    ' + TYPED_METHODS_END_MARKER + '\n' + after;
-    }
-
-    // Ensure types import is present
-    if (!content.includes('import io.github.ccxt.types.*;')) {
-        // Add after the last existing import
-        const lastImportIdx = content.lastIndexOf('\nimport ');
-        if (lastImportIdx !== -1) {
-            const endOfImportLine = content.indexOf('\n', lastImportIdx + 1);
-            content = content.substring(0, endOfImportLine + 1) + 'import io.github.ccxt.types.*;\n' + content.substring(endOfImportLine + 1);
-        }
-    }
-
-    fs.writeFileSync(EXCHANGE_JAVA_FILE, content, 'utf-8');
+    return lines.join('\n');
 }
 
 // --- Main ---
@@ -437,23 +344,29 @@ const restCount = methods.filter(m => !m.isWatch).length;
 const wsCount = methods.filter(m => m.isWatch).length;
 console.log(`Found ${methods.length} methods (REST: ${restCount}, WS: ${wsCount})`);
 
-// Show a few examples with params
 for (const m of methods.slice(0, 5)) {
     const allParams = [...m.requiredParams, ...m.optionalParams];
     console.log(`  ${m.name}(${allParams.map(p => `${p.javaType} ${p.name}${p.isOptional ? '?' : ''}`).join(', ')}) -> ${m.javaReturnType}`);
 }
 
-const typedBlock = generateTypedMethodsBlock(methods);
-console.log(`\nGenerated ${typedBlock.split('\n').length} lines of typed methods`);
+// Find all Core exchange files and generate typed wrappers
+if (!fs.existsSync(EXCHANGES_FOLDER)) {
+    console.error(`Exchanges folder not found: ${EXCHANGES_FOLDER}`);
+    process.exit(1);
+}
 
-console.log(`\nInjecting into ${EXCHANGE_JAVA_FILE}...`);
-injectIntoExchangeJava(typedBlock);
+const coreFiles = fs.readdirSync(EXCHANGES_FOLDER).filter(f => f.endsWith('Core.java'));
+let generated = 0;
 
-// Export the method list for the Java transpiler to use as its cast target set.
-// The transpiler reads this JSON to know which methods need (Object) casts on args.
-// Also include loadMarkets which has a special typed overload.
-const typedMethodNames = ['loadMarkets', ...methods.map(m => camelCase(m.name))];
-fs.writeFileSync(TYPED_METHODS_JSON, JSON.stringify(typedMethodNames, null, 2), 'utf-8');
-console.log(`Exported ${typedMethodNames.length} method names to ${TYPED_METHODS_JSON}`);
+for (const coreFile of coreFiles) {
+    const exchangeId = coreFile.replace('Core.java', '').toLowerCase();
+    const className = capitalize(exchangeId);
+    const outputPath = `${EXCHANGES_FOLDER}${className}.java`;
 
+    const content = generateTypedExchangeClass(exchangeId, methods);
+    fs.writeFileSync(outputPath, content, 'utf-8');
+    generated++;
+}
+
+console.log(`\nGenerated ${generated} typed exchange wrappers in ${EXCHANGES_FOLDER}`);
 console.log('Done!');

@@ -1,11 +1,10 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Ticker;
 import io.github.ccxt.types.Tickers;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Fetch multiple tickers and display a price comparison table.
@@ -16,12 +15,7 @@ import java.util.Map;
 public class FetchMultipleTickers {
 
     public static void main(String[] args) {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-
-        System.out.println("Exchange: " + exchangeId);
-        System.out.println();
-
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         exchange.loadMarkets(false);
 

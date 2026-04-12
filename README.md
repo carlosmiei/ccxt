@@ -356,19 +356,17 @@ cd ccxt/java
 ```
 
 ```Java
-import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Ticker;
 
-Exchange raw = Exchange.dynamicallyCreateInstance("binance", null);
-ExchangeTyped exchange = new ExchangeTyped(raw);
-exchange.loadMarkets();
+Binance exchange = new Binance();
+exchange.loadMarkets(false);
 
 Ticker ticker = exchange.fetchTicker("BTC/USDT");
 System.out.println(ticker.symbol + " " + ticker.last);
 ```
 
-The typed wrapper (`ExchangeTyped`) provides strongly-typed return values. Async methods returning `CompletableFuture` are also available:
+Each exchange has its own typed subclass with strongly-typed return values. Async methods returning `CompletableFuture` are also available:
 
 ```Java
 CompletableFuture<Ticker> future = exchange.fetchTickerAsync("BTC/USDT", null);
@@ -697,8 +695,9 @@ You can check different examples in the `examples/go` folder.
 ### Java
 
 ```Java
-import io.github.ccxt.Exchange;
-import io.github.ccxt.ExchangeTyped;
+import io.github.ccxt.exchanges.Kraken;
+import io.github.ccxt.exchanges.Bitfinex;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.*;
 
 import java.util.HashMap;
@@ -707,17 +706,17 @@ import java.util.Map;
 public class Example {
     public static void main(String[] args) {
         // Create exchange instances
-        ExchangeTyped kraken = new ExchangeTyped(Exchange.dynamicallyCreateInstance("kraken", null));
-        ExchangeTyped bitfinex = new ExchangeTyped(Exchange.dynamicallyCreateInstance("bitfinex", null));
+        Kraken kraken = new Kraken();
+        Bitfinex bitfinex = new Bitfinex();
 
         Map<String, Object> config = new HashMap<>();
         config.put("apiKey", "YOUR_API_KEY");
         config.put("secret", "YOUR_SECRET");
-        ExchangeTyped binance = new ExchangeTyped(Exchange.dynamicallyCreateInstance("binance", config));
+        Binance binance = new Binance(config);
 
         // Load markets
-        kraken.loadMarkets();
-        binance.loadMarkets();
+        kraken.loadMarkets(false);
+        binance.loadMarkets(false);
 
         // Public API
         OrderBook orderBook = kraken.fetchOrderBook("BTC/USDT");
@@ -750,8 +749,8 @@ All methods are also available as async variants returning `CompletableFuture`:
 import java.util.concurrent.CompletableFuture;
 
 // Fire multiple requests concurrently
-CompletableFuture<Ticker> btc = exchange.fetchTickerAsync("BTC/USDT", null);
-CompletableFuture<Ticker> eth = exchange.fetchTickerAsync("ETH/USDT", null);
+CompletableFuture<Ticker> btc = binance.fetchTickerAsync("BTC/USDT", null);
+CompletableFuture<Ticker> eth = binance.fetchTickerAsync("ETH/USDT", null);
 CompletableFuture.allOf(btc, eth).join();
 System.out.println("BTC: " + btc.get().last + " ETH: " + eth.get().last);
 ```

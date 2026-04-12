@@ -1,6 +1,6 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Ticker;
 
 import java.util.concurrent.CompletableFuture;
@@ -16,12 +16,7 @@ import java.util.concurrent.TimeUnit;
 public class AsyncExample {
 
     public static void main(String[] args) throws Exception {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-
-        System.out.println("Exchange: " + exchangeId);
-        System.out.println();
-
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         exchange.loadMarkets(false);
 

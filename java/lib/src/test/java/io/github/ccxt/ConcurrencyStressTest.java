@@ -3,6 +3,8 @@ package io.github.ccxt;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.github.ccxt.exchanges.Binance;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -30,8 +32,8 @@ class ConcurrencyStressTest {
      * a future that completes after a delay, rather than using fetchResponse
      * which returns a completedFuture (no blocking).
      */
-    private static Exchange createDelayedExchange(long ioDelayMs) {
-        Exchange exchange = Exchange.dynamicallyCreateInstance("binance", null);
+    private static Binance createDelayedExchange(long ioDelayMs) {
+        Binance exchange = new Binance();
         exchange.verbose = false;
         exchange.enableRateLimit = false;
         String proxy = System.getenv("CCXT_HTTPS_PROXY");
@@ -79,7 +81,7 @@ class ConcurrencyStressTest {
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     void testHighConcurrencyThroughFullCallChain() throws Exception {
-        Exchange exchange = createDelayedExchange(0);
+        Binance exchange = createDelayedExchange(0);
 
         int concurrentRequests = 200;
         CompletableFuture<?>[] futures = new CompletableFuture[concurrentRequests];
@@ -116,7 +118,7 @@ class ConcurrencyStressTest {
     @Test
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
     void testConcurrentSleepsDoNotBlockPoolThreads() throws Exception {
-        Exchange exchange = Exchange.dynamicallyCreateInstance("binance", null);
+        Exchange exchange = new Binance();
 
         int concurrentSleeps = 100;
         long sleepMs = 200;
@@ -153,7 +155,7 @@ class ConcurrencyStressTest {
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     void testPlatformThreadCountStaysBounded() throws Exception {
-        Exchange exchange = createDelayedExchange(0);
+        Binance exchange = createDelayedExchange(0);
 
         int concurrentRequests = 100;
         CompletableFuture<?>[] futures = new CompletableFuture[concurrentRequests];
@@ -184,7 +186,7 @@ class ConcurrencyStressTest {
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     void testExceptionPropagationUnderConcurrency() throws Exception {
-        Exchange exchange = Exchange.dynamicallyCreateInstance("binance", null);
+        Binance exchange = new Binance();
         exchange.verbose = false;
         exchange.enableRateLimit = false;
         try {

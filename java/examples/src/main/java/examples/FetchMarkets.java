@@ -1,9 +1,8 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.MarketInterface;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -11,19 +10,17 @@ import java.util.Map;
  *
  * Usage:
  *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchMarkets
- *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchMarkets --args="bybit spot"
+ *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchMarkets --args="spot"
  */
 public class FetchMarkets {
 
     public static void main(String[] args) {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-        String filterType = args.length > 1 ? args[1] : null; // "spot", "swap", "future", "option"
+        String filterType = args.length > 0 ? args[0] : null; // "spot", "swap", "future", "option"
 
-        System.out.println("Exchange: " + exchangeId);
-        if (filterType != null) System.out.println("Filter:   " + filterType);
+        if (filterType != null) System.out.println("Filter: " + filterType);
         System.out.println();
 
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         Map<String, MarketInterface> markets = exchange.loadMarkets(false);
 

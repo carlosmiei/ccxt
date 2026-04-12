@@ -1,10 +1,8 @@
 package examples;
 
-import io.github.ccxt.Exchange;
 import io.github.ccxt.exchanges.pro.Binance;
-import io.github.ccxt.types.Ticker;
 
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
 
 /**
  * Watch real-time ticker updates via WebSocket.
@@ -16,14 +14,15 @@ import java.util.concurrent.TimeUnit;
  */
 public class WatchTicker {
 
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         String symbol = args.length > 0 ? args[0] : "BTC/USDT";
 
-        Exchange exchange = new Binance();
+        Binance exchange = new Binance();
         exchange.verbose = false;
 
         System.out.println("Loading markets...");
-        exchange.loadMarkets().get(60, TimeUnit.SECONDS);
+        exchange.loadMarkets().join();
         System.out.println("Watching " + symbol + " ticker (20 updates)...\n");
 
         System.out.printf("%-26s %12s %12s %12s %10s%n",
@@ -31,13 +30,13 @@ public class WatchTicker {
         System.out.println("-".repeat(74));
 
         for (int i = 0; i < 20; i++) {
-            Ticker ticker = exchange.watchTicker(symbol);
+            Map<String, Object> ticker = (Map<String, Object>) exchange.watchTicker(symbol).join();
             System.out.printf("%-26s %12s %12s %12s %10s%n",
-                    ticker.datetime,
-                    ticker.last,
-                    ticker.bid,
-                    ticker.ask,
-                    ticker.baseVolume);
+                    ticker.get("datetime"),
+                    ticker.get("last"),
+                    ticker.get("bid"),
+                    ticker.get("ask"),
+                    ticker.get("baseVolume"));
         }
 
         System.out.println("\nDone!");

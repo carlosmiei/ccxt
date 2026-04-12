@@ -3,6 +3,7 @@ package io.github.ccxt.types;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.errors.*;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -27,11 +28,11 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 class ExchangeTypedTest {
 
-    static Exchange exchange;
+    static Binance exchange;
 
     @BeforeAll
     static void setup() {
-        exchange = Exchange.dynamicallyCreateInstance("binance", null);
+        exchange = new Binance();
         exchange.verbose = false;
         String proxy = System.getenv("CCXT_HTTPS_PROXY");
         if (proxy != null && !proxy.isEmpty()) {

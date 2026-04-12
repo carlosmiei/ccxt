@@ -1,9 +1,10 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.errors.*;
 import io.github.ccxt.types.Ticker;
 
+import java.util.Map;
 import java.util.concurrent.CompletionException;
 
 /**
@@ -15,9 +16,7 @@ import java.util.concurrent.CompletionException;
 public class ErrorHandling {
 
     public static void main(String[] args) {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         exchange.loadMarkets(false);
 
@@ -39,7 +38,7 @@ public class ErrorHandling {
         // 2. Handle authentication error
         System.out.println("\n--- Test 2: Auth required without credentials ---");
         try {
-            exchange.fetchBalance();
+            exchange.fetchBalance((Map<String, Object>) null);
         } catch (CompletionException e) {
             Throwable cause = unwrap(e);
             if (cause instanceof AuthenticationError) {

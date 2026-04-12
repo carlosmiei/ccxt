@@ -1,6 +1,6 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.OHLCV;
 
 import java.time.Instant;
@@ -13,7 +13,7 @@ import java.util.List;
  *
  * Usage:
  *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchOHLCV
- *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchOHLCV --args="binance BTC/USDT 1d"
+ *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchOHLCV --args="BTC/USDT 1d"
  */
 public class FetchOHLCV {
 
@@ -21,16 +21,14 @@ public class FetchOHLCV {
             .withZone(ZoneId.systemDefault());
 
     public static void main(String[] args) {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-        String symbol = args.length > 1 ? args[1] : "BTC/USDT";
-        String timeframe = args.length > 2 ? args[2] : "1h";
+        String symbol = args.length > 0 ? args[0] : "BTC/USDT";
+        String timeframe = args.length > 1 ? args[1] : "1h";
 
-        System.out.println("Exchange:  " + exchangeId);
         System.out.println("Symbol:    " + symbol);
         System.out.println("Timeframe: " + timeframe);
         System.out.println();
 
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         exchange.loadMarkets(false);
 

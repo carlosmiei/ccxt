@@ -808,10 +808,6 @@ class NewTranspiler {
         // cast callDynamically to CompletableFuture when .join() is called on the result
         baseClass = baseClass.replace(/\(Helpers\.callDynamically\(([^)]+(?:\([^)]*\))*[^)]*)\)\)\.join\(\)/g, '((java.util.concurrent.CompletableFuture<Object>)Helpers.callDynamically($1)).join()');
 
-        // Cast args of unified API method calls to (Object) to prevent
-        // Java overload resolution from picking typed overloads in internal code
-        baseClass = this.castUnifiedApiArgs(baseClass);
-
         // // WS fixes
         // baseClass = baseClass.replace(/\(object client,/gm, '(WebSocketClient client,');
 
@@ -941,6 +937,9 @@ class NewTranspiler {
 
         this.transpileErrorHierarchy()
 
+        // Fix Api classes that extend other exchanges (not Exchange) to use Core suffix
+        this.fixApiExtendsForCore()
+
         log.bright.green('Transpiled successfully.')
     }
 
@@ -1019,14 +1018,19 @@ class NewTranspiler {
         const javaImports = this.getJavaImports(name, ws).join("\n") + "\n\n";
         let content = javaVersion.content;
 
+        // For REST classes, append "Core" suffix so the typed wrapper can take the clean name.
+        // e.g., transpiled Binance class becomes BinanceCore, typed Binance extends BinanceCore.
+        const coreSuffix = ws ? '' : 'Core';
+        const className = this.capitalize(name) + coreSuffix;
+
         // inject constructor
         const constructor = [
             '',
-            `   public ${this.capitalize(name)} () {`,
+            `   public ${className} () {`,
             `       super();`,
             `   }`,
             '',
-            `   public ${this.capitalize(name)} (Object options) {`,
+            `   public ${className} (Object options) {`,
             `       super(options);`,
             `   }`,
             ''
@@ -1037,6 +1041,13 @@ class NewTranspiler {
         // const parentExchange = res[1].toLowerCase();
         // override extends from Exchange to ClassApi
         content = content.replace(/extends\s\w+/g, `extends ${this.capitalize(name)}Api`);
+        // Rename the class to include Core suffix
+        content = content.replace(/class\s+\w+\s+extends/, `class ${className} extends`);
+        // Also rename self-references like ClassName.this in anonymous inner classes
+        if (coreSuffix) {
+            const origName = this.capitalize(name);
+            content = content.replace(new RegExp(`${origName}\\.this`, 'g'), `${className}.this`);
+        }
         content = content.replace(/, (sha1|sha384|sha512|sha256|md5|ed25519|keccak|p256|secp256k1)([,)])/g, `, $1()$2`);
         content = content.replace(/(\s+public Object describe\(\))/g, `${constructor}$1`)
         // cast callDynamically to CompletableFuture when .join() is called on the result
@@ -1057,18 +1068,48 @@ class NewTranspiler {
             const wsRegexes = this.getJavaWsRegexes();
             content = this.regexAll (content, wsRegexes);
             content = this.replaceImportedRestClasses (content, javaVersion.imports);
-            // For WS classes, use FQN for REST parent to avoid same-name conflict
-            const restFqn = `io.github.ccxt.exchanges.${this.capitalize(name)}`;
-            content = content.replace(/extends\s\w+Api/g, `extends ${restFqn}`);
-            content = content.replace(/extends\s(\w+)Rest/g, `extends io.github.ccxt.exchanges.$1`);
-            content = content.replace(/extends\s(\w+)\b(?!\.)/, `extends ${restFqn}`);
+            // For WS classes, use FQN for REST Core parent to avoid same-name conflict
+            const restCoreFqn = `io.github.ccxt.exchanges.${this.capitalize(name)}Core`;
+            content = content.replace(/extends\s\w+Api/g, `extends ${restCoreFqn}`);
+            content = content.replace(/extends\s(\w+)Rest/g, `extends io.github.ccxt.exchanges.$1Core`);
+            content = content.replace(/extends\s(\w+)\b(?!\.)/, `extends ${restCoreFqn}`);
             content = this.postProcessWsJava(content, name);
         }
-        // Cast args of unified API method calls to (Object) to prevent
-        // Java overload resolution from picking typed overloads in internal code
-        content = this.castUnifiedApiArgs(content);
         content = this.createGeneratedHeader().join('\n') + '\n' + content;
         return javaImports + content;
+    }
+
+    /**
+     * Fix Api classes that extend other exchange classes (not Exchange) to use Core suffix.
+     * e.g., BinanceusdmApi extends Binance → BinanceusdmApi extends BinanceCore
+     * This is needed because the typed wrapper class now takes the clean name (Binance),
+     * and Api classes must extend the untyped Core class to avoid inheriting typed overloads.
+     */
+    fixApiExtendsForCore() {
+        const apiFolder = './java/lib/src/main/java/io/github/ccxt/api/';
+        if (!fs.existsSync(apiFolder)) return;
+
+        const apiFiles = fs.readdirSync(apiFolder).filter(f => f.endsWith('Api.java'));
+        for (const file of apiFiles) {
+            const path = apiFolder + file;
+            let content = fs.readFileSync(path, 'utf-8');
+            // Match "extends SomeName" where SomeName is NOT "Exchange" and NOT already Core
+            const match = content.match(/class\s+\w+Api\s+extends\s+(\w+)/);
+            if (match && match[1] !== 'Exchange' && !match[1].endsWith('Core')) {
+                const parentName = match[1];
+                // Update extends clause
+                content = content.replace(
+                    new RegExp(`extends\\s+${parentName}\\b`),
+                    `extends ${parentName}Core`
+                );
+                // Update import to use Core name
+                content = content.replace(
+                    new RegExp(`import\\s+io\\.github\\.ccxt\\.exchanges\\.${parentName}\\s*;`),
+                    `import io.github.ccxt.exchanges.${parentName}Core;`
+                );
+                fs.writeFileSync(path, content, 'utf-8');
+            }
+        }
     }
 
     replaceImportedRestClasses(content: string, imports: any[]) {
@@ -1862,120 +1903,6 @@ class NewTranspiler {
         return result;
     }
 
-    // =====================================================================
-    // Cast arguments to (Object) for unified API method calls on `this`
-    // This prevents Java's overload resolution from picking typed overloads
-    // (e.g., fetchTrades(String, Long, Long, Map)) over the untyped varargs
-    // (e.g., fetchTrades(Object, Object...)) in internal transpiled code.
-    //
-    // The method list is loaded from build/java-typed-methods.json, which is
-    // generated by build/generateJavaWrappers.ts (single source of truth).
-    // Run the wrapper generator first to produce this file.
-    // =====================================================================
-
-    static TYPED_OVERLOAD_METHODS: Set<string> = (() => {
-        const jsonPath = './build/java-typed-methods.json';
-        try {
-            const data = fs.readFileSync(jsonPath, 'utf-8');
-            return new Set<string>(JSON.parse(data));
-        } catch {
-            console.warn(`[javaTranspiler] Warning: ${jsonPath} not found. Run generateJavaWrappers.ts first. Using empty set.`);
-            return new Set<string>();
-        }
-    })();
-
-    /**
-     * Split a string by top-level commas (not inside nested parens/brackets/angle brackets).
-     * Handles Java generics like HashMap<String, Object> by tracking <> depth.
-     */
-    splitTopLevelArgs(argsStr: string): string[] {
-        const args: string[] = [];
-        let depth = 0;
-        let angleDepth = 0;
-        let current = '';
-        for (let i = 0; i < argsStr.length; i++) {
-            const ch = argsStr[i];
-            if (ch === '(' || ch === '[' || ch === '{') depth++;
-            else if (ch === ')' || ch === ']' || ch === '}') depth--;
-            else if (ch === '<') angleDepth++;
-            else if (ch === '>') angleDepth = Math.max(0, angleDepth - 1);
-            else if (ch === ',' && depth === 0 && angleDepth === 0) {
-                args.push(current.trim());
-                current = '';
-                continue;
-            }
-            current += ch;
-        }
-        if (current.trim()) args.push(current.trim());
-        return args;
-    }
-
-    /**
-     * Post-process generated Java code to cast arguments of unified API method calls
-     * on `this` to (Object). This ensures Java's overload resolution picks the untyped
-     * varargs overload instead of the typed overload.
-     *
-     * Transforms:
-     *   this.fetchTrades(symbol, since, limit, params)
-     * Into:
-     *   this.fetchTrades((Object) symbol, (Object) since, (Object) limit, (Object) params)
-     *
-     * And zero-arg calls:
-     *   this.fetchAccounts()
-     * Into:
-     *   this.fetchAccounts((Object) null)
-     */
-    castUnifiedApiArgs(content: string): string {
-        // Build a regex that matches this.METHOD_NAME( or exchange.METHOD_NAME(
-        // for any unified API method. Covers both exchange implementation code (this.)
-        // and transpiled test code (exchange.)
-        const methodNames = Array.from((this.constructor as any).TYPED_OVERLOAD_METHODS).join('|');
-        const pattern = new RegExp(`(this|exchange)\\.(${methodNames})\\(`, 'g');
-
-        let result = '';
-        let lastIdx = 0;
-        let match;
-
-        while ((match = pattern.exec(content)) !== null) {
-            const receiver = match[1]; // 'this' or 'exchange'
-            const methodName = match[2];
-            const startIdx = match.index + match[0].length;
-
-            // Find matching closing paren using balanced paren tracking
-            let depth = 1;
-            let i = startIdx;
-            while (i < content.length && depth > 0) {
-                if (content[i] === '(') depth++;
-                if (content[i] === ')') depth--;
-                i++;
-            }
-
-            const argsStr = content.substring(startIdx, i - 1).trim();
-
-            // Build the replacement
-            result += content.substring(lastIdx, match.index);
-
-            if (argsStr === '') {
-                // Zero-arg call: leave as-is. The wrapper generator ensures no zero-arg
-                // typed convenience overload exists for methods called internally with
-                // zero args (via ZERO_ARG_INTERNAL_CALLS detection), so the varargs
-                // overload is the only match. Adding (Object) null would change semantics
-                // since getArg([null], 0, default) returns null instead of the default.
-                result += `${receiver}.${methodName}()`;
-            } else {
-                // Split args by top-level commas and cast each to (Object)
-                const args = this.splitTopLevelArgs(argsStr);
-                const castedArgs = args.map(arg => `(Object) ${arg}`).join(', ');
-                result += `${receiver}.${methodName}(${castedArgs})`;
-            }
-
-            lastIdx = i;
-        }
-
-        result += content.substring(lastIdx);
-        return result;
-    }
-
     replaceDynamicMethodCall(content: string, methodName: string): string {
         const pattern = new RegExp(`(?<=[^\\w.])([a-z]\\w+)\\.${methodName}\\(`, 'g');
         let result = '';
@@ -2024,7 +1951,10 @@ class NewTranspiler {
         const csharp = this.createJavaClass(fileNameNoExt, csharpResult, ws)
 
         if (javaFolder) {
-            overwriteFileAndFolder(javaFolder + this.capitalize(javaName), csharp)
+            // REST classes get Core suffix (e.g., BinanceCore.java); WS classes keep original name
+            const coreSuffix = ws ? '' : 'Core';
+            const outputName = this.capitalize(fileNameNoExt) + coreSuffix + '.java';
+            overwriteFileAndFolder(javaFolder + outputName, csharp)
         }
     }
 
@@ -2309,9 +2239,6 @@ class NewTranspiler {
 
         ])
 
-        // Cast args of unified API method calls to (Object) to prevent typed overload resolution
-        contentIndentend = this.castUnifiedApiArgs(contentIndentend);
-
         const file = [
             'package tests.exchange;',
             'import io.github.ccxt.Helpers;',
@@ -2429,8 +2356,6 @@ class NewTranspiler {
             contentIndentend = this.regexAll(contentIndentend, regexes)
             // cast callDynamically to CompletableFuture when .join() is called on the result
             contentIndentend = contentIndentend.replace(/\(Helpers\.callDynamically\(([^)]+(?:\([^)]*\))*[^)]*)\)\)\.join\(\)/g, '((java.util.concurrent.CompletableFuture<Object>)Helpers.callDynamically($1)).join()');
-            // Cast args of unified API method calls to (Object) to prevent typed overload resolution
-            contentIndentend = this.castUnifiedApiArgs(contentIndentend);
             // const namespace = isWs ? 'using ccxt;\nusing ccxt.pro;' : 'using ccxt;';
             let parsedName = 'Test' + this.capitalize(filename.replace('test.', '').replace('tests.', ''));
             if (parsedName === 'TestOhlcv') parsedName = 'TestOHLCV'; // special case

@@ -1,6 +1,7 @@
 package io.github.ccxt.types;
 
 import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 
 import java.util.List;
 import java.util.Map;
@@ -20,11 +21,10 @@ public class LiveTest {
     }
 
     public static void main(String[] args) throws Exception {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-        System.out.println("=== CCXT Java Typed Wrapper - Live Test (" + exchangeId + ") ===\n");
+        System.out.println("=== CCXT Java Typed Wrapper - Live Test (binance) ===\n");
 
         // 1. Create exchange instance
-        var exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        var exchange = new Binance();
         exchange.verbose = false;
 
         // 2. Load markets

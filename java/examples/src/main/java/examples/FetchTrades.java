@@ -1,6 +1,6 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Trade;
 
 import java.util.List;
@@ -14,14 +14,12 @@ import java.util.List;
 public class FetchTrades {
 
     public static void main(String[] args) {
-        String exchangeId = args.length > 0 ? args[0] : "binance";
-        String symbol = args.length > 1 ? args[1] : "BTC/USDT";
+        String symbol = args.length > 0 ? args[0] : "BTC/USDT";
 
-        System.out.println("Exchange: " + exchangeId);
-        System.out.println("Symbol:   " + symbol);
+        System.out.println("Symbol: " + symbol);
         System.out.println();
 
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         exchange.loadMarkets(false);
 

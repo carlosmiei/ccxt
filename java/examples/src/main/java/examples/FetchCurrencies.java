@@ -1,6 +1,6 @@
 package examples;
 
-import io.github.ccxt.Exchange;
+import io.github.ccxt.exchanges.Binance;
 import io.github.ccxt.types.Currencies;
 import io.github.ccxt.types.CurrencyInterface;
 
@@ -9,21 +9,13 @@ import java.util.Map;
 /**
  * Fetch and display available currencies from an exchange.
  *
- * Note: some exchanges (e.g. Binance) require API keys for fetchCurrencies.
- *
  * Usage:
  *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchCurrencies
- *   cd java && ./gradlew :examples:run -PmainClass=examples.FetchCurrencies --args="kraken"
  */
 public class FetchCurrencies {
 
     public static void main(String[] args) {
-        String exchangeId = args.length > 0 ? args[0] : "kraken";
-
-        System.out.println("Exchange: " + exchangeId);
-        System.out.println();
-
-        Exchange exchange = Exchange.dynamicallyCreateInstance(exchangeId, null);
+        Binance exchange = new Binance();
 
         exchange.loadMarkets(false);
 
