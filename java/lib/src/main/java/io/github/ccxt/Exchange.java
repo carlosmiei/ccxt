@@ -2463,6 +2463,16 @@ public class Exchange {
     // ########################################################################
     // ########################################################################
 
+    /**
+     * Helper for typed exchange wrappers: converts a raw List<Object> to a typed List<T>.
+     * Used by generated subclasses (e.g., Binance extends BinanceCore) to convert
+     * untyped method results into typed return values.
+     */
+    @SuppressWarnings("unchecked")
+    protected static <T> List<T> toTypedList(Object raw, java.util.function.Function<Object, T> ctor) {
+        return ((List<Object>) raw).stream().map(ctor).collect(java.util.stream.Collectors.toList());
+    }
+
     // ------------------------------------------------------------------------
     // METHODS BELOW THIS LINE ARE TRANSPILED FROM TYPESCRIPT
 

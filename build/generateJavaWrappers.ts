@@ -296,12 +296,7 @@ function generateTypedExchangeClass(exchangeId: string, methods: MethodInfo[]): 
     lines.push(`    }`);
     lines.push(``);
 
-    // Helper
-    lines.push(`    @SuppressWarnings("unchecked")`);
-    lines.push(`    protected static <T> List<T> toTypedList(Object raw, java.util.function.Function<Object, T> ctor) {`);
-    lines.push(`        return ((List<Object>) raw).stream().map(ctor).collect(Collectors.toList());`);
-    lines.push(`    }`);
-    lines.push(``);
+    // toTypedList is inherited from Exchange (defined once, not duplicated per exchange)
 
     // loadMarkets special overloads
     lines.push(`    // --- loadMarkets (special: first arg is boolean reload) ---`);
