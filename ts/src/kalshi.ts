@@ -333,44 +333,159 @@ export default class kalshi extends Exchange {
 
     /**
      * Fetches the current market price and bid/ask for a single Kalshi outcome.
-     * @param outcome
+     * @param outcome the unified symbol like TRUMP_BRING_BACK_MANUFACTURING:YES or outcomeId like KXGDPSHAREMANU-29
      * @param params
-     * @see https://trading-api.readme.io/reference/getmarket
+     * @see https://docs.kalshi.com/api-reference/market/get-market
      */
     async fetchTicker (outcome: Str, params: Dict = {}): Promise<Ticker> {
         await this.loadMarkets ();
         await this.checkEventsAndMarkets (outcome);
         const outcomeObj = this.outcome (outcome);
         const ticker = this.safeString (outcomeObj['info'], 'ticker');
-        const response = await this.kalshiPublicGetMarketsTicker (this.extend ({ 'ticker': ticker }, params));
+        const request: Dict = {
+            'ticker': ticker,
+        };
+        const response = await this.kalshiPublicGetMarketsTicker (this.extend (request, params));
+        //
+        //     {
+        //         "market": {
+        //             "can_close_early": true,
+        //             "close_time": "2029-06-30T03:59:00Z",
+        //             "created_time": "2025-06-05T17:55:43.779104Z",
+        //             "early_close_condition": "This market will close and expire early if the event occurs.",
+        //             "event_ticker": "KXGDPSHAREMANU-29",
+        //             "expected_expiration_time": "2029-06-30T14:00:00Z",
+        //             "expiration_time": "2029-07-07T14:00:00Z",
+        //             "expiration_value": "",
+        //             "floor_strike": "13.1",
+        //             "fractional_trading_enabled": true,
+        //             "last_price_dollars": "0.1980",
+        //             "latest_expiration_time": "2029-07-07T14:00:00Z",
+        //             "liquidity_dollars": "0.0000",
+        //             "market_type": "binary",
+        //             "no_ask_dollars": "0.8890",
+        //             "no_bid_dollars": "0.8030",
+        //             "no_sub_title": "Before 2029",
+        //             "notional_value_dollars": "1.0000",
+        //             "open_interest_fp": "11077.21",
+        //             "open_time": "2025-06-05T18:00:00Z",
+        //             "previous_price_dollars": "0.1980",
+        //             "previous_yes_ask_dollars": "0.1970",
+        //             "previous_yes_bid_dollars": "0.1110",
+        //             "price_level_structure": "deci_cent",
+        //             "price_ranges": [
+        //                 {
+        //                     "start": "0.55",
+        //                     "end": "0.56",
+        //                     "step": "0.01"
+        //                 } 
+        //             ],
+        //             "response_price_units": "usd_cent",
+        //             "result": "",
+        //             "rules_primary": "If the value added by Manufacturing to GDP in Q4 2028 is at least 13.1% (the value it was in Q1 2005), then the market resolves to Yes.",
+        //             "rules_secondary": "",
+        //             "settlement_timer_seconds": "1800",
+        //             "status": "active",
+        //             "strike_type": "greater_or_equal",
+        //             "tick_size": "1",
+        //             "ticker": "KXGDPSHAREMANU-29",
+        //             "title": "Will Trump bring back manufacturing?",
+        //             "updated_time": "2026-04-09T10:32:47.890506Z",
+        //             "volume_24h_fp": "0.00",
+        //             "volume_fp": "19617.68",
+        //             "yes_ask_dollars": "0.1970",
+        //             "yes_ask_size_fp": "2750.00",
+        //             "yes_bid_dollars": "0.1110",
+        //             "yes_bid_size_fp": "2505.61",
+        //             "yes_sub_title": "Before 2029"
+        //         }
+        //     }
+        //
         const raw = this.safeValue (response, 'market', response);
         return this.parseTicker (raw, outcomeObj as any);
     }
 
     /**
-     * Parses a raw Kalshi market object into a unified CCXT Ticker, converting cent prices to decimals.
+     * Parses a raw Kalshi market object into a unified CCXT Ticker
      * @param raw
      * @param market
      */
     parseTicker (raw: Dict, market: Market = undefined): Ticker {
-        const isNo = market ? (market['label'] === 'NO' || this.safeString (market['info'], 'outcomeLabel') === 'NO') : false;
+        //
+        //     {
+        //         "market": {
+        //             "can_close_early": true,
+        //             "close_time": "2029-06-30T03:59:00Z",
+        //             "created_time": "2025-06-05T17:55:43.779104Z",
+        //             "early_close_condition": "This market will close and expire early if the event occurs.",
+        //             "event_ticker": "KXGDPSHAREMANU-29",
+        //             "expected_expiration_time": "2029-06-30T14:00:00Z",
+        //             "expiration_time": "2029-07-07T14:00:00Z",
+        //             "expiration_value": "",
+        //             "floor_strike": "13.1",
+        //             "fractional_trading_enabled": true,
+        //             "last_price_dollars": "0.1980",
+        //             "latest_expiration_time": "2029-07-07T14:00:00Z",
+        //             "liquidity_dollars": "0.0000",
+        //             "market_type": "binary",
+        //             "no_ask_dollars": "0.8890",
+        //             "no_bid_dollars": "0.8030",
+        //             "no_sub_title": "Before 2029",
+        //             "notional_value_dollars": "1.0000",
+        //             "open_interest_fp": "11077.21",
+        //             "open_time": "2025-06-05T18:00:00Z",
+        //             "previous_price_dollars": "0.1980",
+        //             "previous_yes_ask_dollars": "0.1970",
+        //             "previous_yes_bid_dollars": "0.1110",
+        //             "price_level_structure": "deci_cent",
+        //             "price_ranges": [
+        //                 {
+        //                     "start": "0.55",
+        //                     "end": "0.56",
+        //                     "step": "0.01"
+        //                 } 
+        //             ],
+        //             "response_price_units": "usd_cent",
+        //             "result": "",
+        //             "rules_primary": "If the value added by Manufacturing to GDP in Q4 2028 is at least 13.1% (the value it was in Q1 2005), then the market resolves to Yes.",
+        //             "rules_secondary": "",
+        //             "settlement_timer_seconds": "1800",
+        //             "status": "active",
+        //             "strike_type": "greater_or_equal",
+        //             "tick_size": "1",
+        //             "ticker": "KXGDPSHAREMANU-29",
+        //             "title": "Will Trump bring back manufacturing?",
+        //             "updated_time": "2026-04-09T10:32:47.890506Z",
+        //             "volume_24h_fp": "0.00",
+        //             "volume_fp": "19617.68",
+        //             "yes_ask_dollars": "0.1970",
+        //             "yes_ask_size_fp": "2750.00",
+        //             "yes_bid_dollars": "0.1110",
+        //             "yes_bid_size_fp": "2505.61",
+        //             "yes_sub_title": "Before 2029"
+        //         }
+        //     }
+        //
+        const outcomeLabel = market ? (this.safeString (market, 'label') || this.safeString (market['info'], 'outcomeLabel') || 'YES') : 'YES';
+        const isNo = outcomeLabel.toUpperCase () === 'NO';
         const now = this.milliseconds ();
         const symbol = this.safeSymbol (undefined, market);
-        // Kalshi prices are in cents (integer 0–99) → divide by 100
-        const yesAsk = this.safeNumber (raw, 'yes_ask');
-        const yesBid = this.safeNumber (raw, 'yes_bid');
-        const last = this.safeNumber (raw, 'last_price');
+        const yesAsk = this.safeNumber (raw, 'yes_ask_dollars');
+        const yesBid = this.safeNumber (raw, 'yes_bid_dollars');
+        const noAsk  = this.safeNumber (raw, 'no_ask_dollars');
+        const noBid  = this.safeNumber (raw, 'no_bid_dollars');
+        const last   = this.safeNumber (raw, 'last_price_dollars');
         let bid: Num;
         let ask: Num;
         let close: Num;
         if (isNo) {
-            bid = (yesAsk !== undefined) ? (100 - yesAsk) / 100 : undefined;
-            ask = (yesBid !== undefined) ? (100 - yesBid) / 100 : undefined;
-            close = (last !== undefined) ? (100 - last) / 100 : undefined;
+            bid   = noBid;
+            ask   = noAsk;
+            close = last !== undefined ? 1 - last : undefined;
         } else {
-            bid = (yesBid !== undefined) ? yesBid / 100 : undefined;
-            ask = (yesAsk !== undefined) ? yesAsk / 100 : undefined;
-            close = (last !== undefined) ? last / 100 : undefined;
+            bid   = yesBid;
+            ask   = yesAsk;
+            close = last;
         }
         return this.safeTicker ({
             'symbol': symbol,
@@ -379,9 +494,9 @@ export default class kalshi extends Exchange {
             'high': undefined,
             'low': undefined,
             'bid': bid,
-            'bidVolume': undefined,
+            'bidVolume': this.safeNumber (raw, 'yes_bid_size_fp'),
             'ask': ask,
-            'askVolume': undefined,
+            'askVolume': this.safeNumber (raw, 'yes_ask_size_fp'),
             'vwap': undefined,
             'open': undefined,
             'close': close,

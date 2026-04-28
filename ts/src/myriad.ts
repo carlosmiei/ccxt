@@ -83,6 +83,7 @@ export default class Myriad extends Exchange {
                             'questions': 1,
                             'questions/{id}': 1,
                             'markets': 1,
+                            'markets/{id}': 1,
                             'markets/{networkId}/{id}': 1,
                             'markets/{id}/events': 1,
                         },
@@ -240,9 +241,10 @@ export default class Myriad extends Exchange {
         const volume24h = this.safeNumber (raw, 'volume24h');
         const marketSymbol = this.slugToMarketSymbol (eventSlug || networkId, slug);
         const outcomes: any[] = [];
-        for (const outcome of rawOutcomes) {
-            const outcomeId = this.safeString (outcome, 'outcomeId');
-            const outcomeLabel = this.safeString (outcome, 'label', outcomeId);
+        for (let i = 0; i < rawOutcomes.length; i++) {
+            const outcome = this.safeDict (rawOutcomes, i, {});
+            const outcomeId = this.safeString (outcome, 'outcomeId', this.safeString (outcome, 'id', i.toString ()));
+            const outcomeLabel = this.safeString (outcome, 'label', this.safeString (outcome, 'title', outcomeId));
             const price = this.safeNumber (outcome, 'price');
             outcomes.push ({
                 'id': networkId + ':' + marketId + '/' + outcomeId,
@@ -320,19 +322,93 @@ export default class Myriad extends Exchange {
 
     /**
      * Fetches the current price for a single Myriad outcome by loading the parent market.
-     * @param symbol  outcome symbol, e.g. "TRUMP_WIN:YES"
+     * @param outcome outcomeId like 2741:756/0 or the symbol, e.g. "TRUMP_WIN:YES"
      * @param params
-     * @see https://docs.myriad.markets/api-reference/markets/get-market
+     * @see https://docs.myriad.markets/builders/myriad-api-reference#320c9e49da828116b12dec5bfeea306a
      */
-    async fetchTicker (symbol: Str, params: Dict = {}): Promise<Ticker> {
+    async fetchTicker (outcome: Str, params: Dict = {}): Promise<Ticker> {
         await this.loadMarkets ();
-        const outcomeObj = this.outcome (symbol);
+        const outcomeObj = this.outcome (outcome);
         const networkId = this.safeString (outcomeObj['info'], 'networkId');
         const marketId = this.safeString (outcomeObj['info'], 'marketId');
-        const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
-            'networkId': networkId,
+        const request: Dict = {
             'id': marketId,
-        }, params));
+            'network_id': networkId,
+        };
+        const response = await this.myriadPublicGetMarketsId (this.extend (request, params));
+        //
+        //     {
+        //         "id": "756",
+        //         "networkId": "2741",
+        //         "slug": "will-trump-capture-another-president-before-his-birthday",
+        //         "title": "Will Trump capture another president before his birthday?",
+        //         "description": "string"
+        //         "publishedAt": "2026-01-16T18:05:36.000Z",
+        //         "expiresAt": "2026-06-14T04:59:00.000Z",
+        //         "resolvesAt": null,
+        //         "fees": {
+        //             "buy": { "fee": "0.01", "treasury_fee": "0.01", "distributor_fee": "0.01" },
+        //             "sell": { "fee": "0", "treasury_fee": "0", "distributor_fee": "0" },
+        //             "treasury": "0x5E3EbEc100e2294C0EB2264FC96225dF067AAaa3",
+        //             "distributor": "0xE44984C586FeBB31605D23b6316cA11B6f4D86b2"
+        //         },
+        //         "state": "open",
+        //         "voided": false,
+        //         "resolvedOutcomeId": "-1",
+        //         "topics": [ "Politics" ],
+        //         "resolutionSource": "https://www.whitehouse.gov/",
+        //         "resolutionTitle": "White House",
+        //         "token": {
+        //             "name": "Bridged USDC (Stargate)",
+        //             "address": "0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1",
+        //             "symbol": "USDC.e",
+        //             "decimals": "6"
+        //         },
+        //         "imageUrl": "https://cdn.polkamarkets.com/Qma9FAX15kHewT8vm61vykGA9bqQhNdDLvEbQWSp72i3PQ",
+        //         "bannerImageUrl": "https://imagedelivery.net/YN1-rdnufJQJCgu3i1CbVw/255d431f-1bb4-4d90-032b-d1f7032e8000/public",
+        //         "ogImageUrl": "https://imagedelivery.net/YN1-rdnufJQJCgu3i1CbVw/cf1af79c-07b9-40f0-283b-ed59865b3c00/public",
+        //         "liquidity": "2000",
+        //         "liquidityPrice": "0.32532445",
+        //         "volume": "10891.236893",
+        //         "volume24h": "0.939",
+        //         "volumeNotional": "13570.426814",
+        //         "volumeNotional24h": "1.028382",
+        //         "users": "122",
+        //         "shares": "4098.474144",
+        //         "featured": false,
+        //         "featuredAt": null,
+        //         "inPlay": false,
+        //         "inPlayStartsAt": null,
+        //         "perpetual": false,
+        //         "moneyline": false,
+        //         "executionMode": "0",
+        //         "tradingModel": "amm",
+        //         "topHolders": [
+        //             "0x8A611AEE71b6448a6F99B6001D1234d020f7d546",
+        //             "0x2993249A3D107B759c886a4BD4e02B70d471eA9B",
+        //             "0x82a5b3BD2A9216369537583f63fa576a1D57c7E7"
+        //         ],
+        //         "outcomes": [
+        //             {
+        //                 "id": "0",
+        //                 "title": "Yes",
+        //                 "shares": "3742.174971",
+        //                 "sharesHeld": "138.741271",
+        //                 "price": "0.08693459",
+        //                 "closingPrice": null,
+        //                 "priceChange24h": "0.00045828",
+        //                 "imageUrl": "https://cdn.polkamarkets.com/Qma9FAX15kHewT8vm61vykGA9bqQhNdDLvEbQWSp72i3PQ",
+        //                 "holders": "7",
+        //                 "tokenId": "1512",
+        //                 "price_charts": [Array]
+        //             },
+        //         ],
+        //         "eventId": null,
+        //         "outcomeIndex": null,
+        //         "negRisk": false,
+        //         "externalSources": []
+        //     }
+        //
         return this.parseTicker (response, outcomeObj);
     }
 
@@ -342,12 +418,85 @@ export default class Myriad extends Exchange {
      * @param market  outcome object
      */
     parseTicker (raw: Dict, market: Market = undefined): Ticker {
+        //
+        //     {
+        //         "id": "756",
+        //         "networkId": "2741",
+        //         "slug": "will-trump-capture-another-president-before-his-birthday",
+        //         "title": "Will Trump capture another president before his birthday?",
+        //         "description": "string"
+        //         "publishedAt": "2026-01-16T18:05:36.000Z",
+        //         "expiresAt": "2026-06-14T04:59:00.000Z",
+        //         "resolvesAt": null,
+        //         "fees": {
+        //             "buy": { "fee": "0.01", "treasury_fee": "0.01", "distributor_fee": "0.01" },
+        //             "sell": { "fee": "0", "treasury_fee": "0", "distributor_fee": "0" },
+        //             "treasury": "0x5E3EbEc100e2294C0EB2264FC96225dF067AAaa3",
+        //             "distributor": "0xE44984C586FeBB31605D23b6316cA11B6f4D86b2"
+        //         },
+        //         "state": "open",
+        //         "voided": false,
+        //         "resolvedOutcomeId": "-1",
+        //         "topics": [ "Politics" ],
+        //         "resolutionSource": "https://www.whitehouse.gov/",
+        //         "resolutionTitle": "White House",
+        //         "token": {
+        //             "name": "Bridged USDC (Stargate)",
+        //             "address": "0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1",
+        //             "symbol": "USDC.e",
+        //             "decimals": "6"
+        //         },
+        //         "imageUrl": "https://cdn.polkamarkets.com/Qma9FAX15kHewT8vm61vykGA9bqQhNdDLvEbQWSp72i3PQ",
+        //         "bannerImageUrl": "https://imagedelivery.net/YN1-rdnufJQJCgu3i1CbVw/255d431f-1bb4-4d90-032b-d1f7032e8000/public",
+        //         "ogImageUrl": "https://imagedelivery.net/YN1-rdnufJQJCgu3i1CbVw/cf1af79c-07b9-40f0-283b-ed59865b3c00/public",
+        //         "liquidity": "2000",
+        //         "liquidityPrice": "0.32532445",
+        //         "volume": "10891.236893",
+        //         "volume24h": "0.939",
+        //         "volumeNotional": "13570.426814",
+        //         "volumeNotional24h": "1.028382",
+        //         "users": "122",
+        //         "shares": "4098.474144",
+        //         "featured": false,
+        //         "featuredAt": null,
+        //         "inPlay": false,
+        //         "inPlayStartsAt": null,
+        //         "perpetual": false,
+        //         "moneyline": false,
+        //         "executionMode": "0",
+        //         "tradingModel": "amm",
+        //         "topHolders": [
+        //             "0x8A611AEE71b6448a6F99B6001D1234d020f7d546",
+        //             "0x2993249A3D107B759c886a4BD4e02B70d471eA9B",
+        //             "0x82a5b3BD2A9216369537583f63fa576a1D57c7E7"
+        //         ],
+        //         "outcomes": [
+        //             {
+        //                 "id": "0",
+        //                 "title": "Yes",
+        //                 "shares": "3742.174971",
+        //                 "sharesHeld": "138.741271",
+        //                 "price": "0.08693459",
+        //                 "closingPrice": null,
+        //                 "priceChange24h": "0.00045828",
+        //                 "imageUrl": "https://cdn.polkamarkets.com/Qma9FAX15kHewT8vm61vykGA9bqQhNdDLvEbQWSp72i3PQ",
+        //                 "holders": "7",
+        //                 "tokenId": "1512",
+        //                 "price_charts": [Array]
+        //             },
+        //         ],
+        //         "eventId": null,
+        //         "outcomeIndex": null,
+        //         "negRisk": false,
+        //         "externalSources": []
+        //     }
+        //
         const outcomeId = market ? this.safeString (market['info'], 'outcomeId') : undefined;
         const outcomes = this.safeList (raw, 'outcomes', []) as any[];
         let price: Num = undefined;
         let change: Num = undefined;
         for (const o of outcomes) {
-            if (this.safeString (o, 'outcomeId') === outcomeId) {
+            if (this.safeString (o, 'outcomeId', this.safeString (o, 'id')) === outcomeId) {
                 price = this.safeNumber (o, 'price');
                 change = this.safeNumber (o, 'priceChange24h');
                 break;
@@ -395,14 +544,14 @@ export default class Myriad extends Exchange {
         const networkId = this.safeString (outcomeObj['info'], 'networkId');
         const marketId = this.safeString (outcomeObj['info'], 'marketId');
         const outcomeId = this.safeString (outcomeObj['info'], 'outcomeId');
-        const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
-            'networkId': networkId,
+        const response = await this.myriadPublicGetMarketsId (this.extend ({
             'id': marketId,
+            'network_id': networkId,
         }, params));
         const outcomes = this.safeList (response, 'outcomes', []) as any[];
         let price: Num = undefined;
         for (const o of outcomes) {
-            if (this.safeString (o, 'outcomeId') === outcomeId) {
+            if (this.safeString (o, 'outcomeId', this.safeString (o, 'id')) === outcomeId) {
                 price = this.safeNumber (o, 'price');
                 break;
             }
