@@ -553,7 +553,27 @@ export default class polymarket extends Exchange {
             'token_id': tokenId,
         };
         const response = await this.clobPublicGetBook (this.extend (request, params));
-        const timestamp = this.milliseconds ();
+        //
+        //     {
+        //         "market": "0x42d42b30124ed2d93800358dfd1d48253114e4d58cff15cb765cd0c69956555f",
+        //         "asset_id": "53471586309106256293075593293890793127405137223521910882276033765569397092350",
+        //         "timestamp": "1777541385018",
+        //         "hash": "bfb61f58dab4055d956eb5e758dbc9101c9a4e6c",
+        //         "bids": [
+        //             { "price": "0.001", "size": "3147.19" },
+        //             { "price": "0.002", "size": "1432.11" }
+        //         ],
+        //         "asks": [
+        //             { "price": "0.999", "size": "73.68" },
+        //             { "price": "0.998", "size": "7" }
+        //         ],
+        //         "min_order_size": "5",
+        //         "tick_size": "0.001",
+        //         "neg_risk": false,
+        //         "last_trade_price": "0.002"
+        //     }
+        //
+        const timestamp = this.safeInteger (response, 'timestamp');
         return this.parseOrderBook (response, outcome, timestamp, 'bids', 'asks', 'price', 'size');
     }
 

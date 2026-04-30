@@ -398,10 +398,10 @@ export default class kalshi extends Exchange {
 
     /**
      * Fetches the order book for a single Kalshi outcome, converting YES-side cents to decimal prices.
-     * @param outcome
+     * @param outcome id or symbol
      * @param limit
      * @param params
-     * @see https://trading-api.readme.io/reference/getmarketorderbook
+     * @see https://docs.kalshi.com/api-reference/market/get-market-orderbook
      */
     async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
@@ -409,36 +409,49 @@ export default class kalshi extends Exchange {
         const outcomeObj = this.outcome (outcome);
         const ticker = this.safeString (outcomeObj['info'], 'ticker');
         const isNo = outcomeObj['label'] === 'NO';
-        const response = await this.kalshiPublicGetMarketsTickerOrderbook (this.extend ({
+        const request: Dict = {
             'ticker': ticker,
-        }, params));
-        const book = this.safeValue (response, 'orderbook', response);
+        };
+        const response = await this.kalshiPublicGetMarketsTickerOrderbook (this.extend (request, params));
+        //
+        //     {
+        //         "orderbook_fp": {
+        //             "no_dollars": [
+        //                 [ "0.1500", "100.00" ], [ "0.1600", "101.00" ]
+        //             ],
+        //             "yes_dollars": [ 
+        //                 [ "0.1500", "100.00" ], [ "0.1600", "101.00" ]
+        //             ]
+        //         }
+        //     }
+        //
+        const book = this.safeValue (response, 'orderbook_fp', response);
         const timestamp = this.milliseconds ();
         // Kalshi uses YES-side perspective: `yes` = bids, `no` = asks (inverted)
-        const rawYes = this.safeList (book, 'yes', []) as any[];
-        const rawNo = this.safeList (book, 'no', []) as any[];
+        const rawYes = this.safeList (book, 'yes_dollars', []) as any[];
+        const rawNo = this.safeList (book, 'no_dollars', []) as any[];
         // Convert [price_cents, size] → [price, size]
         const bids: any[] = [];
         const asks: any[] = [];
         if (isNo) {
             // NO perspective: NO bids come from rawNo, NO asks invert rawYes
             for (let bi = 0; bi < rawNo.length; bi++) {
-                const priceCents = this.safeNumber (rawNo[bi], 0);
-                bids.push ([ priceCents / 100, this.safeNumber (rawNo[bi], 1) ]);
+                const price = this.safeNumber (rawNo[bi], 0);
+                bids.push ([ price, this.safeNumber (rawNo[bi], 1) ]);
             }
             for (let ai = 0; ai < rawYes.length; ai++) {
-                const priceCents = this.safeNumber (rawYes[ai], 0);
-                asks.push ([ (100 - priceCents) / 100, this.safeNumber (rawYes[ai], 1) ]);
+                const price = this.safeNumber (rawYes[ai], 0);
+                asks.push ([ price, this.safeNumber (rawYes[ai], 1) ]);
             }
         } else {
             // YES perspective: YES bids from rawYes, YES asks invert rawNo
             for (let bi = 0; bi < rawYes.length; bi++) {
-                const priceCents = this.safeNumber (rawYes[bi], 0);
-                bids.push ([ priceCents / 100, this.safeNumber (rawYes[bi], 1) ]);
+                const price = this.safeNumber (rawYes[bi], 0);
+                bids.push ([ price, this.safeNumber (rawYes[bi], 1) ]);
             }
             for (let ai = 0; ai < rawNo.length; ai++) {
-                const priceCents = this.safeNumber (rawNo[ai], 0);
-                asks.push ([ (100 - priceCents) / 100, this.safeNumber (rawNo[ai], 1) ]);
+                const price = this.safeNumber (rawNo[ai], 0);
+                asks.push ([ price, this.safeNumber (rawNo[ai], 1) ]);
             }
         }
         return this.sortedOrders (outcome, timestamp, bids, asks);

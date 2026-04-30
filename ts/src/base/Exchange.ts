@@ -5873,6 +5873,11 @@ export default class Exchange {
         return { 'id': outcomeIdOrSymbol, 'symbol': outcomeIdOrSymbol, 'marketSymbol': undefined, 'label': undefined, 'info': {}};
     }
 
+    safeOutcomeSymbol (outcomeIdOrSymbol: Str, outcomeObj: any = undefined): any {
+        outcomeObj = this.safeOutcome (outcomeIdOrSymbol, outcomeObj);
+        return outcomeObj['symbol'];
+    }
+
     createExpiredOptionMarket (symbol: string): MarketInterface {
         throw new NotSupported (this.id + ' createExpiredOptionMarket () is not supported yet');
     }
