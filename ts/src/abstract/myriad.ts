@@ -10,6 +10,7 @@ interface Exchange {
     myriadPublicGetQuestions (params?: {}): Promise<implicitReturnType>;
     myriadPublicGetQuestionsId (params?: {}): Promise<implicitReturnType>;
     myriadPublicGetMarkets (params?: {}): Promise<implicitReturnType>;
+    myriadPublicGetMarketsId (params?: {}): Promise<implicitReturnType>;
     myriadPublicGetMarketsNetworkIdId (params?: {}): Promise<implicitReturnType>;
     myriadPublicGetMarketsIdEvents (params?: {}): Promise<implicitReturnType>;
 
