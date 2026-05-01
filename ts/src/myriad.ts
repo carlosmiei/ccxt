@@ -508,23 +508,88 @@ export default class Myriad extends Exchange {
      * @param since
      * @param limit
      * @param params
-     * @see https://docs.myriad.markets/api-reference/markets/get-market
+    * @see https://docs.myriad.markets/builders/myriad-api-reference#320c9e49da828116b12dec5bfeea306a
      */
     async fetchOHLCV (symbol: Str, timeframe = '1d', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
         const outcomeObj = this.outcome (symbol);
+        const outcomeInfo = this.safeDict (outcomeObj, 'info', {});
         const networkId = this.safeString (outcomeObj['info'], 'networkId');
         const marketId = this.safeString (outcomeObj['info'], 'marketId');
-        const outcomeId = this.safeString (outcomeObj['info'], 'outcomeId');
+        const outcomeId = this.safeString (outcomeInfo, 'outcomeId', this.safeString (outcomeInfo, 'id'));
+        const outcomeTitle = this.safeString (outcomeInfo, 'outcomeLabel', this.safeString (outcomeInfo, 'label', this.safeString (outcomeInfo, 'title')));
         const bucketKey = this.safeString (this.timeframes, timeframe, '30d');
-        const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
-            'networkId': networkId,
+        const response = await this.myriadPublicGetMarketsId (this.extend ({
             'id': marketId,
+            'network_id': networkId,
         }, params));
-        const priceCharts = this.safeValue (response, 'price_charts', {});
-        const bucket = this.safeValue (priceCharts, bucketKey, {});
-        // Each bucket may be keyed by outcomeId
-        const points = (this.safeList (bucket, outcomeId, this.safeList (bucket, 'data', [])) || []) as any[];
+        //
+        //     {
+        //         "id": "164",
+        //         "networkId": "2741",
+        //         "slug": "trump-out-as-president-2027",
+        //         "title": "Will Trump cease to be President before 2027?",
+        //         "state": "open",
+        //         "outcomes": [
+        //             {
+        //                 "id": "0",
+        //                 "outcomeId": "0",
+        //                 "title": "YES",
+        //                 "label": "YES",
+        //                 "price": 0.42,
+        //                 "priceChange24h": -0.02
+        //             }
+        //         ],
+        //         "price_charts": {
+        //             "24h": {
+        //                 "timeframe": "24h",
+        //                 "prices": [
+        //                     {
+        //                         "timestamp": 1705318200,
+        //                         "open": 0.40,
+        //                         "high": 0.45,
+        //                         "low": 0.39,
+        //                         "close": 0.42,
+        //                         "price": 0.42,
+        //                         "value": 0.42
+        //                     }
+        //                 ]
+        //             },
+        //             "7d": {...},
+        //             "30d": {...}
+        //         }
+        //     }
+        //
+        const outcomes = this.safeList (response, 'outcomes', []) as any[];
+        let selectedOutcome: Dict = undefined;
+        for (const outcome of outcomes) {
+            const currentId = this.safeString (outcome, 'id', this.safeString (outcome, 'outcomeId'));
+            const currentTitle = this.safeString (outcome, 'title', this.safeString (outcome, 'label'));
+            if ((outcomeId !== undefined) && (currentId === outcomeId)) {
+                selectedOutcome = outcome;
+                break;
+            }
+            if ((selectedOutcome === undefined) && (outcomeTitle !== undefined) && (currentTitle === outcomeTitle)) {
+                selectedOutcome = outcome;
+            }
+        }
+        const outcomePriceCharts = this.safeDict (selectedOutcome, 'price_charts', {});
+        let chart = this.safeValue (outcomePriceCharts, bucketKey);
+        if (chart === undefined) {
+            for (const key of Object.keys (outcomePriceCharts)) {
+                const chartObj = this.safeDict (outcomePriceCharts, key, {});
+                if (this.safeString (chartObj, 'timeframe') === bucketKey) {
+                    chart = chartObj;
+                    break;
+                }
+            }
+        }
+        let points = (this.safeList (chart, 'prices', this.safeList (chart, 'data', chart as any)) || []) as any[];
+        if (points.length === 0) {
+            const priceCharts = this.safeDict (response, 'price_charts', {});
+            const bucket = this.safeValue (priceCharts, bucketKey, {});
+            points = (this.safeList (bucket, outcomeId, this.safeList (bucket, 'data', [])) || []) as any[];
+        }
         return this.parseOHLCVs (points, outcomeObj, timeframe, since, limit);
     }
 
@@ -534,12 +599,23 @@ export default class Myriad extends Exchange {
      * @param market
      */
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
+        //
+        //     {
+        //         "timestamp": 1705318200,
+        //         "open": 0.40,
+        //         "high": 0.45,
+        //         "low": 0.39,
+        //         "close": 0.42,
+        //         "price": 0.42,
+        //         "value": 0.42
+        //     }
+        //
         const ts = this.safeInteger (ohlcv, 'timestamp');
         const open = this.safeNumber (ohlcv, 'open');
         const high = this.safeNumber (ohlcv, 'high');
         const low = this.safeNumber (ohlcv, 'low');
         const close = this.safeNumber (ohlcv, 'close');
-        const price = this.safeNumber (ohlcv, 'price');  // fallback single-value tick
+        const price = this.safeNumber (ohlcv, 'price', this.safeNumber (ohlcv, 'value'));  // fallback single-value tick
         return [
             ts !== undefined ? ts * 1000 : undefined,
             open !== undefined ? open : price,

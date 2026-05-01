@@ -59,12 +59,11 @@ export default class Limitless extends Exchange {
                 'fetchCurrencies': false,
             },
             'timeframes': {
-                '1m': 1,
-                '5m': 5,
-                '15m': 15,
-                '1h': 60,
-                '6h': 360,
-                '1d': 1440,
+                '1h': '1h',
+                '6h': '6h',
+                '1d': '1d',
+                '1w': '1w',
+                '1M': '1m',
             },
             'urls': {
                 'logo': 'https://limitless.exchange/favicon.ico',
@@ -743,25 +742,76 @@ export default class Limitless extends Exchange {
     // -----------------------------------------------------------------------
 
     /**
-     * Fetches historical price ticks for a single Limitless outcome token and maps them to OHLCV format.
+     * Fetches historical prices for a single Limitless market outcome and maps them to OHLCV format.
+     * Uses the `interval` query parameter and selects the YES/NO series that matches the requested outcome.
      * @param symbol  outcome symbol, e.g. "TRUMP_OUT:YES"
      * @param timeframe
      * @param since
      * @param limit
      * @param params
-     * @see https://docs.limitless.exchange/api-reference/markets/get-historical-price
+     * @see https://docs.limitless.exchange/api-reference/trading/historical-price
      */
     async fetchOHLCV (symbol: Str, timeframe = '1d', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
         await this.checkEventsAndMarkets (symbol);
         const outcomeObj = this.outcome (symbol);
         const slug = this.safeString (outcomeObj['info'], 'slug');
-        const fidelity = this.safeInteger (this.timeframes, timeframe, 1440);
+        const outcomeLabel = this.safeStringUpper (outcomeObj['info'], 'outcomeLabel');
+        const interval = this.safeString (this.timeframes, timeframe, '1d');
         const response = await this.limitlessPublicGetMarketsSlugHistoricalPrice (this.extend ({
             'slug': slug,
-            'fidelity': fidelity,
+            'interval': interval,
         }, params));
-        const history = (this.safeList (response, 'data', response as any) || []) as any[];
+        //
+        //     {
+        //         "data": [
+        //             {
+        //                  "timestamp": 1705318200000,
+        //                  "price": 0.1655
+        //             },
+        //         ]
+        //     }
+        //
+        //
+        //     [
+        //         {
+        //             "title": "YES Token",
+        //             "prices": [
+        //                 {
+        //                     "price": 0.75,
+        //                     "timestamp": "2024-01-15T10:30:00Z"
+        //                 },
+        //             ]
+        //         },
+        //         {
+        //             "title": "NO Token",
+        //             "prices": [
+        //                 {
+        //                     "price": 0.25,
+        //                     "timestamp": "2024-01-15T10:30:00Z"
+        //                 }
+        //             ]
+        //         }
+        //     ]
+        //
+        const rawHistory = (this.safeList (response, 'data', this.safeList (response, 'prices', response as any)) || []) as any[];
+        let history: any[] = rawHistory;
+        if (rawHistory.length > 0) {
+            const first = this.safeDict (rawHistory, 0, {});
+            const firstPrices = this.safeList (first, 'prices');
+            if (firstPrices !== undefined) {
+                let selectedSeries = first;
+                for (let i = 0; i < rawHistory.length; i++) {
+                    const series = this.safeDict (rawHistory, i, {});
+                    const title = this.safeStringUpper (series, 'title', '');
+                    if ((outcomeLabel !== undefined) && (title.indexOf (outcomeLabel) >= 0)) {
+                        selectedSeries = series;
+                        break;
+                    }
+                }
+                history = this.safeList (selectedSeries, 'prices', []);
+            }
+        }
         return this.parseOHLCVs (history, outcomeObj, timeframe, since, limit);
     }
 
@@ -771,12 +821,31 @@ export default class Limitless extends Exchange {
      * @param market
      */
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
-        const ts = this.safeInteger (ohlcv, 'timestamp');
+        //
+        //     {
+        //         "timestamp": 1705318200000,
+        //         "price": 0.1655
+        //     }
+        //
+        //     {
+        //         "price": 0.75,
+        //         "timestamp": "2024-01-15T10:30:00Z"
+        //     }
+        //
+        let ts = this.safeInteger (ohlcv, 'timestamp');
+        if (ts === undefined) {
+            const tsString = this.safeString (ohlcv, 'timestamp');
+            ts = tsString ? this.parse8601 (tsString) : undefined;
+        } else if (ts < 1000000000000) {
+            // old responses may return unix seconds
+            ts *= 1000;
+        }
         const price = this.safeNumber (ohlcv, 'price');
+        const volume = this.safeNumber (ohlcv, 'volume');
         return [
-            ts !== undefined ? ts * 1000 : undefined,
+            ts,
             price, price, price, price,   // synthetic OHLC from single tick
-            undefined,
+            volume,
         ];
     }
 

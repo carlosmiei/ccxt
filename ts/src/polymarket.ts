@@ -613,6 +613,13 @@ export default class polymarket extends Exchange {
             'endTs': endS,
         };
         const response = await this.clobPublicGetPricesHistory (this.extend (request, params));
+        //
+        //     {
+        //         "history": [
+        //             { "t": "1776043119", "p": "0.265" },
+        //         ]
+        //     }
+        //
         const history = this.safeList (response, 'history', []) as any[];
         // Client-side bucket aggregation: snap each tick to its candle boundary and
         // build open/high/low/close/volume. Assumes history is sorted ascending by time.
@@ -640,6 +647,12 @@ export default class polymarket extends Exchange {
 
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
         // Unused: fetchOHLCV performs client-side bucket aggregation directly.
+        //
+        //     {
+        //         "t": "1776043119",
+        //         "p": "0.265"
+        //     }
+        //
         const ts = this.safeInteger (ohlcv, 't');
         const price = this.safeNumber (ohlcv, 'p');
         return [ ts !== undefined ? ts * 1000 : undefined, price, price, price, price, undefined ];
