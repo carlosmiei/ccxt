@@ -587,7 +587,7 @@ export default class kalshi extends Exchange {
      * @param since
      * @param limit
      * @param params
-     * @see https://trading-api.readme.io/reference/getcandlesticks
+     * @see https://docs.kalshi.com/api-reference/market/get-market-candlesticks
      */
     async fetchOHLCV (outcome: Str, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
@@ -618,6 +618,40 @@ export default class kalshi extends Exchange {
         const response = await this.kalshiPublicGetSeriesSeriesTickerMarketsTickerCandlesticks (
             this.extend (request, params)
         );
+        //
+        //     {
+        //         "candlesticks": [
+        //             {
+        //                 "end_period_ts": 1776109260,
+        //                 "open_interest_fp": "10869.00",
+        //                 "price": {
+        //                     "open_dollars": "0.5600",
+        //                     "low_dollars": "0.5600",
+        //                     "high_dollars": "0.5600",
+        //                     "close_dollars": "0.5600",
+        //                     "mean_dollars": "0.5600",
+        //                     "previous_dollars": "0.5600",
+        //                     "min_dollars": "0.5600",
+        //                     "max_dollars": "0.5600"
+        //                 },
+        //                 "volume_fp": "0.00",
+        //                 "yes_ask": {
+        //                     "close_dollars": "0.1630",
+        //                     "high_dollars": "0.1630",
+        //                     "low_dollars": "0.1500",
+        //                     "open_dollars": "0.1630"
+        //                 },
+        //                 "yes_bid": {
+        //                     "close_dollars": "0.0800",
+        //                     "high_dollars": "0.0800",
+        //                     "low_dollars": "0.0700",
+        //                     "open_dollars": "0.0800"
+        //                 }
+        //             },
+        //         ],
+        //         "ticker": "KXGDPSHAREMANU-29"
+        //     }
+        //
         const candles = this.safeList (response, 'candlesticks', []) as any[];
         return this.parseOHLCVs (candles, outcomeObj as any, timeframe, since, limit);
     }
@@ -628,19 +662,48 @@ export default class kalshi extends Exchange {
      * @param market
      */
     parseOHLCV (ohlcv: Dict, market: Market = undefined): OHLCV {
-        // Kalshi candlestick prices are in cents → divide by 100
+        //
+        //     {
+        //         "end_period_ts": 1776109260,
+        //         "open_interest_fp": "10869.00",
+        //         "price": {
+        //             "open_dollars": "0.5600",
+        //             "low_dollars": "0.5600",
+        //             "high_dollars": "0.5600",
+        //             "close_dollars": "0.5600",
+        //             "mean_dollars": "0.5600",
+        //             "previous_dollars": "0.5600",
+        //             "min_dollars": "0.5600",
+        //             "max_dollars": "0.5600"
+        //         },
+        //         "volume_fp": "0.00",
+        //         "yes_ask": {
+        //             "close_dollars": "0.1630",
+        //             "high_dollars": "0.1630",
+        //             "low_dollars": "0.1500",
+        //             "open_dollars": "0.1630"
+        //         },
+        //         "yes_bid": {
+        //             "close_dollars": "0.0800",
+        //             "high_dollars": "0.0800",
+        //             "low_dollars": "0.0700",
+        //             "open_dollars": "0.0800"
+        //         }
+        //     }
+        //
+        const price = this.safeDict (ohlcv, 'price', {});
         const ts = this.safeInteger (ohlcv, 'end_period_ts');
-        const open = this.safeNumber (ohlcv, 'open');
-        const high = this.safeNumber (ohlcv, 'high');
-        const low = this.safeNumber (ohlcv, 'low');
-        const close = this.safeNumber (ohlcv, 'close');
-        const vol = this.safeNumber (ohlcv, 'volume');
+        const vol = this.safeNumber (ohlcv, 'volume_fp');
+        const open = this.safeNumber (price, 'open_dollars');
+        const high = this.safeNumber (price, 'high_dollars');
+        const low = this.safeNumber (price, 'low_dollars');
+        const close = this.safeNumber (price, 'close_dollars');
         return [
             ts !== undefined ? ts * 1000 : undefined,
-            open !== undefined ? open / 100 : undefined,
-            high !== undefined ? high / 100 : undefined,
-            low !== undefined ? low / 100 : undefined,
-            close !== undefined ? close / 100 : undefined,
+            open !== undefined ? open : undefined,
+            high !== undefined ? high : undefined,
+            low !== undefined ? low : undefined,
+            close !== undefined ? close : undefined,
             vol,
         ];
     }
