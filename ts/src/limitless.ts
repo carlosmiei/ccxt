@@ -20,6 +20,9 @@ import type {
     Market, Ticker, OrderBook, OHLCV,
     Order, Position, PredictionEvent,
 } from './base/types.js';
+import { ArgumentsRequired } from '../ccxt.js';
+import { Precise } from './base/Precise.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 
 // ---------------------------------------------------------------------------
 
@@ -78,33 +81,69 @@ export default class Limitless extends Exchange {
                     'public': {
                         'get': {
                             'markets/active': 1,
+                            'markets/active/{categoryId}': 1,
                             'markets/{addressOrSlug}': 1,
+                            'markets/categories/count': 1,
+                            'markets/active/slugs': 1,
                             'markets/search': 1,
                             'markets/{slug}/orderbook': 1,
                             'markets/{slug}/historical-price': 1,
                             'auth/signing-message': 1,
+                            'markets/{addressOrSlug}/oracle-candles': 1,
+                            'markets/{slug}/get-feed-events': 1,
+                            'markets/{slug}/events': 1,
+                            'navigation': 1,
+                            'market-pages/by-path': 1,
+                            'market-pages/{id}/markets': 1,
+                            'property-keys': 1,
+                            'property-keys/{id}': 1,
+                            'property-keys/{id}/options': 1,
+                            'portfolio/{account}/traded-volume': 1,
+                            'portfolio/{account}/positions': 1,
+                            'portfolio/{account}/pnl-chart': 1,
                         },
                     },
                     'private': {
                         'get': {
+                            'auth/api-keys': 1,
                             'markets/{slug}/user-orders': 1,
                             'portfolio/positions': 1,
                             'portfolio/trades': 1,
+                            'markets/{slug}/locked-balance': 1,
+                            'profiles/{account}': 1,
+                            'portfolio/pnl-chart': 1,
+                            'portfolio/history': 1,
+                            'portfolio/points': 1,
+                            'portfolio/trading/allowance': 1,
+                            'auth/api-tokens/capabilities': 1,
+                            'auth/api-tokens': 1,
+                            'profiles/partner-accounts/{profileId}/allowances': 1,
                         },
                         'post': {
+                            'auth/logout': 1,
+                            'auth/api-keys': 1,
                             'auth/login': 1,
                             'orders': 1,
                             'orders/cancel-batch': 1,
+                            'orders/status/batch': 1,
+                            'portfolio/redeem': 1,
+                            'portfolio/withdraw': 1,
+                            'auth/api-tokens/derive': 1,
+                            'profiles/partner-accounts': 1,
+                            'profiles/partner-accounts/{profileId}/allowances/retry': 1,
                         },
                         'delete': {
+                            'auth/api-keys': 1,
                             'orders/{order_id}': 1,
+                            'orders/all/{slug}': 1,
+                            'auth/api-tokens/{tokenId}': 1,
                         },
                     },
                 },
             },
             'requiredCredentials': {
                 'apiKey': true,   // Limitless API key
-                'privateKey': true,   // EVM private key for EIP-712 order signing
+                'secret': true,
             },
             'fees': {
                 'trading': {
@@ -135,7 +174,7 @@ export default class Limitless extends Exchange {
     async fetchMarkets (params: Dict = {}): Promise<Market[]> {
         const queries = this.safeList (params, 'queries', []) as string[];
         const rest = this.omit (params, [ 'queries' ]);
-        const allRaw: any[] = [];
+        let allRaw: any[] = [];
         if (queries && queries.length > 0) {
             const limit = this.safeInteger (rest, 'limit', 50);
             const searchRest = this.omit (rest, [ 'limit' ]);
@@ -154,12 +193,39 @@ export default class Limitless extends Exchange {
         } else {
             let page = 1;
             const pageSize = this.safeInteger (this.options, 'marketsPageSize', 25);
+            const request: Dict = {
+                'page': page,
+                'limit': pageSize,
+            };
+            const firstPageResponse = await this.limitlessPublicGetMarketsActive (this.extend (request, rest));
+            const totalMarketsCount = this.safeInteger (firstPageResponse, 'totalMarketsCount');
+            const firstData = this.safeList (firstPageResponse, 'data', []);
+            allRaw = this.flatten (firstData, allRaw);
+            const promises = [];
+            const totalPages = Math.ceil (totalMarketsCount / pageSize);
+            for (let i = 2; i <= totalPages; i++) {
+                page = i;
+                request['page'] = page;
+                promises.push (this.limitlessPublicGetMarketsActive (this.extend (request, rest)));
+            }
+            const responses = await Promise.all (promises);
+            const length = responses.length;
+            for (let j = 0; j < length; j++) {
+                const response = this.safeDict (responses, j);
+                const data = this.safeList (response, 'data', []);
+                allRaw = this.flatten (data, allRaw);
+            }
+            const lastPageResponse = this.safeDict (responses, length - 1);
+            const lastPageData = this.safeList (lastPageResponse, 'data', []);
+            const lastPageLength = lastPageData.length;
             let hasMore = true;
+            if (lastPageLength < pageSize) {
+                hasMore = false;
+            }
             while (hasMore) {
-                const response = await this.limitlessPublicGetMarketsActive (this.extend ({
-                    'page': page,
-                    'limit': pageSize,
-                }, rest));
+                page++;
+                request['page'] = page;
+                const response = await this.limitlessPublicGetMarketsActive (this.extend (request, rest));
                 const page_markets = (this.safeList (response, 'data', response as any) || []) as any[];
                 if (!page_markets || page_markets.length === 0) {
                     break;
@@ -168,7 +234,6 @@ export default class Limitless extends Exchange {
                     allRaw.push (raw);
                 }
                 hasMore = page_markets.length >= pageSize;
-                page++;
             }
         }
         const markets: Market[] = [];
@@ -283,7 +348,7 @@ export default class Limitless extends Exchange {
         const tokenEntries = Object.keys (tokens);
         for (const outcomeLabel of tokenEntries) {
             const tokenData = tokens[outcomeLabel];
-            const tokenId = this.safeString (tokenData, 'token_id', slug + '/' + outcomeLabel);
+            const tokenId = tokenData;
             outcomes.push ({
                 'id': tokenId,
                 'symbol': this.slugToOutcomeSymbol (groupId, slug, outcomeLabel),
@@ -834,31 +899,47 @@ export default class Limitless extends Exchange {
 
     /**
      * Fetches open orders for the authenticated Limitless user, optionally filtered by market slug.
-     * @param symbol  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
      * @param since
      * @param limit
      * @param params
      * @see https://docs.limitless.exchange/api-reference/orders/get-user-orders
      */
-    async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
-        if (symbol !== undefined) {
-            await this.checkEventsAndMarkets (symbol);
-        } else {
-            await this.checkEventsAndMarkets ();
+    async fetchOpenOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+        if (outcome === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOpenOrders requires an outcome argument');
         }
-        const request: Dict = {};
-        let outcomeObj: any = undefined;
-        if (symbol !== undefined) {
-            await this.loadMarkets ();
-            outcomeObj = this.outcome (symbol);
-            request['slug'] = this.safeString (outcomeObj['info'], 'slug');
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        const outcomeObj = this.outcome (outcome);
+        const info = this.safeDict (outcomeObj, 'info');
+        const request: Dict = {
+            'slug': this.safeString (info, 'slug'),
+        };
+        if (limit !== undefined) {
+            request['limit'] = limit;
         }
-        const slug = this.safeString (request, 'slug', 'all');
-        const response = await this.limitlessPrivateGetMarketsSlugUserOrders (
-            this.extend ({ 'slug': slug }, this.omit (request, 'slug'), params)
-        );
-        const orders = this.safeList (response, 'data', []) as any[];
-        return this.parseOrders (orders, outcomeObj, since, limit);
+        const response = await this.limitlessPrivateGetMarketsSlugUserOrders (this.extend (request, params));
+        //
+        //     [
+        //         {
+        //             "createdAt": "2026-05-04T08:57:06.448Z",
+        //             "id": "c4b1a83a-219f-48db-a9be-1ddadf0bc14c",
+        //             "ownerId": 1315134,
+        //             "marketId": "112523",
+        //             "token": "46235703925185836960484608024734446969378108670784413458211837874003718039438",
+        //             "type": "GTC",
+        //             "status": "LIVE",
+        //             "side": "BUY",
+        //             "makerAmount": "1000040",
+        //             "takerAmount": "10870000",
+        //             "price": "0.092",
+        //             "originalSize": "10870000",
+        //             "remainingSize": "10870000"
+        //         }
+        //     ]
+        //
+        return this.parseOrders (response, outcomeObj as any, since, limit);
     }
 
     /**
@@ -867,43 +948,62 @@ export default class Limitless extends Exchange {
      * @param market  outcome object (optional)
      */
     parseOrder (order: Dict, market: Market = undefined): Order {
-        const id = this.safeString (order, 'id', this.safeString (order, 'orderId'));
-        const slug = this.safeString (order, 'marketSlug', this.safeString (order, 'slug'));
-        const outcome = this.safeString (order, 'outcome');
-        const ocSymbol = (slug && outcome) ? this.shortenSlug (slug) + ':' + (outcome as string).toUpperCase () : undefined;
-        const ocObj = ocSymbol ? this.safeOutcome (ocSymbol, undefined) : undefined;
-        const ocOrMkt = ocObj || market;
-        const status = this.parseOrderStatus (this.safeString (order, 'status'));
-        const side = this.safeStringLower (order, 'side');
-        const price = this.safeNumber (order, 'price');
-        const amount = this.safeNumber (order, 'size', this.safeNumber (order, 'amount'));
-        const filled = this.safeNumber (order, 'filledSize', 0);
-        const remaining = (amount !== undefined && filled !== undefined) ? amount - filled : undefined;
-        const ts = this.safeInteger (order, 'createdAt', this.parse8601 (this.safeString (order, 'created_at')));
+        //
+        //     {
+        //         "createdAt": "2026-05-04T08:57:06.448Z",
+        //         "id": "c4b1a83a-219f-48db-a9be-1ddadf0bc14c",
+        //         "ownerId": 1315134,
+        //         "marketId": "112523",
+        //         "token": "46235703925185836960484608024734446969378108670784413458211837874003718039438",
+        //         "type": "GTC",
+        //         "status": "LIVE",
+        //         "side": "BUY",
+        //         "makerAmount": "1000040",
+        //         "takerAmount": "10870000",
+        //         "price": "0.092",
+        //         "originalSize": "10870000",
+        //         "remainingSize": "10870000"
+        //     }
+        //
+        const id = this.safeString (order, 'id');
+        const tokenId = this.safeString (order, 'token');
+        const mkt = this.safeOutcome (tokenId, market as any);
+        const status = this.parseOrderStatus (this.safeStringLower (order, 'status'));
+        const side = this.safeString (order, 'side');
+        const price = this.safeString (order, 'price');
+        const amount = this.safeString (order, 'originalSize');
+        const remaining = this.safeString (order, 'remainingSize');
+        const datetime = this.safeString (order, 'createdAt');
+        const ts = this.parse8601 (datetime);
+        const timeInForce = this.safeString (order, 'type');
+        let type = 'limit';
+        if (timeInForce === 'FOK') {
+            type = 'market';
+        }
         return this.safeOrder ({
             'id': id,
             'clientOrderId': undefined,
             'info': order,
             'timestamp': ts,
-            'datetime': this.iso8601 (ts),
+            'datetime': datetime,
             'lastTradeTimestamp': undefined,
             'status': status,
-            'symbol': ocOrMkt ? ocOrMkt['symbol'] : undefined,
-            'type': 'limit',
-            'timeInForce': 'GTC',
+            'outcome': mkt['symbol'],
+            'type': type,
+            'timeInForce': timeInForce,
             'postOnly': undefined,
             'side': side,
             'price': price,
             'stopPrice': undefined,
             'triggerPrice': undefined,
             'average': undefined,
-            'amount': amount,
+            'amount': Precise.stringDiv (amount, '1000000'),  // convert from micro-units
             'cost': undefined,
-            'filled': filled,
-            'remaining': remaining,
+            'filled': undefined,
+            'remaining': Precise.stringDiv (remaining, '1000000'),  // convert from micro-units
             'fee': undefined,
             'trades': [],
-        }, ocOrMkt as any);
+        }, mkt);
     }
 
     /**
@@ -912,10 +1012,8 @@ export default class Limitless extends Exchange {
      */
     parseOrderStatus (status: Str): Str {
         const statuses: Dict = {
-            'open': 'open',
-            'filled': 'closed',
-            'cancelled': 'canceled',
-            'canceled': 'canceled',
+            'LIVE': 'open',
+            'MATCHED': 'closed',
         };
         return this.safeString (statuses, status, status);
     }
@@ -1154,7 +1252,7 @@ export default class Limitless extends Exchange {
         const access: string = typeof api === 'string' ? 'public' : api[1];
         const baseUrls = this.urls['api'] as Dict;
         const baseUrl = this.safeString (baseUrls, apiGroup, baseUrls['limitless'] as string);
-        let url = baseUrl + '/' + this.implodeParams (path as string, params);
+        let url = '/' + this.implodeParams (path as string, params);
         const query = this.omit (params, this.extractParams (path as string));
         const querystring = this.urlencode (query);
         if (method === 'GET' && querystring) {
@@ -1164,15 +1262,23 @@ export default class Limitless extends Exchange {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
         }, headers || {});
+        let bodyString = '';
+        if (method !== 'GET' && querystring) {
+            body = query as any;
+            bodyString = this.json (body);
+        }
         if (access === 'private') {
             this.checkRequiredCredentials ();
+            const timestamp = this.iso8601 (this.milliseconds ());
+            const payload = timestamp + '\n' + method + '\n' + url + '\n' + bodyString;
+            const signature = this.hmac (this.encode (payload), this.base64ToBinary (this.secret), sha256, 'base64');
             headers = this.extend (headers, {
-                'x-api-key': this.apiKey,
+                'lmts-api-key': this.apiKey,
+                'lmts-timestamp': timestamp,
+                'lmts-signature': signature,
             });
-            if (method !== 'GET' && querystring) {
-                body = query as any;
-            }
         }
+        url = baseUrl + url;
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
 }
