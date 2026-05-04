@@ -19,8 +19,9 @@ import type {
     Int, Str, Num, Dict,
     Market, Ticker, OrderBook, OHLCV,
     Order, Position, PredictionEvent,
+    Bool,
 } from './base/types.js';
-import { ArgumentsRequired } from '../ccxt.js';
+import { ArgumentsRequired, BadRequest, OrderNotFound } from '../ccxt.js';
 import { Precise } from './base/Precise.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 
@@ -47,17 +48,22 @@ export default class Limitless extends Exchange {
                 'future': false,
                 'option': false,
                 'prediction': true,
+                'fetchClosedOrders': true,
                 'fetchEvents': true,
                 'fetchMarkets': true,
-                'fetchTicker': true,
-                'fetchOrderBook': true,
                 'fetchOHLCV': true,
+                'fetchOpenOrders': true,
+                'fetchOrder': true,
+                'fetchOrderBook': true,
+                'fetchOrders': true,
+                'fetchOrdersByIds': true,
+                'fetchTicker': true,
                 'fetchTrades': false,   // no public trades endpoint
                 'fetchBalance': false,
                 'fetchPositions': true,
-                'fetchOpenOrders': true,
                 'createOrder': true,
                 'cancelOrder': true,
+                'cancelOrders': true,
                 'cancelAllOrders': true,
                 'fetchCurrencies': false,
             },
@@ -157,6 +163,14 @@ export default class Limitless extends Exchange {
                 'defaultFetchMarketsPages': 5,
                 'marketsPageSize': 25,
                 'usdcDecimals': 6,  // Limitless sizes are 6-decimal USDC
+                'warnOnCancelAllOrdersWithOutcome': true, // cancelAllOrders with an outcome symbol will cancel all orders for the entire slug (both YES and NO outcomes), so we warn by default to prevent mistakes. Set this option to false to suppress the warning.
+            },
+            'exceptions': {
+                'exact': {
+                    // {"statusCode":400,"message":"Body is not valid JSON but content-type is set to 'application/json'"}
+                    // 400 Bad Request {"message":"Order not found or already canceled"}
+                },
+                'broad': {},
             },
         });
     }
@@ -531,7 +545,6 @@ export default class Limitless extends Exchange {
         //                "max":0.999
         //             },
         //             "cost":{
-
         //             }
         //          },
         //          "outcomes":[
@@ -898,16 +911,19 @@ export default class Limitless extends Exchange {
     // -----------------------------------------------------------------------
 
     /**
-     * Fetches open orders for the authenticated Limitless user, optionally filtered by market slug.
-     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
-     * @param since
-     * @param limit
-     * @param params
+     * @method
+     * @name limitless#fetchOrders
+     * @description fetches orders for the authenticated user for a single outcome
      * @see https://docs.limitless.exchange/api-reference/orders/get-user-orders
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param [since] the earliest time in ms to fetch orders for
+     * @param [limit] the maximum number of order structures to retrieve
+     * @param [params] extra parameters specific to the exchange API endpoint
+     * @returns a list of [order structures]
      */
-    async fetchOpenOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+    async fetchOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
         if (outcome === undefined) {
-            throw new ArgumentsRequired (this.id + ' fetchOpenOrders requires an outcome argument');
+            throw new ArgumentsRequired (this.id + ' fetchOrders requires an outcome argument');
         }
         await this.loadMarkets ();
         await this.checkEventsAndMarkets (outcome);
@@ -915,6 +931,7 @@ export default class Limitless extends Exchange {
         const info = this.safeDict (outcomeObj, 'info');
         const request: Dict = {
             'slug': this.safeString (info, 'slug'),
+            'statuses': [ 'LIVE', 'MATCHED' ],
         };
         if (limit !== undefined) {
             request['limit'] = limit;
@@ -943,12 +960,207 @@ export default class Limitless extends Exchange {
     }
 
     /**
+     * @method
+     * @name limitless#fetchOpenOrders
+     * @description fetches open orders for the authenticated user for a single outcome
+     * @see https://docs.limitless.exchange/api-reference/orders/get-user-orders
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param [since] the earliest time in ms to fetch orders for
+     * @param [limit] the maximum number of order structures to retrieve
+     * @param [params] extra parameters specific to the exchange API endpoint
+     * @returns a list of [order structures]
+     */
+    async fetchOpenOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+        if (outcome === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOpenOrders requires an outcome argument');
+        }
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        params = this.extend (params, {
+            'statuses': [ 'LIVE' ],
+        });
+        return await this.fetchOrders (outcome, since, limit, params);
+    }
+
+    /**
+     * @method
+     * @name limitless#fetchClosedOrders
+     * @description fetches closed orders for the authenticated user for a single outcome
+     * @see https://docs.limitless.exchange/api-reference/orders/get-user-orders
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param [since] the earliest time in ms to fetch orders for
+     * @param [limit] the maximum number of order structures to retrieve
+     * @param [params] extra parameters specific to the exchange API endpoint
+     */
+    async fetchClosedOrders (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params: Dict = {}): Promise<Order[]> {
+        if (outcome === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchClosedOrders requires an outcome argument');
+        }
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        params = this.extend (params, {
+            'statuses': [ 'MATCHED' ],
+        });
+        return await this.fetchOrders (outcome, since, limit, params);
+    }
+
+    /**
+     * @method
+     * @name limitless#fetchOrdersByIds
+     * @description fetch orders by the list of order id
+     * @see https://docs.limitless.exchange/api-reference/trading/order-status-batch
+     * @param ids list of order id
+     * @param [outcome] market outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param [params] extra parameters specific to the exchange API endpoint
+     */
+    async fetchOrdersByIds (ids, outcome: Str = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        const length = ids.length;
+        if (length > 50) {
+            throw new BadRequest (this.id + ' fetchOrdersByIds can only fetch up to 50 orders at a time');
+        }
+        let outcomeObj = undefined;
+        if (outcome !== undefined) {
+            outcomeObj = this.outcome (outcome);
+        }
+        const items: Dict[] = [];
+        for (let i = 0; i < length; i++) {
+            const id = this.safeString (ids, i);
+            const item: Dict = {
+                'orderId': id,
+            };
+            items.push (item);
+        }
+        const request: Dict = {
+            'items': items,
+        };
+        const response = await this.limitlessPrivatePostOrdersStatusBatch (this.extend (request, params));
+        //
+        //     {
+        //         "results": [
+        //             {
+        //                 "index": 0,
+        //                 "status": "found",
+        //                 "orderId": "ff0dcbf1-f7de-43f0-b6f1-16b972a17f49",
+        //                 "data": {
+        //                     "order": {
+        //                         "createdAt": "2026-05-04T10:26:01.334Z",
+        //                         "id": "ff0dcbf1-f7de-43f0-b6f1-16b972a17f49",
+        //                         "makerAmount": "9999360",
+        //                         "takerAmount": "10752000",
+        //                         "expiration": null,
+        //                         "signatureType": 2,
+        //                         "salt": "277966495716",
+        //                         "maker": "0xAb2B9833FC8B8f55F4De7C4A0FAb8577EF0F7b36",
+        //                         "signer": "0x82a0f074C6C0C11aA370D7FBF077668c31fCc990",
+        //                         "taker": "0x0000000000000000000000000000000000000000",
+        //                         "tokenId": "46235703925185836960484608024734446969378108670784413458211837874003718039438",
+        //                         "side": 0,
+        //                         "feeRateBps": 300,
+        //                         "nonce": "0",
+        //                         "signature": "0x1640c8558d8c627017b2c6ac71a79770d177033afeb9be72842803afcd12938f23308c507935011ad6d10acc299e5367f76b4f806eb025c15cb05739de11260d1b",
+        //                         "orderType": "FAK",
+        //                         "price": "0.93",
+        //                         "marketId": 112523,
+        //                         "ownerId": 1315134,
+        //                         "market": {
+        //                             "id": 112523,
+        //                             "slug": "doge-above-dollar010859-on-may-4-2000-utc-1777838401426",
+        //                             "title": "DOGE above $0.10859 on May 4, 20:00 UTC?",
+        //                             "status": "FUNDED",
+        //                             "yesPositionId": "46235703925185836960484608024734446969378108670784413458211837874003718039438",
+        //                             "noPositionId": "101714389600295994108208140228744407174156865974966685440205519669272948152879"
+        //                         },
+        //                         "owner": {
+        //                             "id": 1315134,
+        //                             "account": "0x7CFF82f72b991B6B2b661e404389fD8a40bCD21B",
+        //                             "client": "eoa",
+        //                             "tradeWalletOption": "smartWallet",
+        //                             "smartWallet": "0xAb2B9833FC8B8f55F4De7C4A0FAb8577EF0F7b36",
+        //                             "points": 0,
+        //                             "referredUsersCount": 0
+        //                         }
+        //                     },
+        //                     "makerMatches": [
+        //                         {
+        //                             "id": "be44a183-ec56-4076-a69c-10283321abd6",
+        //                             "matchedSize": "10752000",
+        //                             "fillPrice": "0.93",
+        //                             "fillCost": "9999360",
+        //                             "orderId": "3255c786-3f30-4115-a99f-72be478f2e44",
+        //                             "order": {
+        //                                 "id": "3255c786-3f30-4115-a99f-72be478f2e44",
+        //                                 "maker": "0x8274600A3a9DC84747E6dEb49380F6B1DE2C505d",
+        //                                 "price": "0.07",
+        //                                 "side": 0,
+        //                                 "tokenId": "101714389600295994108208140228744407174156865974966685440205519669272948152879",
+        //                                 "owner": {
+        //                                     "id": 202602,
+        //                                     "account": "0x8274600A3a9DC84747E6dEb49380F6B1DE2C505d",
+        //                                     "client": "eoa",
+        //                                     "tradeWalletOption": null,
+        //                                     "smartWallet": null,
+        //                                     "username": null,
+        //                                     "displayName": "0x8274600A3a9DC84747E6dEb49380F6B1DE2C505d",
+        //                                     "pfpUrl": null,
+        //                                     "socialUrl": null,
+        //                                     "points": 0,
+        //                                     "referredUsersCount": 0
+        //                                 }
+        //                             }
+        //                         }
+        //                     ],
+        //                     "execution": {
+        //                         "feeRateBps": 300,
+        //                         "effectiveFeeBps": 59,
+        //                         "matched": true,
+        //                         "settlementStatus": "MINED",
+        //                         "tradeEventId": "44c46a93-f5cb-40f5-a52f-bd55bb97641e",
+        //                         "txHash": "0x101cda4b605007440b382c35a27531605c7fc1b29a7c803b19237586a74c10e8",
+        //                         "totalsRaw": {
+        //                             "contractsGross": "10752000",
+        //                             "contractsFee": "63436",
+        //                             "contractsNet": "10688564",
+        //                             "usdGross": "9999360",
+        //                             "usdFee": "0",
+        //                             "usdNet": "9999360"
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         ]
+        //     }
+        //
+        const results = this.safeList (response, 'results', []);
+        return this.parseOrders (results, outcomeObj as any);
+    }
+
+    /**
+     * @method
+     * @name limitless#fetchOrder
+     * @description fetches information on an order made by the user
+     * @see https://docs.limitless.exchange/api-reference/trading/order-status-batch
+     * @param id the order id
+     * @param outcome market outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param params extra parameters specific to the exchange API endpoint
+     * @returns An [order structure]{@link https://docs.ccxt.com/?id=order-structure}
+     */
+    async fetchOrder (id: string, outcome: Str = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        const orders = await this.fetchOrdersByIds ([ id ], outcome, params);
+        return this.safeDict (orders, 0) as Order;
+    }
+
+    /**
      * Parses a raw Limitless order object into a unified CCXT Order object.
      * @param order
      * @param market  outcome object (optional)
      */
     parseOrder (order: Dict, market: Market = undefined): Order {
         //
+        // fetchOrders, fetchOpenOrders, fetchClosedOrders
         //     {
         //         "createdAt": "2026-05-04T08:57:06.448Z",
         //         "id": "c4b1a83a-219f-48db-a9be-1ddadf0bc14c",
@@ -965,20 +1177,138 @@ export default class Limitless extends Exchange {
         //         "remainingSize": "10870000"
         //     }
         //
-        const id = this.safeString (order, 'id');
-        const tokenId = this.safeString (order, 'token');
+        // fetchOrdersByIds, fetchOrder
+        //     {
+        //         "index": 0,
+        //         "status": "found",
+        //         "orderId": "ff0dcbf1-f7de-43f0-b6f1-16b972a17f49",
+        //         "data": {
+        //             "order": {
+        //                 "createdAt": "2026-05-04T10:26:01.334Z",
+        //                 "id": "ff0dcbf1-f7de-43f0-b6f1-16b972a17f49",
+        //                 "makerAmount": "9999360",
+        //                 "takerAmount": "10752000",
+        //                 "expiration": null,
+        //                 "signatureType": 2,
+        //                 "salt": "277966495716",
+        //                 "maker": "0xAb2B9833FC8B8f55F4De7C4A0FAb8577EF0F7b36",
+        //                 "signer": "0x82a0f074C6C0C11aA370D7FBF077668c31fCc990",
+        //                 "taker": "0x0000000000000000000000000000000000000000",
+        //                 "tokenId": "46235703925185836960484608024734446969378108670784413458211837874003718039438",
+        //                 "side": 0,
+        //                 "feeRateBps": 300,
+        //                 "nonce": "0",
+        //                 "signature": "0x1640c8558d8c627017b2c6ac71a79770d177033afeb9be72842803afcd12938f23308c507935011ad6d10acc299e5367f76b4f806eb025c15cb05739de11260d1b",
+        //                 "orderType": "FAK",
+        //                 "price": "0.93",
+        //                 "marketId": 112523,
+        //                 "ownerId": 1315134,
+        //                 "market": {
+        //                     "id": 112523,
+        //                     "slug": "doge-above-dollar010859-on-may-4-2000-utc-1777838401426",
+        //                     "title": "DOGE above $0.10859 on May 4, 20:00 UTC?",
+        //                     "status": "FUNDED",
+        //                     "yesPositionId": "46235703925185836960484608024734446969378108670784413458211837874003718039438",
+        //                     "noPositionId": "101714389600295994108208140228744407174156865974966685440205519669272948152879"
+        //                 },
+        //                 "owner": {
+        //                     "id": 1315134,
+        //                     "account": "0x7CFF82f72b991B6B2b661e404389fD8a40bCD21B",
+        //                     "client": "eoa",
+        //                     "tradeWalletOption": "smartWallet",
+        //                     "smartWallet": "0xAb2B9833FC8B8f55F4De7C4A0FAb8577EF0F7b36",
+        //                     "points": 0,
+        //                     "referredUsersCount": 0
+        //                 }
+        //             },
+        //             "makerMatches": [
+        //                 {
+        //                     "id": "be44a183-ec56-4076-a69c-10283321abd6",
+        //                     "matchedSize": "10752000",
+        //                     "fillPrice": "0.93",
+        //                     "fillCost": "9999360",
+        //                     "orderId": "3255c786-3f30-4115-a99f-72be478f2e44",
+        //                     "order": {
+        //                         "id": "3255c786-3f30-4115-a99f-72be478f2e44",
+        //                         "maker": "0x8274600A3a9DC84747E6dEb49380F6B1DE2C505d",
+        //                         "price": "0.07",
+        //                         "side": 0,
+        //                         "tokenId": "101714389600295994108208140228744407174156865974966685440205519669272948152879",
+        //                         "owner": {
+        //                             "id": 202602,
+        //                             "account": "0x8274600A3a9DC84747E6dEb49380F6B1DE2C505d",
+        //                             "client": "eoa",
+        //                             "tradeWalletOption": null,
+        //                             "smartWallet": null,
+        //                             "username": null,
+        //                             "displayName": "0x8274600A3a9DC84747E6dEb49380F6B1DE2C505d",
+        //                             "pfpUrl": null,
+        //                             "socialUrl": null,
+        //                             "points": 0,
+        //                             "referredUsersCount": 0
+        //                         }
+        //                     }
+        //                 }
+        //             ],
+        //             "execution": {
+        //                 "feeRateBps": 300,
+        //                 "effectiveFeeBps": 59,
+        //                 "matched": true,
+        //                 "settlementStatus": "MINED",
+        //                 "tradeEventId": "44c46a93-f5cb-40f5-a52f-bd55bb97641e",
+        //                 "txHash": "0x101cda4b605007440b382c35a27531605c7fc1b29a7c803b19237586a74c10e8",
+        //                 "totalsRaw": {
+        //                     "contractsGross": "10752000",
+        //                     "contractsFee": "63436",
+        //                     "contractsNet": "10688564",
+        //                     "usdGross": "9999360",
+        //                     "usdFee": "0",
+        //                     "usdNet": "9999360"
+        //                 }
+        //             }
+        //         }
+        //     }
+        const data = this.safeDict (order, 'data');
+        const rawOrder = this.safeDict (data, 'order', order);
+        const id = this.safeString (rawOrder, 'id');
+        const tokenId = this.safeString2 (rawOrder, 'token', 'tokenId');
         const mkt = this.safeOutcome (tokenId, market as any);
-        const status = this.parseOrderStatus (this.safeStringLower (order, 'status'));
-        const side = this.safeString (order, 'side');
-        const price = this.safeString (order, 'price');
-        const amount = this.safeString (order, 'originalSize');
-        const remaining = this.safeString (order, 'remainingSize');
-        const datetime = this.safeString (order, 'createdAt');
+        const symbol = this.safeString (mkt, 'symbol');
+        const rawSide = this.safeString (rawOrder, 'side');
+        const side = this.parseOrderSide (rawSide);
+        const price = this.safeString (rawOrder, 'price');
+        const amountKey = (side === 'buy') ? 'takerAmount' : 'makerAmount'; // todo check
+        const amount = this.safeString (rawOrder, amountKey);
+        const remaining = this.safeString (rawOrder, 'remainingSize');
+        const datetime = this.safeString (rawOrder, 'createdAt');
         const ts = this.parse8601 (datetime);
-        const timeInForce = this.safeString (order, 'type');
-        let type = 'limit';
-        if (timeInForce === 'FOK') {
+        const timeInForce = this.safeString2 (rawOrder, 'type', 'orderType');
+        let type = undefined;
+        if (timeInForce === 'GTC') {
+            type = 'limit';
+        } else if (timeInForce === 'FAK') {
             type = 'market';
+        }
+        let rawStatus = this.safeString (rawOrder, 'status');
+        const execution = this.safeDict (data, 'execution');
+        let fee = undefined;
+        let filled = undefined;
+        let cost = undefined;
+        if (execution !== undefined) {
+            rawStatus = this.safeString (execution, 'settlementStatus');
+            const totals = this.safeDict (execution, 'totalsRaw');
+            cost = this.safeString (totals, 'usdGross');
+            filled = this.safeString (totals, 'contractsGross');
+            let feeCurrency = 'USDC';
+            let feeCost = this.safeString (totals, 'usdFee');
+            if (side === 'buy') {
+                feeCurrency = symbol;
+                feeCost = this.safeString (totals, 'contractsFee');
+            }
+            fee = {
+                'cost': this.applyScale (feeCost),
+                'currency': feeCurrency,
+            };
         }
         return this.safeOrder ({
             'id': id,
@@ -987,35 +1317,74 @@ export default class Limitless extends Exchange {
             'timestamp': ts,
             'datetime': datetime,
             'lastTradeTimestamp': undefined,
-            'status': status,
-            'outcome': mkt['symbol'],
+            'status': this.parseOrderStatus (rawStatus),
+            'symbol': mkt['marketSymbol'],
+            'outcome': symbol,
             'type': type,
-            'timeInForce': timeInForce,
+            'timeInForce': this.parseOrderTimeInForce (timeInForce),
             'postOnly': undefined,
             'side': side,
             'price': price,
             'stopPrice': undefined,
             'triggerPrice': undefined,
             'average': undefined,
-            'amount': Precise.stringDiv (amount, '1000000'),  // convert from micro-units
-            'cost': undefined,
-            'filled': undefined,
-            'remaining': Precise.stringDiv (remaining, '1000000'),  // convert from micro-units
-            'fee': undefined,
+            'amount': this.applyScale (amount),
+            'cost': this.applyScale (cost),
+            'filled': this.applyScale (filled),
+            'remaining': this.applyScale (remaining),
+            'fee': fee,
             'trades': [],
         }, mkt);
     }
 
     /**
-     * Maps a Limitless order status string to the CCXT unified status vocabulary.
+     * Maps an order status string to the CCXT unified status vocabulary.
      * @param status
      */
     parseOrderStatus (status: Str): Str {
         const statuses: Dict = {
             'LIVE': 'open',
             'MATCHED': 'closed',
+            // 'UNMATCHED': 'open', - both open and closed orders can have unmatched status, so we can't reliably map it to one or the other
+            'PENDING': 'pending',
+            'MINED': 'closed',
+            'CONFIRMED': 'closed',
+            'FAILED': 'rejected',
         };
         return this.safeString (statuses, status, status);
+    }
+
+    /**
+     * Maps an order time in force string to the CCXT unified type vocabulary.
+     */
+    parseOrderTimeInForce (timeInForce: Str): Str {
+        const timeInForces: Dict = {
+            'FAK': 'FOK',
+        };
+        return this.safeString (timeInForces, timeInForce, timeInForce);
+    }
+
+    /**
+     * Maps an order side string to the CCXT unified side vocabulary.
+     */
+    parseOrderSide (side: Str): Str {
+        const sides: Dict = {
+            'BUY': 'buy',
+            'SELL': 'sell',
+            '0': 'buy',
+            '1': 'sell',
+        };
+        return this.safeString (sides, side, side);
+    }
+
+    applyScale (amount: Str, multiply: Bool = false): Str {
+        const decimals = this.safeInteger (this.options, 'usdcDecimals', 6);
+        const scale = this.numberToString (10 ** decimals);
+        if (multiply) {
+            return Precise.stringMul (amount, scale);
+        } else {
+            return Precise.stringDiv (amount, scale);
+        }
     }
 
     /**
@@ -1047,42 +1416,81 @@ export default class Limitless extends Exchange {
     }
 
     /**
-     * Cancels a single open order by ID on Limitless.
+     * Cancels a single open order by ID
      * @param id
-     * @param symbol
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
      * @param params
      * @see https://docs.limitless.exchange/api-reference/orders/cancel-order
      */
-    async cancelOrder (id: Str, symbol: Str = undefined, params: Dict = {}): Promise<Order> {
-        if (symbol !== undefined) {
-            await this.checkEventsAndMarkets (symbol);
-        } else {
-            await this.checkEventsAndMarkets ();
-        }
-        const response = await this.limitlessPrivateDeleteOrdersOrderId (this.extend ({ 'order_id': id }, params));
+    async cancelOrder (id: Str, outcome: Str = undefined, params: Dict = {}): Promise<Order> {
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        const request: Dict = {
+            'order_id': id,
+        };
+        const response = await this.limitlessPrivateDeleteOrdersOrderId (this.extend (request, params));
         return this.parseOrder (response);
     }
 
     /**
-     * Cancels all open orders on Limitless, optionally scoped to one market slug.
-     * @param symbol  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @method
+     * @name limitless#cancelOrders
+     * @description cancel multiple orders at the same time
+     * @see https://docs.limitless.exchange/api-reference/trading/cancel-batch
+     * @param ids order ids
+     * @param outcome unified market symbol, default is undefined
+     * @param params extra parameters specific to the exchange API endpoint
+     */
+    async cancelOrders (ids: string[], outcome: Str = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        const request: Dict = {
+            'orderIds': ids,
+        };
+        const response = await this.limitlessPrivatePostOrdersCancelBatch (this.extend (request, params));
+        const canceled = this.safeList (response, 'canceled', []);
+        const failed = this.safeList (response, 'failed', []);
+        const failedLethgn = failed.length;
+        if (failedLethgn > 0) {
+            const message = this.json (response);
+            const feedback = this.id + ' cancelOrders failed: ' + message;
+            throw new OrderNotFound (feedback);
+        }
+        return this.parseOrders (canceled);
+    }
+
+    /**
+     * Cancels all open orders for one market slug.
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
      * @param params
+     * @param params.slug
      * @see https://docs.limitless.exchange/api-reference/orders/cancel-all-orders
      */
-    async cancelAllOrders (symbol: Str = undefined, params: Dict = {}): Promise<Order[]> {
-        if (symbol !== undefined) {
-            await this.checkEventsAndMarkets (symbol);
-        } else {
-            await this.checkEventsAndMarkets ();
+    async cancelAllOrders (outcome: Str = undefined, params: Dict = {}) {
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        if (outcome !== undefined) {
+            let warn = true;
+            [ warn, params ] = this.handleOptionAndParams (params, 'cancelAllOrders', 'warnOnCancelAllOrdersWithOutcome', warn);
+            if (warn) {
+                throw new BadRequest (this.id + ' cancelAllOrders cancels all orders for entire slug (both YES and NO outcomes). Please provide params.slug to specify the slug, or set the warnOnCancelAllOrdersWithOutcome option to false to suppress this warning message.');
+            }
         }
         const request: Dict = {};
-        if (symbol !== undefined) {
-            await this.loadMarkets ();
-            const outcomeObj = this.outcome (symbol);
-            request['marketSlug'] = this.safeString (outcomeObj['info'], 'slug');
+        const slug = this.safeString (params, 'slug');
+        if (outcome !== undefined) {
+            const outcomeObj = this.outcome (outcome);
+            request['slug'] = this.safeString (outcomeObj['info'], 'slug');
+        } else if (slug === undefined) {
+            throw new ArgumentsRequired (this.id + ' cancelAllOrders requires either an outcome argument or a slug parameter');
         }
-        const response = await this.limitlessPrivatePostOrdersCancelBatch (this.extend (request, params));
-        return this.parseOrders (this.safeList (response, 'data', []) as any[]);
+        const response = await this.limitlessPrivateDeleteOrdersAllSlug (this.extend (request, params));
+        //
+        //     {
+        //         "message": "Orders canceled successfully"
+        //     }
+        //
+        return response;
     }
 
     // -----------------------------------------------------------------------
@@ -1247,27 +1655,27 @@ export default class Limitless extends Exchange {
      * @param headers
      * @param body
      */
-    sign (path: Str, api: any = 'limitless', method = 'GET', params: Dict = {}, headers: Dict = undefined, body: Dict = undefined) {
+    sign (path: Str, api: any = 'limitless', method = 'GET', params: Dict = {}, headers: Dict = undefined, body: any = undefined) {
         const apiGroup: string = typeof api === 'string' ? api : api[0];
         const access: string = typeof api === 'string' ? 'public' : api[1];
         const baseUrls = this.urls['api'] as Dict;
         const baseUrl = this.safeString (baseUrls, apiGroup, baseUrls['limitless'] as string);
         let url = '/' + this.implodeParams (path as string, params);
         const query = this.omit (params, this.extractParams (path as string));
-        const querystring = this.urlencode (query);
+        const querystring = this.urlencodeWithArrayRepeat (query);
         if (method === 'GET' && querystring) {
             url += '?' + querystring;
         }
-        headers = this.extend ({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-        }, headers || {});
-        let bodyString = '';
-        if (method !== 'GET' && querystring) {
-            body = query as any;
-            bodyString = this.json (body);
-        }
         if (access === 'private') {
+            let bodyString = '';
+            if (method === 'POST' && querystring) {
+                bodyString = this.json (query);
+                body = bodyString;
+                headers = this.extend ({
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                }, headers || {});
+            }
             this.checkRequiredCredentials ();
             const timestamp = this.iso8601 (this.milliseconds ());
             const payload = timestamp + '\n' + method + '\n' + url + '\n' + bodyString;
