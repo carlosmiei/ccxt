@@ -20,6 +20,7 @@ import type {
     Market, Ticker, OrderBook, OHLCV,
     Order, Position, PredictionEvent,
     Bool,
+    Trade,
 } from './base/types.js';
 import { ArgumentsRequired, BadRequest, OrderNotFound } from '../ccxt.js';
 import { Precise } from './base/Precise.js';
@@ -51,6 +52,7 @@ export default class Limitless extends Exchange {
                 'fetchClosedOrders': true,
                 'fetchEvents': true,
                 'fetchMarkets': true,
+                'fetchMyTrades': true,
                 'fetchOHLCV': true,
                 'fetchOpenOrders': true,
                 'fetchOrder': true,
@@ -1491,6 +1493,204 @@ export default class Limitless extends Exchange {
         //     }
         //
         return response;
+    }
+
+    /**
+     * @method
+     * @name limitless#fetchMyTrades
+     * @description fetch all trades made by the user
+     * @see https://docs.limitless.exchange/api-reference/trades/get-trades
+     * @param outcome
+     * @param since the earliest time in ms to fetch trades for
+     * @param limit the maximum number of trades structures to retrieve
+     * @param params extra parameters specific to the exchange API endpoint
+     */
+    async fetchMyTrades (outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+        await this.loadMarkets ();
+        await this.checkEventsAndMarkets (outcome);
+        let paginate = false;
+        const maxLimit = 100;
+        [ paginate, params ] = this.handleOptionAndParams (params, 'fetchMyTrades', 'paginate', paginate);
+        if (paginate) {
+            params = this.omit (params, 'paginate');
+            return await this.fetchPaginatedCallCursor ('fetchMyTrades', outcome, since, limit, params, 'nextCursor', 'cursor', undefined, maxLimit);
+        }
+        const request: Dict = {};
+        if (limit !== undefined) {
+            request['limit'] = Math.min (limit, maxLimit);
+        }
+        let outcomeObj = undefined;
+        if (outcome !== undefined) {
+            outcomeObj = this.outcome (outcome);
+        }
+        const response = await this.limitlessPrivateGetPortfolioHistory (this.extend (request, params));
+        //
+        //     {
+        //         "data": [
+        //             {
+        //                 "action": "loss",
+        //                 "blockTimestamp": 1778144400,
+        //                 "collateralAmount": "2",
+        //                 "collateralSymbol": "USDC",
+        //                 "collateralToken": "7",
+        //                 "conditionId": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //                 "market": {
+        //                     "closed": true,
+        //                     "collateral": {
+        //                     "symbol": "USDC",
+        //                     "id": "7",
+        //                     "decimals": 6},
+        //                     "group": null,
+        //                     "condition_id": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //                     "conditionId": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //                     "funding": "0",
+        //                     "id": "117515",
+        //                     "slug": "doge-up-or-down-1-hour-1778140801775",
+        //                     "title": "DOGE Up or Down - 1 hour",
+        //                     "expirationDate": "2026-05-07T09:00:00.000Z"
+        //                 },
+        //                 "outcomeIndex": 1,
+        //                 "pnl": "-2000000",
+        //                 "title": "DOGE Up or Down - 1 hour"
+        //             },
+        //             {
+        //                 "blockTimestamp": 1778144137,
+        //                 "collateralAmount": "2",
+        //                 "market": {
+        //                     "closed": true,
+        //                     "collateral": {
+        //                         "symbol": "USDC",
+        //                         "id": "7",
+        //                         "decimals": 6
+        //                     },
+        //                     "group": null,
+        //                     "condition_id": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //                     "conditionId": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //                     "funding": "0",
+        //                     "id": "117515",
+        //                     "slug": "doge-up-or-down-1-hour-1778140801775",
+        //                     "title": "DOGE Up or Down - 1 hour",
+        //                      "expirationDate": "2026-05-07T09:00:00.000Z"
+        //                 },
+        //                 "outcomeTokenAmount": "10",
+        //                 "outcomeTokenAmounts": [
+        //                     "10",
+        //                     "0"
+        //                 ],
+        //                 "outcomeIndex": 0,
+        //                 "outcomeTokenPrice": "0.2",
+        //                 "strategy": "Limit Buy",
+        //                 "transactionHash": "0x1e1167f09bb65ad3037610ae4f2521b696f7109f535e148ea388d42fdb6e2a10"
+        //             }
+        //         ],
+        //         "nextCursor": null
+        //     }
+        //
+        const data = this.safeList (response, 'data', []);
+        // response contains both trade, settlement, split and merge history
+        // we filter out the settlements here and only return the trades
+        const trades: any [] = [];
+        for (let i = 0; i < data.length; i++) {
+            const item = this.safeDict (data, i);
+            const strategy = this.safeStringLower (item, 'strategy');
+            if (strategy !== undefined) {
+                const buyIndex = strategy.indexOf ('buy');
+                const sellIndex = strategy.indexOf ('sell');
+                if ((buyIndex >= 0) || (sellIndex >= 0)) {
+                    trades.push (item);
+                }
+            }
+        }
+        return this.parseTrades (trades, outcomeObj as any, since, limit);
+    }
+
+    /**
+     * Parses a raw CLOB trade object into a unified CCXT Trade object.
+     * @param trade
+     * @param market
+     */
+    parseTrade (trade: Dict, market: Market = undefined): Trade {
+        //
+        //     {
+        //         "blockTimestamp": 1778144137,
+        //         "collateralAmount": "2",
+        //         "market": {
+        //             "closed": true,
+        //             "collateral": {
+        //                 "symbol": "USDC",
+        //                 "id": "7",
+        //                 "decimals": 6
+        //             },
+        //             "group": null,
+        //             "condition_id": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //             "conditionId": "0x0c61db7449dd8f8c81cd856f53d4186cf30888e27eb025d10c7908fa94ba736e",
+        //             "funding": "0",
+        //             "id": "117515",
+        //             "slug": "doge-up-or-down-1-hour-1778140801775",
+        //             "title": "DOGE Up or Down - 1 hour",
+        //             "expirationDate": "2026-05-07T09:00:00.000Z"
+        //         },
+        //         "outcomeTokenAmount": "10",
+        //         "outcomeTokenAmounts": [
+        //             "10",
+        //             "0"
+        //         ],
+        //         "outcomeIndex": 0,
+        //         "outcomeTokenPrice": "0.2",
+        //         "strategy": "Limit Buy",
+        //         "transactionHash": "0x1e1167f09bb65ad3037610ae4f2521b696f7109f535e148ea388d42fdb6e2a10"
+        //     }
+        //
+        const id = this.safeString (trade, 'transactionHash');
+        const timestamp = this.safeIntegerProduct (trade, 'blockTimestamp', 1000);
+        const price = this.safeString (trade, 'outcomeTokenPrice');
+        const amount = this.safeString (trade, 'outcomeTokenAmount');
+        const cost = this.safeString (trade, 'collateralAmount');
+        const rawSide = this.safeStringLower (trade, 'strategy');
+        const sellIndex = rawSide.indexOf ('sell');
+        const side = (sellIndex >= 0) ? 'sell' : 'buy';
+        let type = undefined;
+        let takerOrMaker = undefined;
+        if (rawSide.indexOf ('limit') >= 0) {
+            type = 'limit';
+            takerOrMaker = 'maker';
+        } else if (rawSide.indexOf ('market') >= 0) {
+            type = 'market';
+            takerOrMaker = 'taker';
+        }
+        const rawMarket = this.safeDict (trade, 'market', {});
+        const slug = this.safeString (rawMarket, 'slug');
+        const outcomeIndex = this.safeInteger (trade, 'outcomeIndex');
+        const label = (outcomeIndex === 0) ? 'yes' : 'no';
+        const outcome = this.getOutcomeBySlugAndLabel (slug, label, market);
+        return this.safeTrade ({
+            'id': id,
+            'info': trade,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'outcome': this.safeString (outcome, 'symbol'),
+            'outcomeId': this.safeString (trade, 'asset'),
+            'order': undefined,
+            'type': type,
+            'side': side,
+            'takerOrMaker': takerOrMaker, // todo check
+            'price': price,
+            'amount': amount,
+            'cost': cost,
+            'fee': undefined,
+        }, market);
+    }
+
+    getOutcomeBySlugAndLabel (slug: Str, label: Str, market: Market) {
+        const mkt = this.safeMarket (slug, market);
+        const outcomes = this.safeList (mkt, 'outcomes', []);
+        for (let i = 0; i < outcomes.length; i++) {
+            const outcome = this.safeDict (outcomes, i);
+            const outcomeLabel = this.safeString (outcome, 'label');
+            if (outcomeLabel === label) {
+                return outcome;
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
