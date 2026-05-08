@@ -1681,7 +1681,7 @@ export default class Limitless extends Exchange {
         }, market);
     }
 
-    getOutcomeBySlugAndLabel (slug: Str, label: Str, market: Market) {
+    getOutcomeBySlugAndLabel (slug: Str, label: Str, market: Market = undefined): any {
         const mkt = this.safeMarket (slug, market);
         const outcomes = this.safeList (mkt, 'outcomes', []);
         for (let i = 0; i < outcomes.length; i++) {
@@ -1712,8 +1712,126 @@ export default class Limitless extends Exchange {
             await this.checkEventsAndMarkets ();
         }
         const response = await this.limitlessPrivateGetPortfolioPositions (params);
-        const positions = this.safeList (response, 'data', []) as any[];
-        return this.parsePositions (positions, symbols);
+        //
+        //     {
+        //         "rewards": {
+        //                 "todaysRewards": "0",
+        //                 "totalUnpaidRewards": "0",
+        //                 "totalUserRewardsLastEpoch": "0",
+        //                 "rewardsChartData": [],
+        //                 "rewardsByEpoch": []
+        //         },
+        //         "points": "0.00000000",
+        //         "accumulativePoints": "0.00000000",
+        //         "amm": [],
+        //         "group": [],
+        //         "clob": [
+        //             {
+        //                 "market": {
+        //                     "slug": "btc-above-dollar7982448-on-may-11-1000-utc-1777888806248",
+        //                     "status": "FUNDED",
+        //                     "title": "BTC Up or Down - 1 week",
+        //                     "conditionId": "0xdcd8264cd09a6c50fca35eca24cda13e70f705e8b9ca7df7edb1c53d5e14ef91",
+        //                     "id": 113280,
+        //                     "address": null,
+        //                     "closed": false,
+        //                     "expirationDate": "2026-05-11T10:00:00.000Z",
+        //                     "deadline": "2026-05-11T10:00:00.000Z",
+        //                     "negRiskRequestId": null,
+        //                     "winningOutcomeIndex": null,
+        //                     "yesPositionId": "93872239373494820196551522390839917813776244436120184186867916673676200558660",
+        //                     "noPositionId": "63415751165356883207530164011662686422066216695676262832702521399916548381548",
+        //                     "collateralToken": {
+        //                         "id": 7,
+        //                         "decimals": 6,
+        //                         "symbol": "USDC",
+        //                         "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        //                     },
+        //                     "venue": {
+        //                         "exchange": "0x05c748E2f4DcDe0ec9Fa8DDc40DE6b867f923fa5",
+        //                         "adapter": null,
+        //                         "operator": null
+        //                     },
+        //                     "group": {}
+        //                 },
+        //                 "latestTrade": {
+        //                     "outcomeTokenPrice": 0.991,
+        //                     "latestNoPrice": 0.009,
+        //                     "latestYesPrice": 0.991
+        //                 },
+        //                 "orders": {
+        //                     "liveOrders": [],
+        //                     "totalCollateralLocked": "0"
+        //                 },
+        //                 "positions": {
+        //                     "no": {
+        //                         "cost": "0",
+        //                         "fillPrice": "0",
+        //                         "marketValue": "0",
+        //                         "realisedPnl": "0",
+        //                         "unrealizedPnl": "0"
+        //                     },
+        //                     "yes": {
+        //                         "cost": "995720",
+        //                         "fillPrice": "991000",
+        //                         "marketValue": "999919",
+        //                         "realisedPnl": "0",
+        //                         "unrealizedPnl": "0"
+        //                     }
+        //                 },
+        //                 "tokensBalance": {
+        //                     "no": "0",
+        //                     "yes": "1004763"
+        //                 },
+        //                 "rewards": {
+        //                     "isEarning": false,
+        //                     "epochs": []
+        //                 },
+        //                 "makerAddress": "0xAb2B9833FC8B8f55F4De7C4A0FAb8577EF0F7b36"
+        //             }
+        //         ]
+        //     }
+        //
+        const clob = this.safeList (response, 'clob', []) as any[];
+        const result: Position[] = [];
+        const labels = [ 'yes', 'no' ];
+        for (let i = 0; i < clob.length; i++) {
+            const entry = this.safeDict (clob, i);
+            for (let j = 0; j < labels.length; j++) {
+                const label = this.safeString (labels, j);
+                const position = this.getPositionFromClobEntry (label, entry);
+                if (position !== undefined) {
+                    result.push (position);
+                }
+            }
+        }
+        return result;
+    }
+
+    getPositionFromClobEntry (label: string, entry: Dict = undefined) {
+        if (entry === undefined) {
+            return undefined;
+        }
+        const tokensBalance = this.safeDict (entry, 'tokensBalance');
+        const contracts = this.omitZero (this.safeString (tokensBalance, label));
+        if (contracts === undefined) {
+            return undefined;
+        }
+        const positions = this.safeDict (entry, 'positions');
+        const position = this.safeDict (positions, label);
+        const rawMarket = this.safeDict (entry, 'market');
+        const slug = this.safeString (rawMarket, 'slug');
+        const outcomeObj = this.getOutcomeBySlugAndLabel (slug, label);
+        const parsed = this.parsePosition (position, outcomeObj);
+        parsed['contracts'] = this.parseNumber (this.applyScale (contracts));
+        const latestTrade = this.safeDict (entry, 'latestTrade');
+        let key = 'latestYesPrice';
+        if (label === 'no') {
+            key = 'latestNoPrice';
+        }
+        parsed['markPrice'] = this.safeNumber (latestTrade, key);
+        parsed['info'] = entry;
+        return this.safePosition (parsed);
     }
 
     /**
@@ -1722,29 +1840,37 @@ export default class Limitless extends Exchange {
      * @param market  outcome object (optional)
      */
     parsePosition (position: Dict, market: Market = undefined): Position {
-        const slug = this.safeString (position, 'marketSlug', this.safeString (position, 'slug'));
-        const outcome = this.safeString (position, 'outcome');
-        const ocSymbol = (slug && outcome) ? this.shortenSlug (slug) + ':' + (outcome as string).toUpperCase () : undefined;
-        const ocObj = ocSymbol ? this.safeOutcome (ocSymbol, undefined) : undefined;
-        const ocOrMkt = ocObj || market;
-        const size = this.safeNumber (position, 'size');
-        const price = this.safeNumber (position, 'avgPrice');
-        const cur = this.safeNumber (position, 'currentPrice');
+        //
+        //     {
+        //         "cost": "995720",
+        //         "fillPrice": "991000",
+        //         "marketValue": "999919",
+        //         "realisedPnl": "0",
+        //         "unrealizedPnl": "0"
+        //     }
+        //
+        const symbol = this.safeString (market, 'symbol');
+        const notional = this.applyScale (this.safeString (position, 'marketValue'));
+        const unrealizedPnl = this.applyScale (this.safeString (position, 'unrealizedPnl'));
+        const realizedPnl = this.applyScale (this.safeString (position, 'realisedPnl'));
+        const collateral = this.applyScale (this.safeString (position, 'cost'));
+        const entryPrice = this.applyScale (this.safeString (position, 'fillPrice'));
         return {
             'id': undefined,
-            'symbol': ocOrMkt ? ocOrMkt['symbol'] : undefined,
+            'symbol': symbol,
+            'outcome': symbol,
             'timestamp': undefined,
             'datetime': undefined,
-            'contracts': size,
+            'contracts': undefined,
             'contractSize': 1,
             'side': 'long',
-            'notional': (size !== undefined && cur !== undefined) ? size * cur : undefined,
+            'notional': this.parseNumber (notional),
             'leverage': 1,
-            'unrealizedPnl': (size !== undefined && price !== undefined && cur !== undefined) ? size * (cur - price) : undefined,
-            'realizedPnl': this.safeNumber (position, 'realizedPnl'),
-            'collateral': undefined,
-            'entryPrice': price,
-            'markPrice': cur,
+            'unrealizedPnl': this.parseNumber (unrealizedPnl),
+            'realizedPnl': this.parseNumber (realizedPnl),
+            'collateral': this.parseNumber (collateral),
+            'entryPrice': this.parseNumber (entryPrice),
+            'markPrice': undefined,
             'liquidationPrice': undefined,
             'hedged': false,
             'maintenanceMargin': undefined,
