@@ -6172,7 +6172,7 @@ export default class Exchange {
     }
 
     filterBySymbolSinceLimit (array, symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, tail = false) {
-        return this.filterByValueSinceLimit (array, 'outcome', symbol, since, limit, 'timestamp', tail);
+        return this.filterByValueSinceLimit (array, 'symbol', symbol, since, limit, 'timestamp', tail);
     }
 
     filterByCurrencySinceLimit (array, code = undefined, since: Int = undefined, limit: Int = undefined, tail = false) {
