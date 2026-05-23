@@ -5873,7 +5873,7 @@ export default class Exchange {
         return { 'id': outcomeIdOrSymbol, 'symbol': outcomeIdOrSymbol, 'marketSymbol': undefined, 'label': undefined, 'info': {}};
     }
 
-    safeOutcomeSymbol (outcomeIdOrSymbol: Str, outcomeObj: any = undefined): any {
+    safeOutcomeSymbol (outcomeIdOrSymbol: Str, outcomeObj: any = undefined): Str {
         outcomeObj = this.safeOutcome (outcomeIdOrSymbol, outcomeObj);
         return outcomeObj['symbol'];
     }
