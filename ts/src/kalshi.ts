@@ -487,6 +487,8 @@ export default class kalshi extends Exchange {
             ask   = yesAsk;
             close = last;
         }
+        const bidVolume = isNo ? undefined : this.safeNumber (raw, 'yes_bid_size_fp');
+        const askVolume = isNo ? undefined : this.safeNumber (raw, 'yes_ask_size_fp');
         return this.safeTicker ({
             'symbol': symbol,
             'timestamp': now,
@@ -494,9 +496,9 @@ export default class kalshi extends Exchange {
             'high': undefined,
             'low': undefined,
             'bid': bid,
-            'bidVolume': this.safeNumber (raw, 'yes_bid_size_fp'),
+            'bidVolume': bidVolume,
             'ask': ask,
-            'askVolume': this.safeNumber (raw, 'yes_ask_size_fp'),
+            'askVolume': askVolume,
             'vwap': undefined,
             'open': undefined,
             'close': close,
