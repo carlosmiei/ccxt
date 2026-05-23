@@ -445,9 +445,9 @@ export default class Myriad extends Exchange {
         const outcomeId = this.safeString (outcomeInfo, 'outcomeId', this.safeString (outcomeInfo, 'id'));
         const outcomeTitle = this.safeString (outcomeInfo, 'outcomeLabel', this.safeString (outcomeInfo, 'label', this.safeString (outcomeInfo, 'title')));
         const bucketKey = this.safeString (this.timeframes, timeframe, '30d');
-        const response = await this.myriadPublicGetMarketsId (this.extend ({
+        const response = await this.myriadPublicGetMarketsNetworkIdId (this.extend ({
+            'networkId': networkId,
             'id': marketId,
-            'network_id': networkId,
         }, params));
         //
         //     {
