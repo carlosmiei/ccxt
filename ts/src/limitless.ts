@@ -675,15 +675,15 @@ export default class Limitless extends Exchange {
 
     /**
      * Fetches the order book for a single Limitless outcome token, converting 6-decimal USDC sizes to whole units.
-     * @param symbol  outcome id or symbol, e.g. "TRUMP_OUT:YES"
+     * @param outcome outcome id or symbol e.g. TRUMP_OUT:YES
      * @param limit
      * @param params
      * @see https://docs.limitless.exchange/api-reference/trading/orderbook
      */
-    async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
+    async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
-        await this.checkEventsAndMarkets (symbol);
-        const outcomeObj = this.outcome (symbol);
+        await this.checkEventsAndMarkets (outcome);
+        const outcomeObj = this.outcome (outcome);
         const slug = this.safeString (outcomeObj['info'], 'slug');
         const request: Dict = {
             'slug': slug,
@@ -728,7 +728,7 @@ export default class Limitless extends Exchange {
             asks.push ([ price, sizeMicro !== undefined ? sizeMicro / scale : undefined ]);
         }
         return {
-            'symbol': symbol,
+            'symbol': this.safeString (outcomeObj, 'symbol', outcome),
             'bids': bids,
             'asks': asks,
             'timestamp': timestamp,

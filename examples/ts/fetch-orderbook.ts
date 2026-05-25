@@ -35,12 +35,12 @@ async function example () {
     console.log (firstOutcome, secondOutcome, thirdOutcome, fourthOutcome);
 
 
-    const [ firstTicker, secondTicker, thirdTicker, fourthTicker ] = await Promise.all ([
+    const [ firstOrderBook, secondOrderBook, thirdOrderBook, fourthOrderBook ] = await Promise.all ([
         exchange.fetchOrderBook (firstOutcome),
         kalshi.fetchOrderBook (secondOutcome),
         limitless.fetchOrderBook (thirdOutcome),
         myriad.fetchOrderBook (fourthOutcome),
     ]);
-    console.log (firstTicker, secondTicker, thirdTicker, fourthTicker);
+    console.log (firstOrderBook, secondOrderBook, thirdOrderBook, fourthOrderBook);
 }
 await example ();

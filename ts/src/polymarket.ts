@@ -540,9 +540,9 @@ export default class polymarket extends Exchange {
 
     /**
      * Fetches the CLOB order book for a single outcome token.
-     * @param outcome
-     * @param limit
-     * @param params
+     * @param {string} outcome id or symbol
+     * @param {int} [limit] the maximum number of bids/asks to return
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @see https://docs.polymarket.com/api-reference/market-data/get-order-book
      */
     async fetchOrderBook (outcome: string, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
@@ -574,7 +574,7 @@ export default class polymarket extends Exchange {
         //     }
         //
         const timestamp = this.safeInteger (response, 'timestamp');
-        return this.parseOrderBook (response, outcome, timestamp, 'bids', 'asks', 'price', 'size');
+        return this.parseOrderBook (response, this.safeOutcomeSymbol (outcome, outcomeObj), timestamp, 'bids', 'asks', 'price', 'size');
     }
 
     /**

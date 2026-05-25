@@ -386,7 +386,7 @@ export default class Myriad extends Exchange {
 
     /**
      * Fetches a synthesized AMM order book for a single Myriad outcome using the market price.
-     * @param symbol  outcome symbol, e.g. "TRUMP_WIN:YES"
+     * @param outcome outcome id or symbol e.g. TRUMP_WIN:YES
      * @param limit
      * @param params
      * @see https://docs.myriad.markets/builders/myriad-api-reference#320c9e49da828116b12dec5bfeea306a
