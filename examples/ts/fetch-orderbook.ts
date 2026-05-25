@@ -15,7 +15,7 @@ async function example () {
     ]);
 
 
-    const first = polyEvents[1];
+    const first = polyEvents[0];
     const second = kalshiEvents[0];
     const third = limitlessEvents[0];
     const fourth = myriadEvents[0];

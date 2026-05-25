@@ -397,10 +397,10 @@ export default class kalshi extends Exchange {
     }
 
     /**
-     * Fetches the order book for a single Kalshi outcome, converting YES-side cents to decimal prices.
-     * @param outcome id or symbol
-     * @param limit
-     * @param params
+     * Fetches the order book for a single Kalshi outcome
+     * @param {string} outcome id or symbol
+     * @param {int} [limit] the maximum number of bids/asks to return (not enforced by Kalshis API reserved for future client-side trimming)
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @see https://docs.kalshi.com/api-reference/market/get-market-orderbook
      */
     async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
@@ -434,27 +434,29 @@ export default class kalshi extends Exchange {
         const bids: any[] = [];
         const asks: any[] = [];
         if (isNo) {
-            // NO perspective: NO bids come from rawNo, NO asks invert rawYes
+            // NO perspective: NO bids come from rawNo, NO asks invert rawYes (NO ask = 1 - YES bid)
             for (let bi = 0; bi < rawNo.length; bi++) {
                 const price = this.safeNumber (rawNo[bi], 0);
                 bids.push ([ price, this.safeNumber (rawNo[bi], 1) ]);
             }
             for (let ai = 0; ai < rawYes.length; ai++) {
-                const price = this.safeNumber (rawYes[ai], 0);
+                const yesPrice = this.safeNumber (rawYes[ai], 0);
+                const price = yesPrice !== undefined ? 1 - yesPrice : undefined;
                 asks.push ([ price, this.safeNumber (rawYes[ai], 1) ]);
             }
         } else {
-            // YES perspective: YES bids from rawYes, YES asks invert rawNo
+            // YES perspective: YES bids from rawYes, YES asks invert rawNo (YES ask = 1 - NO bid)
             for (let bi = 0; bi < rawYes.length; bi++) {
                 const price = this.safeNumber (rawYes[bi], 0);
                 bids.push ([ price, this.safeNumber (rawYes[bi], 1) ]);
             }
             for (let ai = 0; ai < rawNo.length; ai++) {
-                const price = this.safeNumber (rawNo[ai], 0);
+                const noPrice = this.safeNumber (rawNo[ai], 0);
+                const price = noPrice !== undefined ? 1 - noPrice : undefined;
                 asks.push ([ price, this.safeNumber (rawNo[ai], 1) ]);
             }
         }
-        return this.sortedOrders (outcome, timestamp, bids, asks);
+        return this.sortedOrders (this.safeString (outcomeObj, 'symbol', outcome), timestamp, bids, asks);
     }
 
     /**
@@ -591,18 +593,13 @@ export default class kalshi extends Exchange {
         //
         const price = this.safeDict (ohlcv, 'price', {});
         const ts = this.safeInteger (ohlcv, 'end_period_ts');
-        const vol = this.safeNumber (ohlcv, 'volume_fp');
-        const open = this.safeNumber (price, 'open_dollars');
-        const high = this.safeNumber (price, 'high_dollars');
-        const low = this.safeNumber (price, 'low_dollars');
-        const close = this.safeNumber (price, 'close_dollars');
         return [
             ts !== undefined ? ts * 1000 : undefined,
-            open !== undefined ? open : undefined,
-            high !== undefined ? high : undefined,
-            low !== undefined ? low : undefined,
-            close !== undefined ? close : undefined,
-            vol,
+            this.safeNumber (price, 'open_dollars'),
+            this.safeNumber (price, 'high_dollars'),
+            this.safeNumber (price, 'low_dollars'),
+            this.safeNumber (price, 'close_dollars'),
+            this.safeNumber (ohlcv, 'volume_fp'),
         ];
     }
 
