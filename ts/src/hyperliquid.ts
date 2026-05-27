@@ -1252,9 +1252,32 @@ export default class hyperliquid extends Exchange {
         const innerResponse = this.safeDict (response, 'response');
         const data = this.safeDict (innerResponse, 'data');
         const statuses = this.safeList (data, 'statuses', []);
+        const outcomeSymbol = this.safeString (outcomeObj, 'symbol', outcome);
+        const requestIds = (clientOrderId !== undefined) ? (Array.isArray (clientOrderId) ? clientOrderId : [ clientOrderId ]) : ids;
         const orders: Order[] = [];
         for (let i = 0; i < statuses.length; i++) {
-            orders.push (this.safeOrder ({ 'info': statuses[i], 'status': statuses[i] }) as Order);
+            const status = statuses[i];
+            const error = this.safeString (status, 'error');
+            if (error !== undefined) {
+                throw new OrderNotFound (this.id + ' cancelOrders() failed for ' + this.safeString (requestIds, i, this.safeString (requestIds, 0)) + ': ' + error);
+            }
+            const success = (status === 'success') || (this.safeString (status, 'status') === 'success');
+            if (!success) {
+                throw new ExchangeError (this.id + ' cancelOrders() received an unexpected status: ' + this.json (status));
+            }
+            const requestId = this.safeString (requestIds, i, this.safeString (requestIds, 0));
+            const order: Dict = {
+                'id': requestId,
+                'clientOrderId': clientOrderId !== undefined ? requestId : undefined,
+                'info': status,
+                'status': 'canceled',
+                'symbol': outcomeSymbol,
+                'outcome': outcomeSymbol,
+                'outcomeId': this.safeString (outcomeObj, 'id'),
+                'timestamp': this.milliseconds (),
+                'datetime': this.iso8601 (this.milliseconds ()),
+            };
+            orders.push (this.safeOrder (order) as Order);
         }
         return orders;
     }
