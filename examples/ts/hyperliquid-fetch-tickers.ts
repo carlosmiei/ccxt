@@ -5,9 +5,9 @@ async function example () {
         'sandboxMode': true,  // outcome markets are on testnet
     });
 
-    const polyEvents = await exchange.fetchEvents ([ 'BTC' ]);
+    const events = await exchange.fetchEvents ([ 'BTC' ]);
 
-    const first = polyEvents[0];
+    const first = events[0];
 
     const firstOutcome = first.markets[0].outcomes[0].id;
     const secondOutcome = first.markets[0].outcomes[1].id;
