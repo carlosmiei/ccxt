@@ -1098,7 +1098,10 @@ export default class hyperliquid extends Exchange {
         }
         let tif = this.capitalize (this.safeStringLower (params, 'timeInForce', defaultTif));
         if (price === undefined) {
-            throw new ArgumentsRequired (this.id + ' createOrder() requires a price parameter for outcome markets (0 1 range). For market orders set a reference price and the slippage will be applied automatically.');
+            if (isMarket) {
+                throw new ArgumentsRequired (this.id + ' createOrder() requires a reference price for market orders on outcome markets in between 0 and 1. The exchange uses this reference price together with the configured slippage to derive the execution price.');
+            }
+            throw new ArgumentsRequired (this.id + ' createOrder() requires a limit price for outcome markets in between 0 and 1.');
         }
         let px: string;
         if (isMarket) {
