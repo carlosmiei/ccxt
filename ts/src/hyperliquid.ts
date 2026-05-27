@@ -408,8 +408,8 @@ export default class hyperliquid extends Exchange {
 
     /**
      * Parses a single binary outcome market into a CCXT Market structure with outcomes[].
-     * @param outcomeInfo  raw entry from outcomeMeta outcomes array
-     * @param outcomeId    integer outcome id
+     * @param outcomeInfo raw entry from outcomeMeta outcomes array
+     * @param outcomeId integer outcome id
      */
     parseOutcomeMarket (outcomeInfo: Dict, outcomeId: number, question: Dict = {}): Market {
         const description = this.safeString (outcomeInfo, 'description', '');
@@ -1697,9 +1697,8 @@ export default class hyperliquid extends Exchange {
 
     amountToPrecision (outcome: string, amount: any): string {
         const market = this.market (outcome);
-        const szDecimalsStr = this.safeString (this.safeDict (market as any, 'precision', {}), 'amount', '0.0001');
+        const prec = this.safeNumber (this.safeDict (market as any, 'precision', {}), 'amount', 0.0001);
         // Convert precision to decimal places
-        const prec = parseFloat (szDecimalsStr);
         const decimals = prec > 0 ? Math.round (-Math.log10 (prec)) : 4;
         return this.decimalToPrecision (amount, 1 /* ROUND */, decimals, 2 /* DECIMAL_PLACES */, this.paddingMode);
     }
