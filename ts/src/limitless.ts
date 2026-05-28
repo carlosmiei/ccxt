@@ -755,19 +755,40 @@ export default class Limitless extends Exchange {
 
     /**
      * Fetches the order book for a single Limitless outcome token, converting 6-decimal USDC sizes to whole units.
-     * @param symbol  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param outcome outcome id or symbol e.g. TRUMP_OUT:YES
      * @param limit
      * @param params
-     * @see https://docs.limitless.exchange/api-reference/markets/get-orderbook
+     * @see https://docs.limitless.exchange/api-reference/trading/orderbook
      */
-    async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
+    async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
-        await this.checkEventsAndMarkets (symbol);
-        const outcomeObj = this.outcome (symbol);
+        await this.checkEventsAndMarkets (outcome);
+        const outcomeObj = this.outcome (outcome);
         const slug = this.safeString (outcomeObj['info'], 'slug');
-        const response = await this.limitlessPublicGetMarketsSlugOrderbook (this.extend ({
+        const request: Dict = {
             'slug': slug,
-        }, params));
+        };
+        const response = await this.limitlessPublicGetMarketsSlugOrderbook (this.extend (request, params));
+        //
+        //     {
+        //         "bids": [
+        //             { "price": "0.14", "size": "12360330000", "side": "BUY" },
+        //             { "price": "0.1", "size": "1000000", "side": "BUY" },
+        //             { "price": "0.003", "size": "500000000", "side": "BUY" }
+        //         ],
+        //         "asks": [
+        //             { "price": "0.161", "size": "222000000", "side": "SELL" },
+        //             { "price": "0.996", "size": "5555000000", "side": "SELL" },
+        //             { "price": "0.997", "size": "500000000", "side": "SELL" }
+        //         ],
+        //         "tokenId": "56154308742753982686710750162015444986563701968079760676518531584453506363044",
+        //         "adjustedMidpoint": "0.1505",
+        //         "midpoint": "0.1505",
+        //         "maxSpread": "0.035",
+        //         "minSize": "100000000",
+        //         "lastTradePrice": "0.161"
+        //     }
+        //
         const timestamp = this.milliseconds ();
         const decimals = this.safeInteger (this.options, 'usdcDecimals', 6);
         // scale = 10^decimals; USDC uses 6 decimals → 1_000_000
@@ -787,7 +808,7 @@ export default class Limitless extends Exchange {
             asks.push ([ price, sizeMicro !== undefined ? sizeMicro / scale : undefined ]);
         }
         return {
-            'symbol': symbol,
+            'symbol': this.safeString (outcomeObj, 'symbol', outcome),
             'bids': bids,
             'asks': asks,
             'timestamp': timestamp,
