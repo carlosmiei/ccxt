@@ -6172,7 +6172,17 @@ export default class Exchange {
     }
 
     filterBySymbolSinceLimit (array, symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, tail = false) {
-        return this.filterByValueSinceLimit (array, 'outcome', symbol, since, limit, 'timestamp', tail);
+        let result = array;
+        if (symbol !== undefined) {
+            result = [];
+            for (let i = 0; i < array.length; i++) {
+                const entry = array[i];
+                if ((entry['symbol'] === symbol) || (entry['outcome'] === symbol)) {
+                    result.push (entry);
+                }
+            }
+        }
+        return this.filterBySinceLimit (result, since, limit, 'timestamp', tail);
     }
 
     filterByCurrencySinceLimit (array, code = undefined, since: Int = undefined, limit: Int = undefined, tail = false) {

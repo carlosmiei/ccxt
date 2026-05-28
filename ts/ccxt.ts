@@ -46,6 +46,7 @@ const version = '4.3.54';
 
 //-----------------------------------------------------------------------------
 
+import hyperliquid from  './src/hyperliquid.js'
 import kalshi from  './src/kalshi.js'
 import limitless from  './src/limitless.js'
 import myriad from  './src/myriad.js'
@@ -54,6 +55,7 @@ import polymarketPro from  './src/pro/polymarket.js'
 
 
 const exchanges = {
+    'hyperliquid':            hyperliquid,
     'kalshi':                 kalshi,
     'limitless':              limitless,
     'myriad':                 myriad,
@@ -202,6 +204,7 @@ export {
     CrossBorrowRates,
     TransferEntries,
     LeverageTiers,
+    hyperliquid,
     kalshi,
     limitless,
     myriad,
