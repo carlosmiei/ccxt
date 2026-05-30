@@ -21,10 +21,14 @@ import type {
     Order, Position, PredictionEvent,
     Bool,
     Trade,
+    Account,
 } from './base/types.js';
-import { ArgumentsRequired, BadRequest, OrderNotFound } from '../ccxt.js';
+import { ArgumentsRequired, BadRequest, InvalidAddress, InvalidOrder, OrderNotFound } from '../ccxt.js';
 import { Precise } from './base/Precise.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
+import { secp256k1 } from './static_dependencies/noble-curves/secp256k1.js';
+import { keccak_256 as keccak } from './static_dependencies/noble-hashes/sha3.js';
+import { ecdsa } from './base/functions.js';
 
 // ---------------------------------------------------------------------------
 
@@ -118,6 +122,7 @@ export default class Limitless extends Exchange {
                             'portfolio/positions': 1,
                             'portfolio/trades': 1,
                             'markets/{slug}/locked-balance': 1,
+                            'profiles/me': 1,
                             'profiles/{account}': 1,
                             'portfolio/pnl-chart': 1,
                             'portfolio/history': 1,
@@ -166,6 +171,8 @@ export default class Limitless extends Exchange {
                 'marketsPageSize': 25,
                 'usdcDecimals': 6,  // Limitless sizes are 6-decimal USDC
                 'warnOnCancelAllOrdersWithOutcome': true, // cancelAllOrders with an outcome symbol will cancel all orders for the entire slug (both YES and NO outcomes), so we warn by default to prevent mistakes. Set this option to false to suppress the warning.
+                'zeroAddress': '0x0000000000000000000000000000000000000000',
+                'createMarketBuyOrderRequiresPrice': true,
             },
             'exceptions': {
                 'exact': {
@@ -1410,9 +1417,34 @@ export default class Limitless extends Exchange {
         }
     }
 
+    parseAccount (account: Dict): Account {
+        const accountId = this.safeString (account, 'id');
+        return {
+            'id': accountId,
+            'type': undefined,
+            'code': undefined,
+            'info': account,
+        };
+    }
+
+    /**
+     * @method
+     * @name limitless#fetchAccounts
+     * @description query for account id and info
+     * @see https://docs.limitless.exchange/api-reference/portfolio/get-current-profile
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
+     * @returns {object[]} a list of [account structures]
+     */
+    async fetchAccounts (params = {}): Promise<Account[]> {
+        await this.loadMarkets ();
+        const response = await this.limitlessPrivateGetProfilesMe (params);
+        const responseList = [ response ];
+        return this.parseAccounts (responseList);
+    }
+
     /**
      * Places a limit or market order on Limitless for the given outcome token.
-     * @param symbol  outcome symbol, e.g. "TRUMP_OUT:YES"
+     * @param outcome  outcome symbol, e.g. "TRUMP_OUT:YES"
      * @param type
      * @param side
      * @param amount
@@ -1420,22 +1452,166 @@ export default class Limitless extends Exchange {
      * @param params
      * @see https://docs.limitless.exchange/api-reference/orders/create-order
      */
-    async createOrder (symbol: Str, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
+    async createOrder (outcome: string, type: Str, side: Str, amount: Num, price: Num = undefined, params: Dict = {}): Promise<Order> {
         await this.loadMarkets ();
-        await this.checkEventsAndMarkets (symbol);
-        const outcomeObj = this.outcome (symbol);
-        const slug = this.safeString (outcomeObj['info'], 'slug');
-        const outcomeLabel = this.safeString (outcomeObj['info'], 'outcomeLabel');
-        const request: Dict = {
-            'marketSlug': slug,
-            'outcome': outcomeLabel,
-            'side': (side as string).toLowerCase (),
-            'size': amount,
-            'price': price,
-            'orderType': type,
+        const accounts = await this.loadAccounts ();
+        await this.checkEventsAndMarkets (outcome);
+        const outcomeObj = this.outcome (outcome);
+        const account = this.safeDict (accounts, 0);
+        const accountInfo = this.safeDict (account, 'info');
+        const walletFromAccount = this.safeString (accountInfo, 'smartWallet');
+        let maker = this.walletAddress ? this.walletAddress : walletFromAccount;
+        [ maker, params ] = this.handleOptionAndParams (params, 'createOrder', 'maker', maker);
+        try {
+            this.checkAddress (maker);
+        } catch (e) {
+            throw new InvalidAddress (this.id + ' createOrder requires a valid maker address. Set the "maker" parameter to a valid address or set the "walletAddress" property in the constructor options.');
+        }
+        let signer = maker;
+        [ signer, params ] = this.handleOptionAndParams (params, 'createOrder', 'signer', signer);
+        try {
+            this.checkAddress (signer);
+        } catch (e) {
+            throw new InvalidAddress (this.id + ' createOrder requires a valid signer address. Set the "signer" parameter to a valid address or set the "walletAddress" property in the constructor options.');
+        }
+        let taker = this.safeString (this.options, 'nullAddress', '0x0000000000000000000000000000000000000000');
+        [ taker, params ] = this.handleOptionAndParams (params, 'createOrder', 'taker', taker);
+        try {
+            this.checkAddress (taker);
+        } catch (e) {
+            throw new InvalidAddress (this.id + ' createOrder requires a valid taker address. Set the "taker" parameter to a valid address or set the "nullAddress" property in the constructor options.');
+        }
+        const nonce = this.milliseconds ();
+        const sides: Dict = {
+            'buy': 0,
+            'sell': 1,
         };
+        const sideValue = this.safeInteger (sides, side.toLowerCase ());
+        const rank = this.safeDict (accountInfo, 'rank');
+        const signRequest: Dict = {
+            'salt': nonce,
+            'maker': maker,
+            'signer': signer,
+            'taker': taker,
+            'tokenId': outcomeObj['id'],
+            'nonce': 0,
+            'feeRateBps': this.safeInteger (rank, 'feeRateBps'), // todo check
+            'side': sideValue,
+            'signatureType': 0, // todo check
+        };
+        const expirationInt = this.safeInteger (params, 'expiration');
+        const expirationString = this.safeString (params, 'expiration');
+        if (expirationInt !== undefined) {
+            signRequest['expiration'] = this.iso8601 (expirationInt);
+        } else if (expirationString !== undefined) {
+            signRequest['expiration'] = expirationString;
+        } else {
+            signRequest['expiration'] = '0';
+        }
+        const amountString = this.numberToString (amount);
+        const priceString = this.numberToString (price);
+        let makerAmount = undefined;
+        let takerAmount = undefined;
+        const isMarket = type === 'market';
+        let postOnly = false;
+        [ postOnly, params ] = this.handlePostOnly (isMarket, undefined, params);
+        let timeInForce = this.safeString (params, 'timeInForce');
+        if (timeInForce === undefined) {
+            timeInForce = isMarket ? 'FOK' : 'GTC';
+        }
+        const marketSymbol = this.safeString (outcomeObj, 'marketSymbol');
+        if (isMarket && (side === 'buy')) {
+            let createMarketBuyOrderRequiresPrice = true;
+            [ createMarketBuyOrderRequiresPrice, params ] = this.handleOptionAndParams (params, 'createOrder', 'createMarketBuyOrderRequiresPrice', true);
+            const cost = this.safeNumber (params, 'cost');
+            params = this.omit (params, 'cost');
+            if (createMarketBuyOrderRequiresPrice) {
+                if ((price === undefined) && (cost === undefined)) {
+                    throw new InvalidOrder (this.id + ' createOrder() requires the price argument for market buy orders to calculate the total cost to spend (amount * price), alternatively set the createMarketBuyOrderRequiresPrice option or param to false and pass the cost to spend in the amount argument');
+                } else {
+                    const quoteAmount = this.parseToNumeric (Precise.stringMul (amountString, priceString));
+                    const costRequest = (cost !== undefined) ? cost : quoteAmount;
+                    makerAmount = this.costToPrecision (marketSymbol, costRequest);
+                }
+            } else {
+                makerAmount = this.costToPrecision (marketSymbol, amount);
+            }
+        } else if (isMarket) {
+            makerAmount = this.amountToPrecision (marketSymbol, amount);
+        } else {
+            const calculatedCost = Precise.stringMul (amountString, priceString);
+            if (side === 'buy') {
+                makerAmount = this.costToPrecision (marketSymbol, calculatedCost);
+                takerAmount = this.amountToPrecision (marketSymbol, amount);
+            } else {
+                makerAmount = this.amountToPrecision (marketSymbol, amount);
+                takerAmount = this.costToPrecision (marketSymbol, calculatedCost);
+            }
+        }
+        signRequest['makerAmount'] = this.parseNumber (this.applyScale (makerAmount, true));
+        signRequest['takerAmount'] = isMarket ? 1 : this.parseNumber (this.applyScale (takerAmount, true));
+        const signature = this.signOrderRequest (signRequest, marketSymbol);
+        signRequest['signature'] = signature;
+        const slug = this.safeString (outcomeObj['info'], 'slug');
+        const request: Dict = {
+            'ownerId': this.safeInteger (account, 'id'),
+            'order': signRequest,
+            'marketSlug': slug,
+            'orderType': timeInForce,
+        };
+        if (postOnly) {
+            request['postOnly'] = postOnly;
+        }
         const response = await this.limitlessPrivatePostOrders (this.extend (request, params));
         return this.parseOrder (response, outcomeObj as any);
+    }
+
+    signOrderRequest (signRequest: Dict, marketSymbol) {
+        this.checkRequiredCredentials ();
+        const market = this.market (marketSymbol);
+        const info = this.safeDict (market, 'info');
+        const venue = this.safeDict (info, 'venue');
+        const exchange = this.safeString (venue, 'exchange');
+        const domain: Dict = {
+            'chainId': 8453,
+            'name': 'Limitless CTF Exchange',
+            'verifyingContract': exchange,
+            'version': '1',
+        };
+        const messageTypes: Dict = {
+            'Order': [
+                { 'name': 'salt', 'type': 'uint256' },
+                { 'name': 'maker', 'type': 'address' },
+                { 'name': 'signer', 'type': 'address' },
+                { 'name': 'taker', 'type': 'address' },
+                { 'name': 'tokenId', 'type': 'uint256' },
+                { 'name': 'makerAmount', 'type': 'uint256' },
+                { 'name': 'takerAmount', 'type': 'uint256' },
+                { 'name': 'expiration', 'type': 'uint256' },
+                { 'name': 'nonce', 'type': 'uint256' },
+                { 'name': 'feeRateBps', 'type': 'uint256' },
+                { 'name': 'side', 'type': 'uint8' },
+                { 'name': 'signatureType', 'type': 'uint8' },
+            ],
+        };
+        const msg = this.ethEncodeStructuredData (domain, messageTypes, signRequest);
+        return this.signMessage (msg, this.privateKey);
+    }
+
+    hashMessage (message) {
+        return '0x' + this.hash (message, keccak, 'hex');
+    }
+
+    signHash (hash, privateKey) {
+        const signature = ecdsa (hash.slice (-64), privateKey.slice (-64), secp256k1, undefined);
+        const r = signature['r'];
+        const s = signature['s'];
+        const v = this.intToBase16 (this.sum (27, signature['v']));
+        return '0x' + r.padStart (64, '0') + s.padStart (64, '0') + v;
+    }
+
+    signMessage (message, privateKey) {
+        return this.signHash (this.hashMessage (message), privateKey.slice (-64));
     }
 
     /**
