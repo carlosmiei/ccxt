@@ -387,6 +387,7 @@ class Exchange {
     public $quoteCurrencies = null;
 
     public static $exchanges = array(
+        'hyperliquid',
         'kalshi',
         'limitless',
         'myriad',

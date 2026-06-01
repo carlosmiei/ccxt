@@ -533,21 +533,95 @@ export default class Myriad extends Exchange {
 
     /**
      * Fetches a synthesized AMM order book for a single Myriad outcome using the market price.
-     * @param symbol  outcome symbol, e.g. "TRUMP_WIN:YES"
+     * @param outcome outcome id or symbol e.g. TRUMP_WIN:YES
      * @param limit
      * @param params
-     * @see https://docs.myriad.markets/api-reference/markets/get-market
+     * @see https://docs.myriad.markets/builders/myriad-api-reference#320c9e49da828116b12dec5bfeea306a
      */
-    async fetchOrderBook (symbol: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
+    async fetchOrderBook (outcome: Str, limit: Int = undefined, params: Dict = {}): Promise<OrderBook> {
         await this.loadMarkets ();
-        const outcomeObj = this.outcome (symbol);
+        const outcomeObj = this.outcome (outcome);
         const networkId = this.safeString (outcomeObj['info'], 'networkId');
         const marketId = this.safeString (outcomeObj['info'], 'marketId');
         const outcomeId = this.safeString (outcomeObj['info'], 'outcomeId');
-        const response = await this.myriadPublicGetMarketsId (this.extend ({
+        const request: Dict = {
             'id': marketId,
             'network_id': networkId,
-        }, params));
+        };
+        const response = await this.myriadPublicGetMarketsId (this.extend (request, params));
+        //
+        //     {
+        //         "id": "756",
+        //         "networkId": "2741",
+        //         "slug": "will-trump-capture-another-president-before-his-birthday",
+        //         "title": "Will Trump capture another president before his birthday?",
+        //         "shortName": null,
+        //         "description": "### **Market Dates:**"
+        //         "publishedAt": "2026-01-16T18:05:36.000Z",
+        //         "expiresAt": "2026-06-14T04:59:00.000Z",
+        //         "resolvesAt": null,
+        //         "fees": {
+        //             "buy": { "fee": "0.01", "treasury_fee": "0.01", "distributor_fee": "0.01" },
+        //             "sell": { "fee": "0", "treasury_fee": "0", "distributor_fee": "0" },
+        //             "treasury": "0x5E3EbEc100e2294C0EB2264FC96225dF067AAaa3",
+        //             "distributor": "0xE44984C586FeBB31605D23b6316cA11B6f4D86b2"
+        //         },
+        //         "state": "open",
+        //         "voided": false,
+        //         "resolvedOutcomeId": "-1",
+        //         "topics": [ "Politics" ],
+        //         "resolutionSource": "https://www.whitehouse.gov/",
+        //         "resolutionTitle": "White House",
+        //         "token": {
+        //             "name": "Bridged USDC (Stargate)",
+        //             "address": "0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1",
+        //             "symbol": "USDC.e",
+        //             "decimals": "6"
+        //         },
+        //         "imageUrl": "https://cdn.polkamarkets.com/Qma9FAX15kHewT8vm61vykGA9bqQhNdDLvEbQWSp72i3PQ",
+        //         "bannerImageUrl": "https://imagedelivery.net/YN1-rdnufJQJCgu3i1CbVw/255d431f-1bb4-4d90-032b-d1f7032e8000/public",
+        //         "ogImageUrl": "https://imagedelivery.net/YN1-rdnufJQJCgu3i1CbVw/d3d60089-3d08-45ac-aa9d-139156e3f900/public",
+        //         "liquidity": "2000",
+        //         "liquidityPrice": "0.29322839",
+        //         "volume": "11396.236893",
+        //         "volume24h": "500",
+        //         "volumeNotional": "14101.517862",
+        //         "volumeNotional24h": "525.779869",
+        //         "users": "124",
+        //         "shares": "4547.083096",
+        //         "featured": false,
+        //         "featuredAt": null,
+        //         "inPlay": false,
+        //         "inPlayStartsAt": null,
+        //         "perpetual": false,
+        //         "moneyline": false,
+        //         "executionMode": "0",
+        //         "tradingModel": "amm",
+        //         "topHolders": [
+        //             "0x8A611AEE71b6448a6F99B6001D1234d020f7d546",
+        //             "0x2993249A3D107B759c886a4BD4e02B70d471eA9B"
+        //         ],
+        //         "outcomes": [
+        //             {
+        //                 "id": "0",
+        //                 "title": "Yes",
+        //                 "shares": "4232.024971",
+        //                 "sharesHeld": "138.741271",
+        //                 "price": "0.06928796",
+        //                 "closingPrice": null,
+        //                 "priceChange24h": "-0.20109988",
+        //                 "imageUrl": "https://cdn.polkamarkets.com/Qma9FAX15kHewT8vm61vykGA9bqQhNdDLvEbQWSp72i3PQ",
+        //                 "holders": "7",
+        //                 "tokenId": "1512",
+        //                 "price_charts": [Array]
+        //             }
+        //         ],
+        //         "eventId": null,
+        //         "outcomeIndex": null,
+        //         "negRisk": false,
+        //         "externalSources": []
+        //     }
+        //
         const outcomes = this.safeList (response, 'outcomes', []) as any[];
         let price: Num = undefined;
         for (const o of outcomes) {
@@ -561,7 +635,7 @@ export default class Myriad extends Exchange {
         const bid = price !== undefined ? price - 0.001 : undefined;
         const ask = price !== undefined ? price + 0.001 : undefined;
         return {
-            'symbol': symbol,
+            'symbol': this.safeOutcomeSymbol (outcome, outcomeObj),
             'bids': bid !== undefined ? [ [ bid, 9999 ] ] : [],
             'asks': ask !== undefined ? [ [ ask, 9999 ] ] : [],
             'timestamp': timestamp,

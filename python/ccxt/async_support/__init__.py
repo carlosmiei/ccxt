@@ -60,12 +60,14 @@ from ccxt.base.errors import RequestTimeout                           # noqa: F4
 from ccxt.base.errors import error_hierarchy                          # noqa: F401
 
 
+from ccxt.async_support.hyperliquid import hyperliquid                          # noqa: F401
 from ccxt.async_support.kalshi import kalshi                                    # noqa: F401
 from ccxt.async_support.limitless import limitless                              # noqa: F401
 from ccxt.async_support.myriad import myriad                                    # noqa: F401
 from ccxt.async_support.polymarket import polymarket                            # noqa: F401
 
 exchanges = [
+    'hyperliquid',
     'kalshi',
     'limitless',
     'myriad',
