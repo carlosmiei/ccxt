@@ -455,7 +455,7 @@ export default class polymarket extends Exchange {
 
     /**
      * Fetches the current mid-price and best bid/ask for a single outcome token.
-     * @param outcome
+     * @param outcome the unified symbol like TRUMP_DANCE_TODAY_997:YES or outcomeId like 16718041887881762329859205887704087070587186248220606272297433440108449709696
      * @param params
      * @see https://docs.polymarket.com/api-reference/data/get-midpoint-price
      * @see https://docs.polymarket.com/api-reference/market-data/get-order-book
@@ -470,6 +470,35 @@ export default class polymarket extends Exchange {
         ];
         const [ midpointResponse, bookResponse ] = await Promise.all (promises);
         const response = { 'midpoint': midpointResponse, 'book': bookResponse };
+        //
+        //     {
+        //         "midpoint": {
+        //             "mid": "0.9985"
+        //         },
+        //         "book": {
+        //             "market": "0x2d55f622bc12e23dc1f1bb4db8360c28c92155f9376bf73953c0756ee1387b2f",
+        //             "asset_id": "16718041887881762329859205887704087070587186248220606272297433440108449709696",
+        //             "timestamp": "1777344471023",
+        //             "hash": "11aa0feabec970de83b04a2c0d50a7639e144f43",
+        //             "bids": [
+        //                 {
+        //                     "price": "0.45",
+        //                     "size": "100"
+        //                 },
+        //             ],
+        //             "asks": [
+        //                 {
+        //                     "price": "0.46",
+        //                     "size": "150"
+        //                 },
+        //             ],
+        //             "min_order_size": "5",
+        //             "tick_size": "0.001",
+        //             "neg_risk": false,
+        //             "last_trade_price": "0.998"
+        //         }
+        //     }
+        //
         return this.parseTicker (
             response,
             outcomeObj
@@ -505,6 +534,35 @@ export default class polymarket extends Exchange {
      * @param market
      */
     parseTicker (ticker: Dict, market: Market = undefined): Ticker {
+        //
+        //     {
+        //         "midpoint": {
+        //             "mid": "0.9985"
+        //         },
+        //         "book": {
+        //             "market": "0x2d55f622bc12e23dc1f1bb4db8360c28c92155f9376bf73953c0756ee1387b2f",
+        //             "asset_id": "16718041887881762329859205887704087070587186248220606272297433440108449709696",
+        //             "timestamp": "1777344471023",
+        //             "hash": "11aa0feabec970de83b04a2c0d50a7639e144f43",
+        //             "bids": [
+        //                 {
+        //                     "price": "0.45",
+        //                     "size": "100"
+        //                 },
+        //             ],
+        //             "asks": [
+        //                 {
+        //                     "price": "0.46",
+        //                     "size": "150"
+        //                 },
+        //             ],
+        //             "min_order_size": "5",
+        //             "tick_size": "0.001",
+        //             "neg_risk": false,
+        //             "last_trade_price": "0.998"
+        //         }
+        //     }
+        //
         const midpointData = this.safeValue (ticker, 'midpoint', {});
         const bookData = this.safeValue (ticker, 'book', {});
         const mid = this.safeNumber (midpointData, 'mid');
