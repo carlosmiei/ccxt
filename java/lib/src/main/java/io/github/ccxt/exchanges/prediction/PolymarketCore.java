@@ -361,17 +361,42 @@ public class PolymarketCore extends PolymarketApi
 
             Object parameters = Helpers.getArg(optionalArgs, 0, new java.util.HashMap<String, Object>() {{}});
             Object pageSize = this.safeInteger(parameters, "limit", 50);
-            Object rest = this.omit(parameters, new java.util.ArrayList<Object>(java.util.Arrays.asList("limit")));
+            // map the unified sort/status onto the gamma search params
+            Object sort = this.safeString(parameters, "sort");
+            Object sortParam = "volume";
+            if (Helpers.isTrue(Helpers.isEqual(sort, "liquidity")))
+            {
+                sortParam = "liquidity";
+            } else if (Helpers.isTrue(Helpers.isEqual(sort, "newest")))
+            {
+                sortParam = "startDate";
+            }
+            Object status = this.safeString(parameters, "status", "active");
+            Object eventsStatus = "active";
+            if (Helpers.isTrue(Helpers.isTrue((Helpers.isEqual(status, "closed"))) || Helpers.isTrue((Helpers.isEqual(status, "inactive")))))
+            {
+                eventsStatus = "closed";
+            } else if (Helpers.isTrue(Helpers.isEqual(status, "all")))
+            {
+                eventsStatus = null;
+            }
+            Object rest = this.omit(parameters, new java.util.ArrayList<Object>(java.util.Arrays.asList("limit", "sort", "status", "searchIn", "eventId", "slug", "query", "queries")));
             Object seen = new java.util.HashMap<String, Object>() {{}};
             Object rawEvents = new java.util.ArrayList<Object>(java.util.Arrays.asList());
             for (var qi = 0; Helpers.isLessThan(qi, Helpers.getArrayLength(queries)); qi++)
             {
                 Object q = Helpers.GetValue(queries, qi);
+                final Object finalSortParam = sortParam;
                 Object baseRequest = new java.util.HashMap<String, Object>() {{
                     put( "q", q );
                     put( "limit_per_type", pageSize );
-                    put( "events_status", "active" );
+                    put( "sort", finalSortParam );
+                    put( "ascending", false );
                 }};
+                if (Helpers.isTrue(!Helpers.isEqual(eventsStatus, null)))
+                {
+                    Helpers.addElementToObject(baseRequest, "events_status", eventsStatus);
+                }
                 Object firstRequest = new java.util.HashMap<String, Object>() {{
                     put( "page", 1 );
                 }};
@@ -450,20 +475,34 @@ public class PolymarketCore extends PolymarketApi
             Object limit = this.safeInteger(parameters, "limit", this.safeInteger(this.options, "fetchMarketsLimit", 1000));
             Object maxPages = Math.ceil(Double.parseDouble(Helpers.toString(Helpers.divide(limit, pageSize))));
             Object status = this.safeString(parameters, "status", this.safeString(this.options, "defaultEventStatus", "active"));
-            Object rest = this.omit(parameters, new java.util.ArrayList<Object>(java.util.Arrays.asList("status", "limit")));
+            // sort maps to the gamma `order` field; 'volume' is the default ranking
+            Object sort = this.safeString(parameters, "sort");
+            Object order = "volume";
+            if (Helpers.isTrue(Helpers.isEqual(sort, "liquidity")))
+            {
+                order = "liquidity";
+            } else if (Helpers.isTrue(Helpers.isEqual(sort, "newest")))
+            {
+                order = "startDate";
+            }
+            Object rest = this.omit(parameters, new java.util.ArrayList<Object>(java.util.Arrays.asList("status", "limit", "sort", "searchIn", "eventId", "slug", "query", "queries")));
+            final Object finalOrder = order;
             Object baseRequest = new java.util.HashMap<String, Object>() {{
                 put( "limit", pageSize );
-                put( "order", "volume24hr" );
+                put( "order", finalOrder );
                 put( "ascending", false );
             }};
             baseRequest = this.extend(baseRequest, rest);
             if (Helpers.isTrue(Helpers.isEqual(status, "active")))
             {
                 Helpers.addElementToObject(baseRequest, "active", true);
-            } else if (Helpers.isTrue(Helpers.isEqual(status, "closed")))
+                Helpers.addElementToObject(baseRequest, "closed", false);
+            } else if (Helpers.isTrue(Helpers.isTrue((Helpers.isEqual(status, "closed"))) || Helpers.isTrue((Helpers.isEqual(status, "inactive")))))
             {
+                Helpers.addElementToObject(baseRequest, "active", false);
                 Helpers.addElementToObject(baseRequest, "closed", true);
             }
+            // 'all' — no active/closed filter
             // fetch page 1 first; if full, fire remaining pages in parallel
             Object firstPageRequest = new java.util.HashMap<String, Object>() {{
                 put( "offset", 0 );
@@ -771,7 +810,7 @@ final Object finalMarketSymbol = marketSymbol;
 
             Object parameters = Helpers.getArg(optionalArgs, 0, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = Helpers.GetValue(outcomeObj, "outcomeId");
             Object promises = new java.util.ArrayList<Object>(java.util.Arrays.asList(this.clobPublicGetMidpoint(new java.util.HashMap<String, Object>() {{
@@ -847,11 +886,11 @@ final Object finalMarketSymbol = marketSymbol;
             {
                 for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(outcomes)); i++)
                 {
-                    this.checkEventsAndMarkets(Helpers.GetValue(outcomes, i));
+                    this.checkEvents(Helpers.GetValue(outcomes, i));
                 }
             } else
             {
-                this.checkEventsAndMarkets();
+                this.checkEvents();
             }
             Object outcomesMap = ((Helpers.isTrue((!Helpers.isEqual(this.outcomes, null))))) ? this.outcomes : new java.util.HashMap<String, Object>() {{}};
             Object targets = new java.util.ArrayList<Object>(java.util.Arrays.asList());
@@ -995,7 +1034,7 @@ final Object finalMarketSymbol = marketSymbol;
         final Object finalMarket = market;
         final Object finalQuoteVolume = quoteVolume;
         return this.safePredictionTicker(new java.util.HashMap<String, Object>() {{
-            put( "symbol", symbol );
+            put( "outcome", symbol );
             put( "outcomeId", PolymarketCore.this.safeString(finalMarket, "outcomeId") );
             put( "label", PolymarketCore.this.safeString(finalMarket, "label") );
             put( "market", PolymarketCore.this.safeString(finalMarket, "market") );
@@ -1039,7 +1078,7 @@ final Object finalMarketSymbol = marketSymbol;
             Object limit = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = ((String)Helpers.GetValue(outcomeObj, "outcomeId"));
             Object request = new java.util.HashMap<String, Object>() {{
@@ -1098,7 +1137,7 @@ final Object finalMarketSymbol = marketSymbol;
             Object limit = Helpers.getArg(optionalArgs, 2, null);
             Object parameters = Helpers.getArg(optionalArgs, 3, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = ((String)Helpers.GetValue(outcomeObj, "outcomeId"));
             Object fidelityMin = this.safeInteger(this.timeframes, timeframe, 1); // fidelity in minutes
@@ -1275,7 +1314,7 @@ final Object finalMarketSymbol = marketSymbol;
 
             Object parameters = Helpers.getArg(optionalArgs, 0, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             Object outcomeObj = this.outcome(outcome);
             Object outcomeInfo = this.safeDict(outcomeObj, "info", new java.util.HashMap<String, Object>() {{}});
             Object conditionId = this.safeString(outcomeInfo, "conditionId");
@@ -1304,7 +1343,7 @@ final Object finalMarketSymbol = marketSymbol;
         //
         Object market = Helpers.getArg(optionalArgs, 0, null);
         Object timestamp = this.milliseconds();
-        return this.safeOpenInterest(new java.util.HashMap<String, Object>() {{
+        Object openInterest = this.safeOpenInterest(new java.util.HashMap<String, Object>() {{
             put( "symbol", PolymarketCore.this.safeOutcomeSymbol(null, market) );
             put( "openInterestAmount", null );
             put( "openInterestValue", PolymarketCore.this.safeNumber(interest, "value") );
@@ -1314,6 +1353,10 @@ final Object finalMarketSymbol = marketSymbol;
             put( "datetime", PolymarketCore.this.iso8601(timestamp) );
             put( "info", interest );
         }}, market);
+        Helpers.addElementToObject(openInterest, "outcome", this.safeOutcomeSymbol(null, market));
+        Helpers.addElementToObject(openInterest, "outcomeId", this.safeString(market, "outcomeId"));
+        ((java.util.Map<String,Object>)openInterest).remove((String)"symbol");
+        return openInterest;
     }
 
     /**
@@ -1332,7 +1375,7 @@ final Object finalMarketSymbol = marketSymbol;
 
             Object parameters = Helpers.getArg(optionalArgs, 0, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = this.safeString(outcomeObj, "outcomeId");
             Object request = new java.util.HashMap<String, Object>() {{
@@ -1346,7 +1389,8 @@ final Object finalMarketSymbol = marketSymbol;
             Object rate = ((Helpers.isTrue((!Helpers.isEqual(baseFeeBps, null))))) ? this.parseNumber(Precise.stringDiv(baseFeeBps, "10000")) : null;
             return new java.util.HashMap<String, Object>() {{
                 put( "info", response );
-                put( "symbol", PolymarketCore.this.safeOutcomeSymbol(null, ((Object)outcomeObj)) );
+                put( "outcome", PolymarketCore.this.safeOutcomeSymbol(null, ((Object)outcomeObj)) );
+                put( "outcomeId", PolymarketCore.this.safeString(outcomeObj, "outcomeId") );
                 put( "maker", rate );
                 put( "taker", rate );
                 put( "percentage", true );
@@ -1376,7 +1420,7 @@ final Object finalMarketSymbol = marketSymbol;
             Object limit = Helpers.getArg(optionalArgs, 1, null);
             Object parameters = Helpers.getArg(optionalArgs, 2, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = ((String)Helpers.GetValue(outcomeObj, "outcomeId"));
             Object outcomeInfo = this.safeDict(outcomeObj, "info", new java.util.HashMap<String, Object>() {{}});
@@ -1440,7 +1484,7 @@ final Object finalMarketSymbol = marketSymbol;
             Object outcomeObj = null;
             if (Helpers.isTrue(!Helpers.isEqual(symbol, null)))
             {
-                this.checkEventsAndMarkets(symbol);
+                this.checkEvents(symbol);
                 outcomeObj = this.outcome(symbol);
                 Helpers.addElementToObject(request, "asset_id", Helpers.GetValue(outcomeObj, "outcomeId"));
             }
@@ -1545,7 +1589,6 @@ final Object finalMarketSymbol = marketSymbol;
             put( "info", trade );
             put( "timestamp", finalTimestamp );
             put( "datetime", PolymarketCore.this.iso8601(finalTimestamp) );
-            put( "symbol", symbol );
             put( "outcome", symbol );
             put( "outcomeId", assetId );
             put( "label", PolymarketCore.this.safeString(mkt, "label") );
@@ -1645,11 +1688,11 @@ final Object finalMarketSymbol = marketSymbol;
             {
                 for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(outcomes)); i++)
                 {
-                    this.checkEventsAndMarkets(Helpers.GetValue(outcomes, i));
+                    this.checkEvents(Helpers.GetValue(outcomes, i));
                 }
             } else
             {
-                this.checkEventsAndMarkets();
+                this.checkEvents();
             }
             if (Helpers.isTrue(Helpers.isEqual(this.walletAddress, null)))
             {
@@ -1737,7 +1780,7 @@ final Object finalMarketSymbol = marketSymbol;
         final Object finalCurPrice = curPrice;
         return this.safePredictionPosition(new java.util.HashMap<String, Object>() {{
             put( "id", PolymarketCore.this.safeString(position, "id") );
-            put( "symbol", Helpers.GetValue(marketData, "outcome") );
+            put( "outcome", Helpers.GetValue(marketData, "outcome") );
             put( "outcomeId", Helpers.GetValue(marketData, "outcomeId") );
             put( "market", Helpers.GetValue(marketData, "market") );
             put( "label", Helpers.GetValue(marketData, "label") );
@@ -1792,10 +1835,10 @@ final Object finalMarketSymbol = marketSymbol;
             Object outcome = symbol;
             if (Helpers.isTrue(!Helpers.isEqual(outcome, null)))
             {
-                this.checkEventsAndMarkets(outcome);
+                this.checkEvents(outcome);
             } else
             {
-                this.checkEventsAndMarkets();
+                this.checkEvents();
             }
             Object request = new java.util.HashMap<String, Object>() {{}};
             Object outcomeObj = null;
@@ -1832,10 +1875,10 @@ final Object finalMarketSymbol = marketSymbol;
             Object outcome = symbol;
             if (Helpers.isTrue(!Helpers.isEqual(outcome, null)))
             {
-                this.checkEventsAndMarkets(outcome);
+                this.checkEvents(outcome);
             } else
             {
-                this.checkEventsAndMarkets();
+                this.checkEvents();
             }
             Object request = new java.util.HashMap<String, Object>() {{
                 put( "id", id );
@@ -1886,7 +1929,7 @@ final Object finalMarketSymbol = marketSymbol;
             put( "datetime", PolymarketCore.this.iso8601(ts) );
             put( "lastTradeTimestamp", null );
             put( "status", status );
-            put( "symbol", Helpers.GetValue(mkt, "outcome") );
+            put( "outcome", Helpers.GetValue(mkt, "outcome") );
             put( "outcomeId", PolymarketCore.this.safeString(mkt, "outcomeId") );
             put( "label", PolymarketCore.this.safeString(mkt, "label") );
             put( "market", PolymarketCore.this.safeString(mkt, "market") );
@@ -2438,7 +2481,7 @@ final Object finalMarketSymbol = marketSymbol;
             if (Helpers.isTrue(!Helpers.isEqual(outcome, null)))
             {
                 // scope to a single outcome token via DELETE /cancel-market-orders { asset_id }
-                this.checkEventsAndMarkets(outcome);
+                this.checkEvents(outcome);
                 Object outcomeObj = this.outcome(outcome);
                 Object request = new java.util.HashMap<String, Object>() {{
                     put( "asset_id", Helpers.GetValue(outcomeObj, "outcomeId") );
@@ -2473,9 +2516,14 @@ final Object finalMarketSymbol = marketSymbol;
      * @see https://docs.polymarket.com/api-reference/search/search-markets-events-and-profiles
      * @see https://docs.polymarket.com/api-reference/events/list-events
      * @param {object} [params] extra exchange-specific parameters
-     * @param {string} [params.query] a single search term; when omitted (and no queries) the most active events are returned (capped)
+     * @param {string} [params.query] a single keyword search term
      * @param {string[]} [params.queries] multiple search terms (alternative to query)
-     * @param {int} [params.limit] when searching, page size per query (default 50); when omitted, max events to fetch (default options.fetchMarketsLimit, 1000), ordered by 24h volume
+     * @param {int} [params.limit] max number of events to return
+     * @param {string} [params.sort] 'volume' (default), 'liquidity' or 'newest' — mapped to the gamma order field
+     * @param {string} [params.status] 'active' (default), 'inactive', 'closed' or 'all' ('inactive' and 'closed' are interchangeable)
+     * @param {string} [params.searchIn] when searching, restrict the match to 'title' (default), 'description' or 'both'
+     * @param {string} [params.eventId] direct lookup by event id (short-circuits the listing/search)
+     * @param {string} [params.slug] direct lookup by event slug
      * @returns {object[]} an array of event structures
      */
     public java.util.concurrent.CompletableFuture<Object> fetchEvents(Object... optionalArgs)
@@ -2484,11 +2532,26 @@ final Object finalMarketSymbol = marketSymbol;
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
             Object parameters = Helpers.getArg(optionalArgs, 0, new java.util.HashMap<String, Object>() {{}});
+            Object requestedEventId = this.safeString(parameters, "eventId");
+            Object requestedSlug = this.safeString(parameters, "slug");
             Object queries = this.parseSearchQueries(parameters);
-            Object rest = this.omit(parameters, new java.util.ArrayList<Object>(java.util.Arrays.asList("query", "queries")));
+            Object rest = this.omit(parameters, new java.util.ArrayList<Object>(java.util.Arrays.asList("query", "queries", "eventId", "slug")));
             Object queriesLength = Helpers.getArrayLength(queries);
             Object rawEvents = new java.util.ArrayList<Object>(java.util.Arrays.asList());
-            if (Helpers.isTrue(Helpers.isGreaterThan(queriesLength, 0)))
+            if (Helpers.isTrue(Helpers.isTrue((!Helpers.isEqual(requestedEventId, null))) || Helpers.isTrue((!Helpers.isEqual(requestedSlug, null)))))
+            {
+                // direct lookup by event id or slug via the events endpoint (returns a list)
+                Object lookup = new java.util.HashMap<String, Object>() {{}};
+                if (Helpers.isTrue(!Helpers.isEqual(requestedEventId, null)))
+                {
+                    Helpers.addElementToObject(lookup, "id", requestedEventId);
+                } else
+                {
+                    Helpers.addElementToObject(lookup, "slug", requestedSlug);
+                }
+                Object response = (this.gammaPublicGetEvents(lookup)).join();
+                rawEvents = ((Helpers.isTrue((!Helpers.isEqual(response, null))))) ? response : new java.util.ArrayList<Object>(java.util.Arrays.asList());
+            } else if (Helpers.isTrue(Helpers.isGreaterThan(queriesLength, 0)))
             {
                 rawEvents = (this.fetchRawEventsBySearch(queries, rest)).join();
             } else
@@ -2560,19 +2623,32 @@ final Object finalMarketSymbol = marketSymbol;
                 for (var j = 0; Helpers.isLessThan(j, Helpers.getArrayLength(outcomesList)); j++)
                 {
                     Object oc = Helpers.GetValue(outcomesList, j);
-                    Object ocSymbol = this.safeString(oc, "symbol");
+                    Object ocSymbol = this.safeString(oc, "outcome");
                     if (Helpers.isTrue(!Helpers.isEqual(ocSymbol, null)))
                     {
                         Helpers.addElementToObject(this.outcomes, ocSymbol, oc);
                     }
-                    Object ocId = this.safeString(oc, "id");
+                    Object ocId = this.safeString(oc, "outcomeId");
                     if (Helpers.isTrue(!Helpers.isEqual(ocId, null)))
                     {
                         Helpers.addElementToObject(this.outcomes_by_id, ocId, oc);
                     }
                 }
             }
-            return result;
+            // the gamma search endpoint is fuzzy, so refine the search path by status and searchIn
+            // client-side (searchIn defaults to 'title', matching the reference behaviour)
+            Object filtered = result;
+            if (Helpers.isTrue(Helpers.isGreaterThan(queriesLength, 0)))
+            {
+                filtered = this.filterEventsByStatus(filtered, this.safeString(parameters, "status", "active"));
+                filtered = this.filterEventsBySearchIn(filtered, queries, this.safeString(parameters, "searchIn", "title"));
+            }
+            Object finalLimit = this.safeInteger(parameters, "limit");
+            if (Helpers.isTrue(!Helpers.isEqual(finalLimit, null)))
+            {
+                filtered = this.arraySlice(filtered, 0, finalLimit);
+            }
+            return filtered;
         });
 
     }
@@ -3114,7 +3190,7 @@ final Object finalSymbol = symbol;
             put( "asks", asks );
             put( "timestamp", timestamp );
             put( "datetime", PolymarketCore.this.iso8601(timestamp) );
-            put( "symbol", finalSymbol );
+            put( "outcome", finalSymbol );
         }}});
         client.resolve(orderbook, Helpers.add("orderbook::", symbol));
         client.resolve(orderbook, Helpers.add("ticker::", symbol));
@@ -3174,7 +3250,7 @@ final Object finalSymbol = symbol;
             put( "info", eventVar );
             put( "timestamp", timestamp );
             put( "datetime", PolymarketCore.this.iso8601(timestamp) );
-            put( "symbol", finalSymbol );
+            put( "outcome", finalSymbol );
             put( "outcomeId", PolymarketCore.this.safeString(market, "outcomeId") );
             put( "label", PolymarketCore.this.safeString(market, "label") );
             put( "market", PolymarketCore.this.safeString(market, "market") );
@@ -3219,7 +3295,6 @@ final Object finalSymbol = symbol;
             Object limit = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            (this.loadMarkets()).join();
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = this.safeString(outcomeObj, "outcomeId");
             symbol = this.safeString(outcomeObj, "outcome");
@@ -3255,7 +3330,6 @@ final Object finalSymbol = symbol;
             Object limit = Helpers.getArg(optionalArgs, 1, null);
             Object parameters = Helpers.getArg(optionalArgs, 2, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            (this.loadMarkets()).join();
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = this.safeString(outcomeObj, "outcomeId");
             symbol = this.safeString(outcomeObj, "outcome");
@@ -3287,7 +3361,6 @@ final Object finalSymbol = symbol;
             Object symbol = symbol3;
             Object parameters = Helpers.getArg(optionalArgs, 0, new java.util.HashMap<String, Object>() {{}});
             Object outcome = symbol;
-            (this.loadMarkets()).join();
             Object outcomeObj = this.outcome(outcome);
             Object tokenId = this.safeString(outcomeObj, "outcomeId");
             symbol = this.safeString(outcomeObj, "outcome");
@@ -3349,7 +3422,7 @@ final Object finalSymbol = symbol;
             final Object finalBestAskVolume = bestAskVolume;
             final Object finalMid = mid;
             return this.safePredictionTicker(new java.util.HashMap<String, Object>() {{
-                put( "symbol", finalSymbol );
+                put( "outcome", finalSymbol );
                 put( "outcomeId", PolymarketCore.this.safeString(market, "outcomeId") );
                 put( "label", PolymarketCore.this.safeString(market, "label") );
                 put( "market", PolymarketCore.this.safeString(market, "market") );
@@ -3397,7 +3470,6 @@ final Object finalSymbol = symbol;
             Object since = Helpers.getArg(optionalArgs, 1, null);
             Object limit = Helpers.getArg(optionalArgs, 2, null);
             Object parameters = Helpers.getArg(optionalArgs, 3, new java.util.HashMap<String, Object>() {{}});
-            (this.loadMarkets()).join();
             (this.loadApiCredentials()).join();
             Object messageHash = "orders";
             if (Helpers.isTrue(!Helpers.isEqual(symbol, null)))
@@ -3436,7 +3508,6 @@ final Object finalSymbol = symbol;
             Object since = Helpers.getArg(optionalArgs, 1, null);
             Object limit = Helpers.getArg(optionalArgs, 2, null);
             Object parameters = Helpers.getArg(optionalArgs, 3, new java.util.HashMap<String, Object>() {{}});
-            (this.loadMarkets()).join();
             (this.loadApiCredentials()).join();
             Object messageHash = "myTrades";
             if (Helpers.isTrue(!Helpers.isEqual(symbol, null)))

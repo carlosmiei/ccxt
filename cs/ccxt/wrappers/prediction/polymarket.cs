@@ -166,11 +166,11 @@ public partial class polymarket
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure).</returns>
-    public async Task<OrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
+    public async Task<PredictionOrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
     {
         var limit = limit2 == 0 ? null : (object)limit2;
         var res = await this.fetchOrderBook(symbol, limit, parameters);
-        return new OrderBook(res);
+        return new PredictionOrderBook(res);
     }
     /// <summary>
     /// fetches price history ticks for a single outcome token and buckets them client-side into OHLCV candles, snapping tick timestamps to the candle boundary
@@ -261,10 +261,10 @@ public partial class polymarket
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> an [open interest structure](https://docs.ccxt.com/#/?id=open-interest-structure).</returns>
-    public async Task<OpenInterest> FetchOpenInterest(string symbol, Dictionary<string, object> parameters = null)
+    public async Task<PredictionOpenInterest> FetchOpenInterest(string symbol, Dictionary<string, object> parameters = null)
     {
         var res = await this.fetchOpenInterest(symbol, parameters);
-        return new OpenInterest(res);
+        return new PredictionOpenInterest(res);
     }
     /// <summary>
     /// fetches the base fee rate for a prediction market outcome token
@@ -281,10 +281,10 @@ public partial class polymarket
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> a [fee structure](https://docs.ccxt.com/#/?id=fee-structure).</returns>
-    public async Task<TradingFeeInterface> FetchTradingFee(string symbol, Dictionary<string, object> parameters = null)
+    public async Task<PredictionTradingFee> FetchTradingFee(string symbol, Dictionary<string, object> parameters = null)
     {
         var res = await this.fetchTradingFee(symbol, parameters);
-        return new TradingFeeInterface(res);
+        return new PredictionTradingFee(res);
     }
     /// <summary>
     /// fetches public trade history for a single outcome token from the data API
@@ -742,19 +742,49 @@ public partial class polymarket
     /// <item>
     /// <term>params.query</term>
     /// <description>
-    /// string : a single search term; when omitted (and no queries) the most active events are returned (capped)
+    /// string : a single keyword search term
     /// </description>
     /// </item>
     /// <item>
     /// <term>params.limit</term>
     /// <description>
-    /// int : when searching, page size per query (default 50); when omitted, max events to fetch (default options.fetchMarketsLimit, 1000), ordered by 24h volume
+    /// int : max number of events to return
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <term>params.sort</term>
+    /// <description>
+    /// string : 'volume' (default), 'liquidity' or 'newest' — mapped to the gamma order field
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <term>params.status</term>
+    /// <description>
+    /// string : 'active' (default), 'inactive', 'closed' or 'all' ('inactive' and 'closed' are interchangeable)
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <term>params.searchIn</term>
+    /// <description>
+    /// string : when searching, restrict the match to 'title' (default), 'description' or 'both'
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <term>params.eventId</term>
+    /// <description>
+    /// string : direct lookup by event id (short-circuits the listing/search)
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <term>params.slug</term>
+    /// <description>
+    /// string : direct lookup by event slug
     /// </description>
     /// </item>
     /// </list>
     /// </remarks>
     /// <returns> <term>object[]</term> an array of event structures.</returns>
-    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters = null)
+    public async Task<List<Dictionary<string, object>>> FetchEvents(fetchEventsParams parameters)
     {
         var res = await this.fetchEvents(parameters);
         return ((IList<object>)res).Select(item => (item as Dictionary<string, object>)).ToList();

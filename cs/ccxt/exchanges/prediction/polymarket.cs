@@ -340,7 +340,26 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object pageSize = this.safeInteger(parameters, "limit", 50);
-        object rest = this.omit(parameters, new List<object>() {"limit"});
+        // map the unified sort/status onto the gamma search params
+        object sort = this.safeString(parameters, "sort");
+        object sortParam = "volume";
+        if (isTrue(isEqual(sort, "liquidity")))
+        {
+            sortParam = "liquidity";
+        } else if (isTrue(isEqual(sort, "newest")))
+        {
+            sortParam = "startDate";
+        }
+        object status = this.safeString(parameters, "status", "active");
+        object eventsStatus = "active";
+        if (isTrue(isTrue((isEqual(status, "closed"))) || isTrue((isEqual(status, "inactive")))))
+        {
+            eventsStatus = "closed";
+        } else if (isTrue(isEqual(status, "all")))
+        {
+            eventsStatus = null;
+        }
+        object rest = this.omit(parameters, new List<object>() {"limit", "sort", "status", "searchIn", "eventId", "slug", "query", "queries"});
         object seen = new Dictionary<string, object>() {};
         object rawEvents = new List<object>() {};
         for (object qi = 0; isLessThan(qi, getArrayLength(queries)); postFixIncrement(ref qi))
@@ -349,8 +368,13 @@ public partial class polymarket : PredictionExchange
             object baseRequest = new Dictionary<string, object>() {
                 { "q", q },
                 { "limit_per_type", pageSize },
-                { "events_status", "active" },
+                { "sort", sortParam },
+                { "ascending", false },
             };
+            if (isTrue(!isEqual(eventsStatus, null)))
+            {
+                ((IDictionary<string,object>)baseRequest)["events_status"] = eventsStatus;
+            }
             object firstRequest = new Dictionary<string, object>() {
                 { "page", 1 },
             };
@@ -423,20 +447,33 @@ public partial class polymarket : PredictionExchange
         object limit = this.safeInteger(parameters, "limit", this.safeInteger(this.options, "fetchMarketsLimit", 1000));
         object maxPages = Math.Ceiling(Convert.ToDouble(divide(limit, pageSize)));
         object status = this.safeString(parameters, "status", this.safeString(this.options, "defaultEventStatus", "active"));
-        object rest = this.omit(parameters, new List<object>() {"status", "limit"});
+        // sort maps to the gamma `order` field; 'volume' is the default ranking
+        object sort = this.safeString(parameters, "sort");
+        object order = "volume";
+        if (isTrue(isEqual(sort, "liquidity")))
+        {
+            order = "liquidity";
+        } else if (isTrue(isEqual(sort, "newest")))
+        {
+            order = "startDate";
+        }
+        object rest = this.omit(parameters, new List<object>() {"status", "limit", "sort", "searchIn", "eventId", "slug", "query", "queries"});
         object baseRequest = new Dictionary<string, object>() {
             { "limit", pageSize },
-            { "order", "volume24hr" },
+            { "order", order },
             { "ascending", false },
         };
         baseRequest = this.extend(baseRequest, rest);
         if (isTrue(isEqual(status, "active")))
         {
             ((IDictionary<string,object>)baseRequest)["active"] = true;
-        } else if (isTrue(isEqual(status, "closed")))
+            ((IDictionary<string,object>)baseRequest)["closed"] = false;
+        } else if (isTrue(isTrue((isEqual(status, "closed"))) || isTrue((isEqual(status, "inactive")))))
         {
+            ((IDictionary<string,object>)baseRequest)["active"] = false;
             ((IDictionary<string,object>)baseRequest)["closed"] = true;
         }
+        // 'all' — no active/closed filter
         // fetch page 1 first; if full, fire remaining pages in parallel
         object firstPageRequest = new Dictionary<string, object>() {
             { "offset", 0 },
@@ -736,7 +773,7 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object tokenId = getValue(outcomeObj, "outcomeId");
         object promises = new List<object> {this.clobPublicGetMidpoint(new Dictionary<string, object>() {
@@ -806,11 +843,11 @@ public partial class polymarket : PredictionExchange
         {
             for (object i = 0; isLessThan(i, getArrayLength(outcomes)); postFixIncrement(ref i))
             {
-                this.checkEventsAndMarkets(getValue(outcomes, i));
+                this.checkEvents(getValue(outcomes, i));
             }
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object outcomesMap = ((bool) isTrue((!isEqual(this.outcomes, null)))) ? this.outcomes : new Dictionary<string, object>() {};
         object targets = new List<object>() {};
@@ -948,7 +985,7 @@ public partial class polymarket : PredictionExchange
             quoteVolume = this.safeNumber2(getValue(market, "info"), "volume24hr", "volume");
         }
         return this.safePredictionTicker(new Dictionary<string, object>() {
-            { "symbol", symbol },
+            { "outcome", symbol },
             { "outcomeId", this.safeString(market, "outcomeId") },
             { "label", this.safeString(market, "label") },
             { "market", this.safeString(market, "market") },
@@ -988,7 +1025,7 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object tokenId = ((string)getValue(outcomeObj, "outcomeId"));
         object request = new Dictionary<string, object>() {
@@ -1040,7 +1077,7 @@ public partial class polymarket : PredictionExchange
         timeframe ??= "1m";
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object tokenId = ((string)getValue(outcomeObj, "outcomeId"));
         object fidelityMin = this.safeInteger(this.timeframes, timeframe, 1); // fidelity in minutes
@@ -1197,7 +1234,7 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object outcomeInfo = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object conditionId = this.safeString(outcomeInfo, "conditionId");
@@ -1222,7 +1259,7 @@ public partial class polymarket : PredictionExchange
         //     { "market": "0x7976b8...92", "value": 4925662.470476 }
         //
         object timestamp = this.milliseconds();
-        return this.safeOpenInterest(new Dictionary<string, object>() {
+        object openInterest = this.safeOpenInterest(new Dictionary<string, object>() {
             { "symbol", this.safeOutcomeSymbol(null, market) },
             { "openInterestAmount", null },
             { "openInterestValue", this.safeNumber(interest, "value") },
@@ -1232,6 +1269,10 @@ public partial class polymarket : PredictionExchange
             { "datetime", this.iso8601(timestamp) },
             { "info", interest },
         }, market);
+        ((IDictionary<string,object>)openInterest)["outcome"] = this.safeOutcomeSymbol(null, market);
+        ((IDictionary<string,object>)openInterest)["outcomeId"] = this.safeString(market, "outcomeId");
+        ((IDictionary<string,object>)openInterest).Remove((string)"symbol");
+        return openInterest;
     }
 
     /**
@@ -1247,7 +1288,7 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object tokenId = this.safeString(outcomeObj, "outcomeId");
         object request = new Dictionary<string, object>() {
@@ -1259,14 +1300,15 @@ public partial class polymarket : PredictionExchange
         //
         object baseFeeBps = this.safeString(response, "base_fee");
         object rate = ((bool) isTrue((!isEqual(baseFeeBps, null)))) ? this.parseNumber(Precise.stringDiv(baseFeeBps, "10000")) : null;
-        return new Dictionary<string, object>() {
+        return ((object)new Dictionary<string, object>() {
             { "info", response },
-            { "symbol", this.safeOutcomeSymbol(null, ((object)outcomeObj)) },
+            { "outcome", this.safeOutcomeSymbol(null, ((object)outcomeObj)) },
+            { "outcomeId", this.safeString(outcomeObj, "outcomeId") },
             { "maker", rate },
             { "taker", rate },
             { "percentage", true },
             { "tierBased", false },
-        };
+        });
     }
 
     /**
@@ -1284,7 +1326,7 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object tokenId = ((string)getValue(outcomeObj, "outcomeId"));
         object outcomeInfo = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
@@ -1339,7 +1381,7 @@ public partial class polymarket : PredictionExchange
         object outcomeObj = null;
         if (isTrue(!isEqual(symbol, null)))
         {
-            this.checkEventsAndMarkets(symbol);
+            this.checkEvents(symbol);
             outcomeObj = this.outcome(symbol);
             ((IDictionary<string,object>)request)["asset_id"] = getValue(outcomeObj, "outcomeId");
         }
@@ -1430,7 +1472,6 @@ public partial class polymarket : PredictionExchange
             { "info", trade },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
-            { "symbol", symbol },
             { "outcome", symbol },
             { "outcomeId", assetId },
             { "label", this.safeString(mkt, "label") },
@@ -1520,11 +1561,11 @@ public partial class polymarket : PredictionExchange
         {
             for (object i = 0; isLessThan(i, getArrayLength(outcomes)); postFixIncrement(ref i))
             {
-                this.checkEventsAndMarkets(getValue(outcomes, i));
+                this.checkEvents(getValue(outcomes, i));
             }
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         if (isTrue(isEqual(this.walletAddress, null)))
         {
@@ -1601,7 +1642,7 @@ public partial class polymarket : PredictionExchange
         }
         return this.safePredictionPosition(new Dictionary<string, object>() {
             { "id", this.safeString(position, "id") },
-            { "symbol", getValue(marketData, "outcome") },
+            { "outcome", getValue(marketData, "outcome") },
             { "outcomeId", getValue(marketData, "outcomeId") },
             { "market", getValue(marketData, "market") },
             { "label", getValue(marketData, "label") },
@@ -1650,10 +1691,10 @@ public partial class polymarket : PredictionExchange
         object outcome = symbol;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object request = new Dictionary<string, object>() {};
         object outcomeObj = null;
@@ -1684,10 +1725,10 @@ public partial class polymarket : PredictionExchange
         object outcome = symbol;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object request = new Dictionary<string, object>() {
             { "id", id },
@@ -1735,7 +1776,7 @@ public partial class polymarket : PredictionExchange
             { "datetime", this.iso8601(ts) },
             { "lastTradeTimestamp", null },
             { "status", status },
-            { "symbol", getValue(mkt, "outcome") },
+            { "outcome", getValue(mkt, "outcome") },
             { "outcomeId", this.safeString(mkt, "outcomeId") },
             { "label", this.safeString(mkt, "label") },
             { "market", this.safeString(mkt, "market") },
@@ -2243,7 +2284,7 @@ public partial class polymarket : PredictionExchange
         if (isTrue(!isEqual(outcome, null)))
         {
             // scope to a single outcome token via DELETE /cancel-market-orders { asset_id }
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             object outcomeObj = this.outcome(outcome);
             object request = new Dictionary<string, object>() {
                 { "asset_id", getValue(outcomeObj, "outcomeId") },
@@ -2274,19 +2315,39 @@ public partial class polymarket : PredictionExchange
      * @see https://docs.polymarket.com/api-reference/search/search-markets-events-and-profiles
      * @see https://docs.polymarket.com/api-reference/events/list-events
      * @param {object} [params] extra exchange-specific parameters
-     * @param {string} [params.query] a single search term; when omitted (and no queries) the most active events are returned (capped)
+     * @param {string} [params.query] a single keyword search term
      * @param {string[]} [params.queries] multiple search terms (alternative to query)
-     * @param {int} [params.limit] when searching, page size per query (default 50); when omitted, max events to fetch (default options.fetchMarketsLimit, 1000), ordered by 24h volume
+     * @param {int} [params.limit] max number of events to return
+     * @param {string} [params.sort] 'volume' (default), 'liquidity' or 'newest' — mapped to the gamma order field
+     * @param {string} [params.status] 'active' (default), 'inactive', 'closed' or 'all' ('inactive' and 'closed' are interchangeable)
+     * @param {string} [params.searchIn] when searching, restrict the match to 'title' (default), 'description' or 'both'
+     * @param {string} [params.eventId] direct lookup by event id (short-circuits the listing/search)
+     * @param {string} [params.slug] direct lookup by event slug
      * @returns {object[]} an array of event structures
      */
     public async override Task<object> fetchEvents(object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
+        object requestedEventId = this.safeString(parameters, "eventId");
+        object requestedSlug = this.safeString(parameters, "slug");
         object queries = this.parseSearchQueries(parameters);
-        object rest = this.omit(parameters, new List<object>() {"query", "queries"});
+        object rest = this.omit(parameters, new List<object>() {"query", "queries", "eventId", "slug"});
         object queriesLength = getArrayLength(queries);
         object rawEvents = new List<object>() {};
-        if (isTrue(isGreaterThan(queriesLength, 0)))
+        if (isTrue(isTrue((!isEqual(requestedEventId, null))) || isTrue((!isEqual(requestedSlug, null)))))
+        {
+            // direct lookup by event id or slug via the events endpoint (returns a list)
+            object lookup = new Dictionary<string, object>() {};
+            if (isTrue(!isEqual(requestedEventId, null)))
+            {
+                ((IDictionary<string,object>)lookup)["id"] = requestedEventId;
+            } else
+            {
+                ((IDictionary<string,object>)lookup)["slug"] = requestedSlug;
+            }
+            object response = await this.gammaPublicGetEvents(lookup);
+            rawEvents = ((bool) isTrue((!isEqual(response, null)))) ? response : new List<object>() {};
+        } else if (isTrue(isGreaterThan(queriesLength, 0)))
         {
             rawEvents = await this.fetchRawEventsBySearch(queries, rest);
         } else
@@ -2356,19 +2417,32 @@ public partial class polymarket : PredictionExchange
             for (object j = 0; isLessThan(j, getArrayLength(outcomesList)); postFixIncrement(ref j))
             {
                 object oc = getValue(outcomesList, j);
-                object ocSymbol = this.safeString(oc, "symbol");
+                object ocSymbol = this.safeString(oc, "outcome");
                 if (isTrue(!isEqual(ocSymbol, null)))
                 {
                     ((IDictionary<string,object>)this.outcomes)[(string)ocSymbol] = oc;
                 }
-                object ocId = this.safeString(oc, "id");
+                object ocId = this.safeString(oc, "outcomeId");
                 if (isTrue(!isEqual(ocId, null)))
                 {
                     ((IDictionary<string,object>)this.outcomes_by_id)[(string)ocId] = oc;
                 }
             }
         }
-        return result;
+        // the gamma search endpoint is fuzzy, so refine the search path by status and searchIn
+        // client-side (searchIn defaults to 'title', matching the reference behaviour)
+        object filtered = result;
+        if (isTrue(isGreaterThan(queriesLength, 0)))
+        {
+            filtered = this.filterEventsByStatus(filtered, this.safeString(parameters, "status", "active"));
+            filtered = this.filterEventsBySearchIn(filtered, queries, this.safeString(parameters, "searchIn", "title"));
+        }
+        object finalLimit = this.safeInteger(parameters, "limit");
+        if (isTrue(!isEqual(finalLimit, null)))
+        {
+            filtered = this.arraySlice(filtered, 0, finalLimit);
+        }
+        return filtered;
     }
 
     /**
@@ -2874,7 +2948,7 @@ public partial class polymarket : PredictionExchange
             { "asks", asks },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
-            { "symbol", symbol },
+            { "outcome", symbol },
         });
         callDynamically(client as WebSocketClient, "resolve", new object[] {orderbook, add("orderbook::", symbol)});
         callDynamically(client as WebSocketClient, "resolve", new object[] {orderbook, add("ticker::", symbol)});
@@ -2933,7 +3007,7 @@ public partial class polymarket : PredictionExchange
             { "info", eventVar },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
-            { "symbol", symbol },
+            { "outcome", symbol },
             { "outcomeId", this.safeString(market, "outcomeId") },
             { "label", this.safeString(market, "label") },
             { "market", this.safeString(market, "market") },
@@ -2974,7 +3048,6 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object outcomeObj = this.outcome(outcome);
         object tokenId = this.safeString(outcomeObj, "outcomeId");
         symbol = this.safeString(outcomeObj, "outcome");
@@ -3003,7 +3076,6 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object outcomeObj = this.outcome(outcome);
         object tokenId = this.safeString(outcomeObj, "outcomeId");
         symbol = this.safeString(outcomeObj, "outcome");
@@ -3030,7 +3102,6 @@ public partial class polymarket : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object outcomeObj = this.outcome(outcome);
         object tokenId = this.safeString(outcomeObj, "outcomeId");
         symbol = this.safeString(outcomeObj, "outcome");
@@ -3086,7 +3157,7 @@ public partial class polymarket : PredictionExchange
         }
         object market = this.safeOutcome(symbol);
         return this.safePredictionTicker(new Dictionary<string, object>() {
-            { "symbol", symbol },
+            { "outcome", symbol },
             { "outcomeId", this.safeString(market, "outcomeId") },
             { "label", this.safeString(market, "label") },
             { "market", this.safeString(market, "market") },
@@ -3126,7 +3197,6 @@ public partial class polymarket : PredictionExchange
     public async override Task<object> watchOrders(object symbol = null, object since = null, object limit = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
         await this.loadApiCredentials();
         object messageHash = "orders";
         if (isTrue(!isEqual(symbol, null)))
@@ -3157,7 +3227,6 @@ public partial class polymarket : PredictionExchange
     public async override Task<object> watchMyTrades(object symbol = null, object since = null, object limit = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
         await this.loadApiCredentials();
         object messageHash = "myTrades";
         if (isTrue(!isEqual(symbol, null)))

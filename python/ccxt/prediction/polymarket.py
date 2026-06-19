@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 import math
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheByOutcomeById
-from ccxt.base.types import Any, Balances, Int, Market, Num, OrderBook, OrderRequest, Str, Strings, OpenInterest, TradingFeeInterface, PredictionEvent, PredictionTicker, PredictionTickers, PredictionOrder, PredictionTrade, PredictionPosition
+from ccxt.base.types import Any, Balances, Int, Market, Num, OrderRequest, Str, Strings, PredictionEvent, PredictionTicker, PredictionTickers, PredictionOrder, PredictionTrade, PredictionPosition
 from typing import List
 from ccxt.base.errors import AuthenticationError
 from ccxt.base.errors import ArgumentsRequired
@@ -346,12 +346,27 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict[]: an array of raw gamma event objects
         """
         pageSize = self.safe_integer(params, 'limit', 50)
-        rest = self.omit(params, ['limit'])
+        # map the unified sort/status onto the gamma search params
+        sort = self.safe_string(params, 'sort')
+        sortParam = 'volume'
+        if sort == 'liquidity':
+            sortParam = 'liquidity'
+        elif sort == 'newest':
+            sortParam = 'startDate'
+        status = self.safe_string(params, 'status', 'active')
+        eventsStatus = 'active'
+        if (status == 'closed') or (status == 'inactive'):
+            eventsStatus = 'closed'
+        elif status == 'all':
+            eventsStatus = None
+        rest = self.omit(params, ['limit', 'sort', 'status', 'searchIn', 'eventId', 'slug', 'query', 'queries'])
         seen: dict = {}
         rawEvents: List[Any] = []
         for qi in range(0, len(queries)):
             q = queries[qi]
-            baseRequest: dict = {'q': q, 'limit_per_type': pageSize, 'events_status': 'active'}
+            baseRequest: dict = {'q': q, 'limit_per_type': pageSize, 'sort': sortParam, 'ascending': False}
+            if eventsStatus is not None:
+                baseRequest['events_status'] = eventsStatus
             firstRequest: dict = {'page': 1}
             firstRequest = self.extend(self.extend(firstRequest, baseRequest), rest)
             first = await self.gammaPublicGetPublicSearch(firstRequest)
@@ -402,13 +417,23 @@ class polymarket(PredictionExchange, ImplicitAPI):
         limit = self.safe_integer(params, 'limit', self.safe_integer(self.options, 'fetchMarketsLimit', 1000))
         maxPages = int(math.ceil(limit / pageSize))
         status = self.safe_string(params, 'status', self.safe_string(self.options, 'defaultEventStatus', 'active'))
-        rest = self.omit(params, ['status', 'limit'])
-        baseRequest: dict = {'limit': pageSize, 'order': 'volume24hr', 'ascending': False}
+        # sort maps to the gamma `order` field; 'volume' is the default ranking
+        sort = self.safe_string(params, 'sort')
+        order = 'volume'
+        if sort == 'liquidity':
+            order = 'liquidity'
+        elif sort == 'newest':
+            order = 'startDate'
+        rest = self.omit(params, ['status', 'limit', 'sort', 'searchIn', 'eventId', 'slug', 'query', 'queries'])
+        baseRequest: dict = {'limit': pageSize, 'order': order, 'ascending': False}
         baseRequest = self.extend(baseRequest, rest)
         if status == 'active':
             baseRequest['active'] = True
-        elif status == 'closed':
+            baseRequest['closed'] = False
+        elif (status == 'closed') or (status == 'inactive'):
+            baseRequest['active'] = False
             baseRequest['closed'] = True
+        # 'all' — no active/closed filter
         # fetch page 1 first; if full, fire remaining pages in parallel
         firstPageRequest: dict = {'offset': 0}
         firstPageRequest = self.extend(firstPageRequest, baseRequest)
@@ -654,7 +679,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict: a [ticker structure](https://docs.ccxt.com/#/?id=ticker-structure)
         """
         outcome = symbol
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         tokenId = outcomeObj['outcomeId']
         promises = [
@@ -714,9 +739,9 @@ class polymarket(PredictionExchange, ImplicitAPI):
             outcomesLength = len(outcomes)
         if outcomesLength > 0:
             for i in range(0, len(outcomes)):
-                self.checkEventsAndMarkets(outcomes[i])
+                self.checkEvents(outcomes[i])
         else:
-            self.checkEventsAndMarkets()
+            self.checkEvents()
         outcomesMap = self.outcomes if (self.outcomes is not None) else {}
         targets: List[Any] = []
         if outcomes is not None:
@@ -822,7 +847,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         if market is not None:
             quoteVolume = self.safe_number_2(market['info'], 'volume24hr', 'volume')
         return self.safePredictionTicker({
-            'symbol': symbol,
+            'outcome': symbol,
             'outcomeId': self.safe_string(market, 'outcomeId'),
             'label': self.safe_string(market, 'label'),
             'market': self.safe_string(market, 'market'),
@@ -847,7 +872,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'info': ticker,
         }, market)
 
-    async def fetch_order_book(self, symbol: str, limit: Int = None, params={}) -> OrderBook:
+    async def fetch_order_book(self, symbol: str, limit: Int = None, params={}) -> PredictionOrderBook:
         """
         fetches the CLOB order book for a single outcome token
 
@@ -859,7 +884,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict: an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure)
         """
         outcome = symbol
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         tokenId = outcomeObj['outcomeId']
         request: dict = {
@@ -907,7 +932,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns int[][]: a list of candles ordered, open, high, low, close, volume
         """
         outcome = symbol
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         tokenId = outcomeObj['outcomeId']
         fidelityMin = self.safe_integer(self.timeframes, timeframe, 1)  # fidelity in minutes
@@ -1022,7 +1047,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'info': response,
         }
 
-    async def fetch_open_interest(self, symbol: str, params={}) -> OpenInterest:
+    async def fetch_open_interest(self, symbol: str, params={}) -> PredictionOpenInterest:
         """
         fetches the open interest of a prediction market outcome
 
@@ -1033,7 +1058,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict: an [open interest structure](https://docs.ccxt.com/#/?id=open-interest-structure)
         """
         outcome = symbol
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         outcomeInfo = self.safe_dict(outcomeObj, 'info', {})
         conditionId = self.safe_string(outcomeInfo, 'conditionId')
@@ -1047,12 +1072,12 @@ class polymarket(PredictionExchange, ImplicitAPI):
         first = self.safe_dict(response, 0, {})
         return self.parse_open_interest(first, outcomeObj)
 
-    def parse_open_interest(self, interest, market: Market = None) -> OpenInterest:
+    def parse_open_interest(self, interest, market: Market = None) -> PredictionOpenInterest:
         #
         #     {"market": "0x7976b8...92", "value": 4925662.470476}
         #
         timestamp = self.milliseconds()
-        return self.safe_open_interest({
+        openInterest = self.safe_open_interest({
             'symbol': self.safeOutcomeSymbol(None, market),
             'openInterestAmount': None,
             'openInterestValue': self.safe_number(interest, 'value'),
@@ -1062,8 +1087,12 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'datetime': self.iso8601(timestamp),
             'info': interest,
         }, market)
+        openInterest['outcome'] = self.safeOutcomeSymbol(None, market)
+        openInterest['outcomeId'] = self.safe_string(market, 'outcomeId')
+        del openInterest['symbol']
+        return openInterest
 
-    async def fetch_trading_fee(self, symbol: str, params={}) -> TradingFeeInterface:
+    async def fetch_trading_fee(self, symbol: str, params={}) -> PredictionTradingFee:
         """
         fetches the base fee rate for a prediction market outcome token
 
@@ -1074,7 +1103,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict: a [fee structure](https://docs.ccxt.com/#/?id=fee-structure)
         """
         outcome = symbol
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         tokenId = self.safe_string(outcomeObj, 'outcomeId')
         request: dict = {'token_id': tokenId}
@@ -1086,7 +1115,8 @@ class polymarket(PredictionExchange, ImplicitAPI):
         rate = self.parse_number(Precise.string_div(baseFeeBps, '10000')) if (baseFeeBps is not None) else None
         return {
             'info': response,
-            'symbol': self.safeOutcomeSymbol(None, outcomeObj),
+            'outcome': self.safeOutcomeSymbol(None, outcomeObj),
+            'outcomeId': self.safe_string(outcomeObj, 'outcomeId'),
             'maker': rate,
             'taker': rate,
             'percentage': True,
@@ -1106,7 +1136,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [trade structures](https://docs.ccxt.com/#/?id=public-trades)
         """
         outcome = symbol
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         tokenId = outcomeObj['outcomeId']
         outcomeInfo = self.safe_dict(outcomeObj, 'info', {})
@@ -1147,7 +1177,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         request: dict = {}
         outcomeObj: Any = None
         if symbol is not None:
-            self.checkEventsAndMarkets(symbol)
+            self.checkEvents(symbol)
             outcomeObj = self.outcome(symbol)
             request['asset_id'] = outcomeObj['outcomeId']
         response = await self.clobPrivateGetDataTrades(self.extend(request, params))
@@ -1218,7 +1248,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'info': trade,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'symbol': symbol,
             'outcome': symbol,
             'outcomeId': assetId,
             'label': self.safe_string(mkt, 'label'),
@@ -1290,9 +1319,9 @@ class polymarket(PredictionExchange, ImplicitAPI):
             outcomesLength = len(outcomes)
         if outcomesLength > 0:
             for i in range(0, len(outcomes)):
-                self.checkEventsAndMarkets(outcomes[i])
+                self.checkEvents(outcomes[i])
         else:
-            self.checkEventsAndMarkets()
+            self.checkEvents()
         if self.walletAddress is None:
             raise ArgumentsRequired(self.id + ' walletAddress is required to fetchPositions')
         request = {
@@ -1349,7 +1378,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             notional = size * curPrice
         return self.safePredictionPosition({
             'id': self.safe_string(position, 'id'),
-            'symbol': marketData['outcome'],
+            'outcome': marketData['outcome'],
             'outcomeId': marketData['outcomeId'],
             'market': marketData['market'],
             'label': marketData['label'],
@@ -1394,9 +1423,9 @@ class polymarket(PredictionExchange, ImplicitAPI):
         await self.load_api_credentials()
         outcome = symbol
         if outcome is not None:
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
         else:
-            self.checkEventsAndMarkets()
+            self.checkEvents()
         request: dict = {}
         outcomeObj: Any = None
         if outcome is not None:
@@ -1420,9 +1449,9 @@ class polymarket(PredictionExchange, ImplicitAPI):
         await self.load_api_credentials()
         outcome = symbol
         if outcome is not None:
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
         else:
-            self.checkEventsAndMarkets()
+            self.checkEvents()
         request: dict = {'id': id}
         response = await self.clobPrivateGetDataOrderId(self.extend(request, params))
         return self.parse_order(response)
@@ -1463,7 +1492,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'datetime': self.iso8601(ts),
             'lastTradeTimestamp': None,
             'status': status,
-            'symbol': mkt['outcome'],
+            'outcome': mkt['outcome'],
             'outcomeId': self.safe_string(mkt, 'outcomeId'),
             'label': self.safe_string(mkt, 'label'),
             'market': self.safe_string(mkt, 'market'),
@@ -1847,7 +1876,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         response = None
         if outcome is not None:
             # scope to a single outcome token via DELETE /cancel-market-orders {asset_id}
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
             outcomeObj = self.outcome(outcome)
             request: dict = {'asset_id': outcomeObj['outcomeId']}
             response = await self.clobPrivateDeleteCancelMarketOrders(self.extend(request, params))
@@ -1860,7 +1889,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             orders.append(self.safePredictionOrder({'id': self.safe_string(canceled, i), 'status': 'canceled', 'info': response}))
         return orders
 
-    async def fetch_events(self, params={}) -> List[PredictionEvent]:
+    async def fetch_events(self, params: fetchEventsParams = {}) -> List[PredictionEvent]:
         """
         fetches prediction-market events matching the given search terms(or all active events when omitted) and caches their markets and outcomes on the instance
 
@@ -1868,16 +1897,32 @@ class polymarket(PredictionExchange, ImplicitAPI):
         https://docs.polymarket.com/api-reference/events/list-events
 
         :param dict [params]: extra exchange-specific parameters
-        :param str [params.query]: a single search term; when omitted(and no queries) the most active events are returned(capped)
+        :param str [params.query]: a single keyword search term
         :param str[] [params.queries]: multiple search terms(alternative to query)
-        :param int [params.limit]: when searching, page size per query(default 50); when omitted, max events to fetch(default options.fetchMarketsLimit, 1000), ordered by 24h volume
+        :param int [params.limit]: max number of events to return
+        :param str [params.sort]: 'volume'(default), 'liquidity' or 'newest' — mapped to the gamma order field
+        :param str [params.status]: 'active'(default), 'inactive', 'closed' or 'all'('inactive' and 'closed' are interchangeable)
+        :param str [params.searchIn]: when searching, restrict the match to 'title'(default), 'description' or 'both'
+        :param str [params.eventId]: direct lookup by event id(short-circuits the listing/search)
+        :param str [params.slug]: direct lookup by event slug
         :returns dict[]: an array of event structures
         """
+        requestedEventId = self.safe_string(params, 'eventId')
+        requestedSlug = self.safe_string(params, 'slug')
         queries = self.parseSearchQueries(params)
-        rest = self.omit(params, ['query', 'queries'])
+        rest = self.omit(params, ['query', 'queries', 'eventId', 'slug'])
         queriesLength = len(queries)
         rawEvents: List[Any] = []
-        if queriesLength > 0:
+        if (requestedEventId is not None) or (requestedSlug is not None):
+            # direct lookup by event id or slug via the events endpoint(returns a list)
+            lookup: dict = {}
+            if requestedEventId is not None:
+                lookup['id'] = requestedEventId
+            else:
+                lookup['slug'] = requestedSlug
+            response = await self.gammaPublicGetEvents(lookup)
+            rawEvents = response if (response is not None) else []
+        elif queriesLength > 0:
             rawEvents = await self.fetch_raw_events_by_search(queries, rest)
         else:
             rawEvents = await self.fetch_raw_events_list(rest)
@@ -1921,13 +1966,22 @@ class polymarket(PredictionExchange, ImplicitAPI):
             outcomesList = self.safe_list(market, 'outcomes', [])
             for j in range(0, len(outcomesList)):
                 oc = outcomesList[j]
-                ocSymbol = self.safe_string(oc, 'symbol')
+                ocSymbol = self.safe_string(oc, 'outcome')
                 if ocSymbol is not None:
                     self.outcomes[ocSymbol] = oc
-                ocId = self.safe_string(oc, 'id')
+                ocId = self.safe_string(oc, 'outcomeId')
                 if ocId is not None:
                     self.outcomes_by_id[ocId] = oc
-        return result
+        # the gamma search endpoint is fuzzy, so refine the search path by status and searchIn
+        # client-side(searchIn defaults to 'title', matching the reference behaviour)
+        filtered = result
+        if queriesLength > 0:
+            filtered = self.filterEventsByStatus(filtered, self.safe_string(params, 'status', 'active'))
+            filtered = self.filterEventsBySearchIn(filtered, queries, self.safe_string(params, 'searchIn', 'title'))
+        finalLimit = self.safe_integer(params, 'limit')
+        if finalLimit is not None:
+            filtered = self.array_slice(filtered, 0, finalLimit)
+        return filtered
 
     async def fetch_event(self, id: str, params={}) -> PredictionEvent:
         """
@@ -2315,7 +2369,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'asks': asks,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'symbol': symbol,
+            'outcome': symbol,
         })
         client.resolve(orderbook, 'orderbook::' + symbol)
         client.resolve(orderbook, 'ticker::' + symbol)
@@ -2362,7 +2416,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             'info': event,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'symbol': symbol,
+            'outcome': symbol,
             'outcomeId': self.safe_string(market, 'outcomeId'),
             'label': self.safe_string(market, 'label'),
             'market': self.safe_string(market, 'market'),
@@ -2385,7 +2439,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         stored.append(trade)
         client.resolve(stored, 'trades::' + symbol)
 
-    async def watch_order_book(self, symbol: Str, limit: Int = None, params={}) -> OrderBook:
+    async def watch_order_book(self, symbol: Str, limit: Int = None, params={}) -> PredictionOrderBook:
         """
         streams live order-book updates for a single Polymarket outcome token
         :param str symbol: unified outcome symbol(e.g. "ELECTION/YES:USDC")
@@ -2394,7 +2448,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict: an `order book structure <https://docs.ccxt.com/#/?id=order-book-structure>`
         """
         outcome = symbol
-        await self.load_markets()
         outcomeObj = self.outcome(outcome)
         tokenId = self.safe_string(outcomeObj, 'outcomeId')
         symbol = self.safe_string(outcomeObj, 'outcome')
@@ -2415,7 +2468,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of `trade structures <https://docs.ccxt.com/#/?id=public-trades>`
         """
         outcome = symbol
-        await self.load_markets()
         outcomeObj = self.outcome(outcome)
         tokenId = self.safe_string(outcomeObj, 'outcomeId')
         symbol = self.safe_string(outcomeObj, 'outcome')
@@ -2434,7 +2486,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :returns dict: a `ticker structure <https://docs.ccxt.com/#/?id=ticker-structure>`
         """
         outcome = symbol
-        await self.load_markets()
         outcomeObj = self.outcome(outcome)
         tokenId = self.safe_string(outcomeObj, 'outcomeId')
         symbol = self.safe_string(outcomeObj, 'outcome')
@@ -2473,7 +2524,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             mid = bestAsk
         market = self.safeOutcome(symbol)
         return self.safePredictionTicker({
-            'symbol': symbol,
+            'outcome': symbol,
             'outcomeId': self.safe_string(market, 'outcomeId'),
             'label': self.safe_string(market, 'label'),
             'market': self.safe_string(market, 'market'),
@@ -2510,7 +2561,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
         """
-        await self.load_markets()
         await self.load_api_credentials()
         messageHash = 'orders'
         if symbol is not None:
@@ -2534,7 +2584,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [trade structures](https://docs.ccxt.com/#/?id=trade-structure)
         """
-        await self.load_markets()
         await self.load_api_credentials()
         messageHash = 'myTrades'
         if symbol is not None:
