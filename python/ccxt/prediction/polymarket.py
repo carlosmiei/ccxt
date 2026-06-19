@@ -1125,7 +1125,11 @@ class polymarket(PredictionExchange, ImplicitAPI):
             tradeAsset = self.safe_string(trade, 'asset')
             if tradeAsset == tokenId:
                 filteredTrades.append(trade)
-        return self.parse_trades(filteredTrades, outcomeObj, since, limit)
+        # the trades are already narrowed to self outcome by asset id above; pass no market so the
+        # base parseTrades doesn't apply its symbol filter(prediction trades carry `outcome`, not
+        # `symbol`, so a symbol-bearing outcome object would drop them all). parseTrade resolves the
+        # outcome from each trade's asset id.
+        return self.parse_trades(filteredTrades, None, since, limit)
 
     async def fetch_my_trades(self, symbol: Str = None, since: Int = None, limit: Int = None, params={}) -> List[PredictionTrade]:
         """

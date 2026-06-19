@@ -1236,7 +1236,11 @@ export default class polymarket extends Exchange {
                 filteredTrades.push (trade);
             }
         }
-        return this.parseTrades (filteredTrades, outcomeObj, since, limit) as PredictionTrade[];
+        // the trades are already narrowed to this outcome by asset id above; pass no market so the
+        // base parseTrades doesn't apply its symbol filter (prediction trades carry `outcome`, not
+        // `symbol`, so a symbol-bearing outcome object would drop them all). parseTrade resolves the
+        // outcome from each trade's asset id.
+        return this.parseTrades (filteredTrades, undefined, since, limit) as PredictionTrade[];
     }
 
     /**

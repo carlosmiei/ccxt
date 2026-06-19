@@ -1221,7 +1221,11 @@ class polymarket extends Exchange {
                     $filteredTrades[] = $trade;
                 }
             }
-            return $this->parse_trades($filteredTrades, $outcomeObj, $since, $limit);
+            // the trades are already narrowed to this $outcome by asset id above; pass no market so the
+            // base parseTrades doesn't apply its $symbol filter (prediction trades carry `$outcome`, not
+            // `$symbol`, so a $symbol-bearing $outcome object would drop them all). parseTrade resolves the
+            // $outcome from each trade's asset id.
+            return $this->parse_trades($filteredTrades, null, $since, $limit);
         }) ();
     }
 
