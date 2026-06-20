@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 import math
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheByOutcomeById
-from ccxt.base.types import Any, Balances, Int, Market, Num, OrderRequest, Str, Strings, PredictionEvent, PredictionTicker, PredictionTickers, PredictionOrder, PredictionTrade, PredictionPosition
+from ccxt.base.types import Any, Balances, Int, Market, Num, OrderRequest, Str, Strings, PredictionEvent, fetchEventsParams, PredictionTicker, PredictionTickers, PredictionOrder, PredictionOrderBook, PredictionTrade, PredictionPosition, PredictionTradingFee, PredictionOpenInterest
 from typing import List
 from ccxt.base.errors import AuthenticationError
 from ccxt.base.errors import ArgumentsRequired
@@ -913,10 +913,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         #
         timestamp = self.safe_integer(response, 'timestamp')
         orderbook = self.parse_order_book(response, self.safeOutcomeSymbol(outcome, outcomeObj), timestamp, 'bids', 'asks', 'price', 'size')
-        orderbook['outcome'] = self.safe_string(outcomeObj, 'outcome')
-        orderbook['outcomeId'] = self.safe_string(outcomeObj, 'outcomeId')
-        orderbook['market'] = self.safe_string(outcomeObj, 'market')
-        return orderbook
+        return self.safePredictionOrderBook(orderbook, outcomeObj)
 
     async def fetch_ohlcv(self, symbol: str, timeframe='1m', since: Int = None, limit: Int = None, params={}) -> List[list]:
         """

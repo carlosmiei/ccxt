@@ -1054,10 +1054,7 @@ public partial class polymarket : PredictionExchange
         //
         object timestamp = this.safeInteger(response, "timestamp");
         object orderbook = this.parseOrderBook(response, this.safeOutcomeSymbol(outcome, outcomeObj), timestamp, "bids", "asks", "price", "size");
-        ((IDictionary<string,object>)orderbook)["outcome"] = this.safeString(outcomeObj, "outcome");
-        ((IDictionary<string,object>)orderbook)["outcomeId"] = this.safeString(outcomeObj, "outcomeId");
-        ((IDictionary<string,object>)orderbook)["market"] = this.safeString(outcomeObj, "market");
-        return orderbook;
+        return this.safePredictionOrderBook(orderbook, outcomeObj);
     }
 
     /**

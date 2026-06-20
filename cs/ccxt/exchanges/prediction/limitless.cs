@@ -748,6 +748,8 @@ public partial class limitless : PredictionExchange
         object title = this.safeString(eventVar, "title", groupId);
         object markets = new List<object>() {};
         object rawMarkets = this.safeList(eventVar, "markets", new List<object>() {});
+        // aggregate 24h volume across the markets so sort by volume works
+        object totalVolume = 0;
         for (object i = 0; isLessThan(i, getArrayLength(rawMarkets)); postFixIncrement(ref i))
         {
             object rawMarket = getValue(rawMarkets, i);
@@ -760,6 +762,8 @@ public partial class limitless : PredictionExchange
             {
                 ((IList<object>)markets).Add(this.parseMarket(rawMarket));
             }
+            object marketInfo = this.safeDict(rawMarket, "info", rawMarket);
+            totalVolume = this.sum(totalVolume, this.safeNumber2(marketInfo, "volume24h", "volume", 0));
         }
         return ((object)this.extend(new Dictionary<string, object>() {
             { "id", groupId },
@@ -768,6 +772,8 @@ public partial class limitless : PredictionExchange
             { "title", title },
             { "description", this.safeString(eventVar, "description") },
             { "markets", markets },
+            { "volume", totalVolume },
+            { "liquidity", this.safeNumber(eventVar, "liquidity") },
             { "url", this.safeString(eventVar, "url") },
             { "image", this.safeString(eventVar, "imageUrl", this.safeString(eventVar, "image")) },
             { "active", this.safeBool(eventVar, "active", true) },
@@ -798,8 +804,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object slug = this.safeString(getValue(outcomeObj, "info"), "slug");
         object request = new Dictionary<string, object>() {
@@ -1039,7 +1044,7 @@ public partial class limitless : PredictionExchange
         object now = this.milliseconds();
         object outcomeSymbol = this.safeOutcomeSymbol(null, market);
         return this.safePredictionTicker(new Dictionary<string, object>() {
-            { "symbol", outcomeSymbol },
+            { "outcome", outcomeSymbol },
             { "outcomeId", this.safeString(market, "outcomeId") },
             { "label", this.safeString(market, "label") },
             { "market", this.safeString(market, "market") },
@@ -1078,7 +1083,6 @@ public partial class limitless : PredictionExchange
     public async override Task<object> fetchTickers(object symbols = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
         object result = new Dictionary<string, object>() {};
         if (isTrue(isEqual(symbols, null)))
         {
@@ -1106,7 +1110,7 @@ public partial class limitless : PredictionExchange
         object slugs = new List<object>() {};
         for (object i = 0; isLessThan(i, getArrayLength(symbols)); postFixIncrement(ref i))
         {
-            this.checkEventsAndMarkets(getValue(symbols, i));
+            this.checkEvents(getValue(symbols, i));
             object outcomeObj = this.outcome(getValue(symbols, i));
             object slug = this.safeString(getValue(outcomeObj, "info"), "slug");
             if (!isTrue((inOp(outcomesBySlug, slug))))
@@ -1169,8 +1173,7 @@ public partial class limitless : PredictionExchange
     public async override Task<object> fetchTrades(object symbol, object since = null, object limit = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(symbol);
+        this.checkEvents(symbol);
         object outcomeObj = this.outcome(symbol);
         object slug = this.safeString(getValue(outcomeObj, "info"), "slug");
         object tokenId = this.safeString(outcomeObj, "outcomeId");
@@ -1235,8 +1238,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object slug = this.safeString(getValue(outcomeObj, "info"), "slug");
         object request = new Dictionary<string, object>() {
@@ -1304,14 +1306,15 @@ public partial class limitless : PredictionExchange
             }
             ((IList<object>)asks).Add(new List<object> {this.parseNumber(priceStr), this.parseNumber(sizeStr)});
         }
-        return new Dictionary<string, object>() {
-            { "symbol", this.safeOutcomeSymbol(outcome, outcomeObj) },
+        object orderbook = new Dictionary<string, object>() {
+            { "outcome", this.safeOutcomeSymbol(outcome, outcomeObj) },
             { "bids", this.sortBy(bids, 0, true) },
             { "asks", this.sortBy(asks, 0) },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
             { "nonce", null },
         };
+        return this.safePredictionOrderBook(orderbook, outcomeObj);
     }
 
     /**
@@ -1330,8 +1333,7 @@ public partial class limitless : PredictionExchange
     {
         timeframe ??= "1d";
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(symbol);
+        this.checkEvents(symbol);
         object outcomeObj = this.outcome(symbol);
         object slug = this.safeString(getValue(outcomeObj, "info"), "slug");
         object outcomeLabel = this.safeStringUpper(getValue(outcomeObj, "info"), "outcomeLabel");
@@ -1466,8 +1468,7 @@ public partial class limitless : PredictionExchange
         {
             throw new ArgumentsRequired ((string)add(this.id, " fetchOrders requires an outcome argument")) ;
         }
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object info = this.safeDict(outcomeObj, "info");
         object request = new Dictionary<string, object>() {
@@ -1523,8 +1524,7 @@ public partial class limitless : PredictionExchange
         {
             throw new ArgumentsRequired ((string)add(this.id, " fetchOpenOrders requires an outcome argument")) ;
         }
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         parameters = this.extend(parameters, new Dictionary<string, object>() {
             { "statuses", new List<object>() {"LIVE"} },
         });
@@ -1550,8 +1550,7 @@ public partial class limitless : PredictionExchange
         {
             throw new ArgumentsRequired ((string)add(this.id, " fetchClosedOrders requires an outcome argument")) ;
         }
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         parameters = this.extend(parameters, new Dictionary<string, object>() {
             { "statuses", new List<object>() {"MATCHED"} },
         });
@@ -1572,8 +1571,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object length = getArrayLength(ids);
         if (isTrue(isGreaterThan(length, 50)))
         {
@@ -1716,8 +1714,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object orders = await this.fetchOrdersByIds(new List<object>() {id}, outcome, parameters);
         object order = this.safeDict(orders, 0);
         if (isTrue(isEqual(order, null)))
@@ -1907,7 +1904,6 @@ public partial class limitless : PredictionExchange
             { "datetime", datetime },
             { "lastTradeTimestamp", null },
             { "status", this.parseOrderStatus(rawStatus) },
-            { "symbol", outcomeSymbol },
             { "outcome", outcomeSymbol },
             { "outcomeId", this.safeString(mkt, "outcomeId") },
             { "label", this.safeString(mkt, "label") },
@@ -2021,7 +2017,6 @@ public partial class limitless : PredictionExchange
     public async override Task<object> fetchAccounts(object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
         object response = await this.limitlessPrivateGetProfilesMe(parameters);
         object responseList = new List<object>() {response};
         return this.parseAccounts(responseList);
@@ -2044,9 +2039,8 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object accounts = await this.loadAccounts();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object account = this.safeDict(accounts, 0);
         object accountInfo = this.safeDict(account, "info");
@@ -2305,8 +2299,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object request = new Dictionary<string, object>() {
             { "order_id", id },
         };
@@ -2328,8 +2321,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object request = new Dictionary<string, object>() {
             { "orderIds", ids },
         };
@@ -2360,8 +2352,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         if (isTrue(!isEqual(outcome, null)))
         {
             object warn = true;
@@ -2409,8 +2400,7 @@ public partial class limitless : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object paginate = false;
         object maxLimit = 100;
         var paginateparametersVariable = this.handleOptionAndParams(parameters, "fetchMyTrades", "paginate", paginate);
@@ -2549,7 +2539,6 @@ public partial class limitless : PredictionExchange
                 { "info", trade },
                 { "timestamp", ts },
                 { "datetime", this.iso8601(ts) },
-                { "symbol", feedOutcome },
                 { "outcome", feedOutcome },
                 { "outcomeId", this.safeString(market, "outcomeId") },
                 { "label", this.safeString(market, "label") },
@@ -2625,7 +2614,6 @@ public partial class limitless : PredictionExchange
             { "info", trade },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
-            { "symbol", tradeOutcome },
             { "outcome", tradeOutcome },
             { "outcomeId", this.safeString(trade, "asset") },
             { "label", this.safeString(outcome, "label") },
@@ -2678,11 +2666,11 @@ public partial class limitless : PredictionExchange
         {
             for (object i = 0; isLessThan(i, getArrayLength(symbols)); postFixIncrement(ref i))
             {
-                this.checkEventsAndMarkets(getValue(symbols, i));
+                this.checkEvents(getValue(symbols, i));
             }
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object response = await this.limitlessPrivateGetPortfolioPositions(parameters);
         //
@@ -2842,7 +2830,6 @@ public partial class limitless : PredictionExchange
         object entryPrice = this.applyScale(this.safeString(position, "fillPrice"));
         return new Dictionary<string, object>() {
             { "id", null },
-            { "symbol", outcomeSymbol },
             { "outcome", outcomeSymbol },
             { "outcomeId", this.safeString(market, "outcomeId") },
             { "label", this.safeString(market, "label") },
@@ -2892,12 +2879,11 @@ public partial class limitless : PredictionExchange
         object queriesLength = getArrayLength(queries);
         if (isTrue(!isTrue(queries) || isTrue(isEqual(queriesLength, 0))))
         {
-            await this.loadMarkets();
             result = (IList<object>)(new List<object>(((IDictionary<string,object>)this.events).Values));
         } else
         {
             object limit = this.safeInteger(parameters, "limit", 50);
-            object rest = this.omit(parameters, new List<object>() {"query", "queries", "limit"});
+            object rest = this.omit(parameters, new List<object>() {"query", "queries", "limit", "sort", "searchIn", "eventId", "slug", "status"});
             object seen = new Dictionary<string, object>() {};
             object rawMarkets = new List<object>() {};
             for (object i = 0; isLessThan(i, getArrayLength(queries)); postFixIncrement(ref i))
@@ -2962,7 +2948,7 @@ public partial class limitless : PredictionExchange
             }
         }
         this.rebuildOutcomes();
-        return result;
+        return this.applyEventFetchParams(result, parameters, queries);
     }
 
     /**
@@ -2985,12 +2971,12 @@ public partial class limitless : PredictionExchange
             for (object j = 0; isLessThan(j, getArrayLength(outcomesList)); postFixIncrement(ref j))
             {
                 object oc = getValue(outcomesList, j);
-                object ocSymbol = this.safeString(oc, "symbol");
+                object ocSymbol = this.safeString(oc, "outcome");
                 if (isTrue(!isEqual(ocSymbol, null)))
                 {
                     ((IDictionary<string,object>)this.outcomes)[(string)ocSymbol] = oc;
                 }
-                object ocId = this.safeString(oc, "id");
+                object ocId = this.safeString(oc, "outcomeId");
                 if (isTrue(!isEqual(ocId, null)))
                 {
                     ((IDictionary<string,object>)this.outcomes_by_id)[(string)ocId] = oc;

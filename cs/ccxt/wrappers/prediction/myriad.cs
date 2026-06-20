@@ -672,10 +672,10 @@ public partial class myriad
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> a [fee structure](https://docs.ccxt.com/#/?id=fee-structure).</returns>
-    public async Task<TradingFeeInterface> FetchTradingFee(string symbol, Dictionary<string, object> parameters = null)
+    public async Task<PredictionTradingFee> FetchTradingFee(string symbol, Dictionary<string, object> parameters = null)
     {
         var res = await this.fetchTradingFee(symbol, parameters);
-        return new TradingFeeInterface(res);
+        return new PredictionTradingFee(res);
     }
     /// <summary>
     /// fetches the real order book for order-book markets, or synthesizes a one-level book from the AMM price otherwise
@@ -698,11 +698,11 @@ public partial class myriad
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure).</returns>
-    public async Task<OrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
+    public async Task<PredictionOrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
     {
         var limit = limit2 == 0 ? null : (object)limit2;
         var res = await this.fetchOrderBook(symbol, limit, parameters);
-        return new OrderBook(res);
+        return new PredictionOrderBook(res);
     }
     /// <summary>
     /// fetches price history for an outcome from the price_charts bucket embedded in the market response
@@ -825,7 +825,7 @@ public partial class myriad
     /// </list>
     /// </remarks>
     /// <returns> <term>object[]</term> an array of event structures.</returns>
-    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters = null)
+    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters)
     {
         var res = await this.fetchEvents(parameters);
         return ((IList<object>)res).Select(item => (item as Dictionary<string, object>)).ToList();

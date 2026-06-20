@@ -8,7 +8,7 @@ from ccxt.abstract.prediction.limitless import ImplicitAPI
 import asyncio
 import hashlib
 import math
-from ccxt.base.types import Account, Any, Bool, Int, Market, Num, OrderBook, Str, Strings, PredictionEvent, PredictionTicker, PredictionTickers, PredictionOrder, PredictionTrade, PredictionPosition
+from ccxt.base.types import Account, Any, Bool, Int, Market, Num, Str, Strings, PredictionEvent, fetchEventsParams, PredictionTicker, PredictionTickers, PredictionOrder, PredictionOrderBook, PredictionTrade, PredictionPosition
 from typing import List
 from ccxt.base.errors import ArgumentsRequired
 from ccxt.base.errors import BadRequest
@@ -692,6 +692,8 @@ class limitless(PredictionExchange, ImplicitAPI):
         title = self.safe_string(event, 'title', groupId)
         markets = []
         rawMarkets = self.safe_list(event, 'markets', [])
+        # aggregate 24h volume across the markets so sort by volume works
+        totalVolume = 0
         for i in range(0, len(rawMarkets)):
             rawMarket = rawMarkets[i]
             marketSymbol = self.safe_string(rawMarket, 'symbol')
@@ -700,6 +702,8 @@ class limitless(PredictionExchange, ImplicitAPI):
                 markets.append(rawMarket)
             else:
                 markets.append(self.parse_market(rawMarket))
+            marketInfo = self.safe_dict(rawMarket, 'info', rawMarket)
+            totalVolume = self.sum(totalVolume, self.safe_number_2(marketInfo, 'volume24h', 'volume', 0))
         return self.extend({
             'id': groupId,
             'slug': groupId,
@@ -707,6 +711,8 @@ class limitless(PredictionExchange, ImplicitAPI):
             'title': title,
             'description': self.safe_string(event, 'description'),
             'markets': markets,
+            'volume': totalVolume,
+            'liquidity': self.safe_number(event, 'liquidity'),
             'url': self.safe_string(event, 'url'),
             'image': self.safe_string(event, 'imageUrl', self.safe_string(event, 'image')),
             'active': self.safe_bool(event, 'active', True),
@@ -734,8 +740,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict: a [ticker structure](https://docs.ccxt.com/#/?id=ticker-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         slug = self.safe_string(outcomeObj['info'], 'slug')
         request: dict = {
@@ -946,7 +951,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         now = self.milliseconds()
         outcomeSymbol = self.safeOutcomeSymbol(None, market)
         return self.safePredictionTicker({
-            'symbol': outcomeSymbol,
+            'outcome': outcomeSymbol,
             'outcomeId': self.safe_string(market, 'outcomeId'),
             'label': self.safe_string(market, 'label'),
             'market': self.safe_string(market, 'market'),
@@ -982,7 +987,6 @@ class limitless(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol
         """
-        await self.load_markets()
         result: PredictionTickers = {}
         if symbols is None:
             # parse tickers for every loaded outcome from the cached listing data, without the per-market order books
@@ -1001,7 +1005,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         outcomesBySlug: dict = {}
         slugs: List[Any] = []
         for i in range(0, len(symbols)):
-            self.checkEventsAndMarkets(symbols[i])
+            self.checkEvents(symbols[i])
             outcomeObj = self.outcome(symbols[i])
             slug = self.safe_string(outcomeObj['info'], 'slug')
             if not (slug in outcomesBySlug):
@@ -1043,8 +1047,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [trade structures](https://docs.ccxt.com/#/?id=public-trades)
         """
-        await self.load_markets()
-        self.checkEventsAndMarkets(symbol)
+        self.checkEvents(symbol)
         outcomeObj = self.outcome(symbol)
         slug = self.safe_string(outcomeObj['info'], 'slug')
         tokenId = self.safe_string(outcomeObj, 'outcomeId')
@@ -1088,7 +1091,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         parsedTrades = self.parse_trades(filtered, None)
         return self.filterByOutcomeSinceLimit(parsedTrades, symbol, since, limit)
 
-    async def fetch_order_book(self, symbol: Str, limit: Int = None, params={}) -> OrderBook:
+    async def fetch_order_book(self, symbol: Str, limit: Int = None, params={}) -> PredictionOrderBook:
         """
         fetches the order book for a single outcome token, converting 6-decimal USDC sizes to whole units, no outcomes are quoted at 1 - price with the sides swapped
 
@@ -1100,8 +1103,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict: an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         slug = self.safe_string(outcomeObj['info'], 'slug')
         request: dict = {
@@ -1157,14 +1159,15 @@ class limitless(PredictionExchange, ImplicitAPI):
             if sizeStr is not None:
                 sizeStr = Precise.string_div(sizeStr, scaleStr)
             asks.append([self.parse_number(priceStr), self.parse_number(sizeStr)])
-        return {
-            'symbol': self.safeOutcomeSymbol(outcome, outcomeObj),
+        orderbook = {
+            'outcome': self.safeOutcomeSymbol(outcome, outcomeObj),
             'bids': self.sort_by(bids, 0, True),
             'asks': self.sort_by(asks, 0),
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
             'nonce': None,
         }
+        return self.safePredictionOrderBook(orderbook, outcomeObj)
 
     async def fetch_ohlcv(self, symbol: Str, timeframe='1d', since: Int = None, limit: Int = None, params={}) -> List[list]:
         """
@@ -1179,8 +1182,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns int[][]: a list of candles ordered, open, high, low, close, volume
         """
-        await self.load_markets()
-        self.checkEventsAndMarkets(symbol)
+        self.checkEvents(symbol)
         outcomeObj = self.outcome(symbol)
         slug = self.safe_string(outcomeObj['info'], 'slug')
         outcomeLabel = self.safe_string_upper(outcomeObj['info'], 'outcomeLabel')
@@ -1295,8 +1297,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         outcome = symbol
         if outcome is None:
             raise ArgumentsRequired(self.id + ' fetchOrders requires an outcome argument')
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         info = self.safe_dict(outcomeObj, 'info')
         request: dict = {
@@ -1345,8 +1346,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         outcome = symbol
         if outcome is None:
             raise ArgumentsRequired(self.id + ' fetchOpenOrders requires an outcome argument')
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         params = self.extend(params, {
             'statuses': ['LIVE'],
         })
@@ -1367,8 +1367,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         outcome = symbol
         if outcome is None:
             raise ArgumentsRequired(self.id + ' fetchClosedOrders requires an outcome argument')
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         params = self.extend(params, {
             'statuses': ['MATCHED'],
         })
@@ -1386,8 +1385,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         length = len(ids)
         if length > 50:
             raise BadRequest(self.id + ' fetchOrdersByIds can only fetch up to 50 orders at a time')
@@ -1519,8 +1517,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict: an [order structure](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         orders = await self.fetch_orders_by_ids([id], outcome, params)
         order = self.safe_dict(orders, 0)
         if order is None:
@@ -1695,7 +1692,6 @@ class limitless(PredictionExchange, ImplicitAPI):
             'datetime': datetime,
             'lastTradeTimestamp': None,
             'status': self.parse_order_status(rawStatus),
-            'symbol': outcomeSymbol,
             'outcome': outcomeSymbol,
             'outcomeId': self.safe_string(mkt, 'outcomeId'),
             'label': self.safe_string(mkt, 'label'),
@@ -1787,7 +1783,6 @@ class limitless(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [account structures]
         """
-        await self.load_markets()
         response = await self.limitlessPrivateGetProfilesMe(params)
         responseList = [response]
         return self.parse_accounts(responseList)
@@ -1807,9 +1802,8 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict: an [order structure](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
         accounts = await self.load_accounts()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         account = self.safe_dict(accounts, 0)
         accountInfo = self.safe_dict(account, 'info')
@@ -1987,8 +1981,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict: an [order structure](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         request: dict = {
             'order_id': id,
         }
@@ -2007,8 +2000,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         request: dict = {
             'orderIds': ids,
         }
@@ -2034,8 +2026,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         if outcome is not None:
             warn = True
             warn, params = self.handle_option_and_params(params, 'cancelAllOrders', 'warnOnCancelAllOrdersWithOutcome', warn)
@@ -2069,8 +2060,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [trade structures](https://docs.ccxt.com/#/?id=trade-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         paginate = False
         maxLimit = 100
         paginate, params = self.handle_option_and_params(params, 'fetchMyTrades', 'paginate', paginate)
@@ -2187,7 +2177,6 @@ class limitless(PredictionExchange, ImplicitAPI):
                 'info': trade,
                 'timestamp': ts,
                 'datetime': self.iso8601(ts),
-                'symbol': feedOutcome,
                 'outcome': feedOutcome,
                 'outcomeId': self.safe_string(market, 'outcomeId'),
                 'label': self.safe_string(market, 'label'),
@@ -2259,7 +2248,6 @@ class limitless(PredictionExchange, ImplicitAPI):
             'info': trade,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'symbol': tradeOutcome,
             'outcome': tradeOutcome,
             'outcomeId': self.safe_string(trade, 'asset'),
             'label': self.safe_string(outcome, 'label'),
@@ -2299,9 +2287,9 @@ class limitless(PredictionExchange, ImplicitAPI):
             symbolsLength = len(symbols)
         if symbolsLength > 0:
             for i in range(0, len(symbols)):
-                self.checkEventsAndMarkets(symbols[i])
+                self.checkEvents(symbols[i])
         else:
-            self.checkEventsAndMarkets()
+            self.checkEvents()
         response = await self.limitlessPrivateGetPortfolioPositions(params)
         #
         #     {
@@ -2442,7 +2430,6 @@ class limitless(PredictionExchange, ImplicitAPI):
         entryPrice = self.apply_scale(self.safe_string(position, 'fillPrice'))
         return {
             'id': None,
-            'symbol': outcomeSymbol,
             'outcome': outcomeSymbol,
             'outcomeId': self.safe_string(market, 'outcomeId'),
             'label': self.safe_string(market, 'label'),
@@ -2472,7 +2459,7 @@ class limitless(PredictionExchange, ImplicitAPI):
             'info': position,
         }
 
-    async def fetch_events(self, params={}) -> List[PredictionEvent]:
+    async def fetch_events(self, params: fetchEventsParams = {}) -> List[PredictionEvent]:
         """
         fetches prediction-market events matching the given search terms(or the most active markets, capped, when omitted) and caches their markets and outcomes on the instance
 
@@ -2488,11 +2475,10 @@ class limitless(PredictionExchange, ImplicitAPI):
         result = []
         queriesLength = len(queries)
         if not queries or queriesLength == 0:
-            await self.load_markets()
             result = list(self.events.values())
         else:
             limit = self.safe_integer(params, 'limit', 50)
-            rest = self.omit(params, ['query', 'queries', 'limit'])
+            rest = self.omit(params, ['query', 'queries', 'limit', 'sort', 'searchIn', 'eventId', 'slug', 'status'])
             seen: dict = {}
             rawMarkets: List[Any] = []
             for i in range(0, len(queries)):
@@ -2533,7 +2519,7 @@ class limitless(PredictionExchange, ImplicitAPI):
                 self.events[eventKey] = ev
                 result.append(ev)
         self.rebuild_outcomes()
-        return result
+        return self.applyEventFetchParams(result, params, queries)
 
     def rebuild_outcomes(self):
         """
@@ -2550,10 +2536,10 @@ class limitless(PredictionExchange, ImplicitAPI):
             outcomesList = self.safe_list(market, 'outcomes', [])
             for j in range(0, len(outcomesList)):
                 oc = outcomesList[j]
-                ocSymbol = self.safe_string(oc, 'symbol')
+                ocSymbol = self.safe_string(oc, 'outcome')
                 if ocSymbol is not None:
                     self.outcomes[ocSymbol] = oc
-                ocId = self.safe_string(oc, 'id')
+                ocId = self.safe_string(oc, 'outcomeId')
                 if ocId is not None:
                     self.outcomes_by_id[ocId] = oc
 

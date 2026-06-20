@@ -2,7 +2,7 @@
 
 import { Exchange } from './Exchange.js';
 import { ExchangeError, BadSymbol, NotSupported, ArgumentsRequired } from './errors.js';
-import type { Str, Strings, Num, Int, Bool, Dictionary, Ticker, OrderBook, OHLCV, Trade, Order, OrderType, OrderSide, Dict, PredictionTicker, PredictionOrder, PredictionTrade, PredictionPosition } from './types.js';
+import type { Str, Strings, Num, Int, Bool, Dictionary, Ticker, OrderBook, OHLCV, Trade, Order, OrderType, OrderSide, Dict, PredictionTicker, PredictionOrder, PredictionTrade, PredictionPosition, PredictionOrderBook, fetchEventsParams } from './types.js';
 
 // ----------------------------------------------------------------------------
 
@@ -149,7 +149,7 @@ export default class PredictionExchange extends Exchange {
         return result;
     }
 
-    async fetchEvents (params = {}): Promise<any[]> {
+    async fetchEvents (params: fetchEventsParams = {}): Promise<any[]> {
         throw new NotSupported (this.id + ' fetchEvents() is not supported yet');
     }
 
@@ -391,6 +391,18 @@ export default class PredictionExchange extends Exchange {
         return this.toPredictionStructure (parsed, position);
     }
 
+    safePredictionOrderBook (orderbook: Dict, outcomeObj: Dict = undefined): PredictionOrderBook {
+        // normalize a parsed order book to the prediction shape: replace the unified
+        // `symbol` with the `outcome` handle and attach the outcome identity fields
+        // (outcomeId / market) so books match the PredictionOrderBook structure.
+        const fallback = this.safeString2 (orderbook, 'outcome', 'symbol');
+        orderbook['outcome'] = (outcomeObj === undefined) ? fallback : this.safeString (outcomeObj, 'outcome', fallback);
+        orderbook['outcomeId'] = (outcomeObj === undefined) ? this.safeString (orderbook, 'outcomeId') : this.safeString (outcomeObj, 'outcomeId');
+        orderbook['market'] = (outcomeObj === undefined) ? this.safeString (orderbook, 'market') : this.safeString (outcomeObj, 'market');
+        // omit (not delete) — `del dict['symbol']` raises KeyError in python/php when absent
+        return this.omit (orderbook, 'symbol') as PredictionOrderBook;
+    }
+
     toPredictionStructure (parsed: Dict, raw: Dict): any {
         // rename the unified `symbol` to the prediction `outcome` handle and attach the
         // prediction identity fields (raw exchange id, label, parent market/event) that the
@@ -401,8 +413,8 @@ export default class PredictionExchange extends Exchange {
         parsed['label'] = this.safeString (raw, 'label');
         parsed['market'] = this.safeString (raw, 'market');
         parsed['event'] = this.safeString (raw, 'event');
-        delete parsed['symbol'];
-        return parsed;
+        // omit (not delete) — `del dict['symbol']` raises KeyError in python/php when absent
+        return this.omit (parsed, 'symbol');
     }
 
     filterByOutcomeSinceLimit (array, outcome: Str = undefined, since: Int = undefined, limit: Int = undefined, tail = false) {

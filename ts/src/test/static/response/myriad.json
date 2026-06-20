@@ -120,11 +120,12 @@
 					"externalSources": []
 				},
 				"parsedResponse": {
+					"outcome": "POLYMARKET_KALSHI:POLYMARKET",
 					"outcomeId": "2741:549/0",
 					"label": "Polymarket",
 					"market": "POLYMARKET_KALSHI:POLYMARKET",
-					"timestamp": 1781895628750,
-					"datetime": "2026-06-19T19:00:28.750Z",
+					"timestamp": 1781915900351,
+					"datetime": "2026-06-20T00:38:20.351Z",
 					"high": null,
 					"low": null,
 					"bid": 0.72519807,
@@ -249,7 +250,6 @@
 					},
 					"indexPrice": null,
 					"markPrice": null,
-					"outcome": "POLYMARKET_KALSHI:POLYMARKET",
 					"event": null
 				}
 			}
@@ -372,11 +372,12 @@
 				},
 				"parsedResponse": {
 					"POLYMARKET_KALSHI:POLYMARKET": {
+						"outcome": "POLYMARKET_KALSHI:POLYMARKET",
 						"outcomeId": "2741:549/0",
 						"label": "Polymarket",
 						"market": "POLYMARKET_KALSHI:POLYMARKET",
-						"timestamp": 1781895628952,
-						"datetime": "2026-06-19T19:00:28.952Z",
+						"timestamp": 1781915900552,
+						"datetime": "2026-06-20T00:38:20.552Z",
 						"high": null,
 						"low": null,
 						"bid": 0.72519807,
@@ -501,15 +502,15 @@
 						},
 						"indexPrice": null,
 						"markPrice": null,
-						"outcome": "POLYMARKET_KALSHI:POLYMARKET",
 						"event": null
 					},
 					"POLYMARKET_KALSHI:KALSHI": {
+						"outcome": "POLYMARKET_KALSHI:KALSHI",
 						"outcomeId": "2741:549/1",
 						"label": "Kalshi",
 						"market": "POLYMARKET_KALSHI:KALSHI",
-						"timestamp": 1781895628952,
-						"datetime": "2026-06-19T19:00:28.952Z",
+						"timestamp": 1781915900552,
+						"datetime": "2026-06-20T00:38:20.552Z",
 						"high": null,
 						"low": null,
 						"bid": 0.27480193,
@@ -634,7 +635,6 @@
 						},
 						"indexPrice": null,
 						"markPrice": null,
-						"outcome": "POLYMARKET_KALSHI:KALSHI",
 						"event": null
 					}
 				}
@@ -754,7 +754,7 @@
 					"externalSources": []
 				},
 				"parsedResponse": {
-					"symbol": "POLYMARKET_KALSHI:POLYMARKET",
+					"outcome": "POLYMARKET_KALSHI:POLYMARKET",
 					"bids": [
 						[
 							0.72419807,
@@ -767,9 +767,11 @@
 							9999
 						]
 					],
-					"timestamp": 1781895629152,
-					"datetime": "2026-06-19T19:00:29.152Z",
-					"nonce": null
+					"timestamp": 1781915900754,
+					"datetime": "2026-06-20T00:38:20.754Z",
+					"nonce": null,
+					"outcomeId": "2741:549/0",
+					"market": "POLYMARKET_KALSHI"
 				}
 			}
 		],

@@ -895,6 +895,7 @@ class NewTranspiler {
             'OrderType': 'string',
             'OrderSide': 'string', // tmp
             'PredictionEvent': 'map[string]any', // no concrete Go struct; surface as a map
+            'fetchEventsParams': 'map[string]interface{}', // params bag; surface as a map
         };
 
         if (wrappedType === undefined || wrappedType === 'Undefined') {
@@ -2083,6 +2084,9 @@ ${caseStatements.join('\n')}
         }
 
         if (prediction) {
+            // the prediction package needs its OWN DynamicallyCreateInstance (over
+            // prediction ids); the base one in package ccxt only knows regular ids
+            this.createDynamicInstanceFile (false, true);
             log.bright.green ('Transpiled prediction exchanges successfully.');
             return;
         }

@@ -1237,14 +1237,15 @@ export default class limitless extends Exchange {
             }
             asks.push ([ this.parseNumber (priceStr), this.parseNumber (sizeStr) ]);
         }
-        return {
+        const orderbook = {
             'outcome': this.safeOutcomeSymbol (outcome, outcomeObj),
             'bids': this.sortBy (bids, 0, true),
             'asks': this.sortBy (asks, 0),
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'nonce': undefined,
-        } as unknown as PredictionOrderBook;
+        };
+        return this.safePredictionOrderBook (orderbook, outcomeObj);
     }
 
     /**

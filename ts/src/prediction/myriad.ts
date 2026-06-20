@@ -1916,7 +1916,7 @@ export default class myriad extends Exchange {
             //         "asks": [ [ "990000000000000000", "151975683890577539072" ] ]
             //     }
             //
-            return this.parseWeiOrderBook (obResponse, this.safeOutcomeSymbol (outcome, outcomeObj));
+            return this.safePredictionOrderBook (this.parseWeiOrderBook (obResponse, this.safeOutcomeSymbol (outcome, outcomeObj)), outcomeObj);
         }
         const request: Dict = {
             'id': marketId,
@@ -2027,14 +2027,15 @@ export default class myriad extends Exchange {
         if (ask !== undefined) {
             asks.push ([ ask, synthSize ]);
         }
-        return {
+        const orderbook = {
             'outcome': this.safeOutcomeSymbol (outcome, outcomeObj),
             'bids': bids,
             'asks': asks,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'nonce': undefined,
-        } as unknown as PredictionOrderBook;
+        };
+        return this.safePredictionOrderBook (orderbook, outcomeObj);
     }
 
     /**
@@ -2417,7 +2418,9 @@ export default class myriad extends Exchange {
         const queriesLength = queries.length;
         if (queriesLength === 0) {
             this.populateOutcomes ();
-            return this.applyEventFetchParams (Object.values (this.events as Dict) as any[], params, queries);
+            // hoist Object.values to a local — inline as a call argument breaks the php regex transpiler
+            const existingEvents = Object.values (this.events as Dict) as any[];
+            return this.applyEventFetchParams (existingEvents, params, queries);
         }
         const rawMarkets = await this.fetchRawMarketsBySearch (queries, rest);
         if (!this.events) {
@@ -2471,11 +2474,16 @@ export default class myriad extends Exchange {
             const outcomesList = this.safeList (market, 'outcomes', []) as any[];
             for (let j = 0; j < outcomesList.length; j++) {
                 const oc = outcomesList[j];
-                const ocSymbol = this.safeString (oc, 'outcome');
+                // accept the legacy symbol/id keys too: in Go/C#/Java the prediction
+                // setMarkets override is not dispatched, so oc is not pre-normalized
+                const ocSymbol = this.safeString2 (oc, 'outcome', 'symbol');
+                const ocId = this.safeString2 (oc, 'outcomeId', 'id');
+                oc['outcome'] = ocSymbol;
+                oc['outcomeId'] = ocId;
+                oc['market'] = this.safeString2 (oc, 'market', 'marketSymbol');
                 if (ocSymbol !== undefined) {
                     this.outcomes[ocSymbol] = oc;
                 }
-                const ocId = this.safeString (oc, 'outcomeId');
                 if (ocId !== undefined) {
                     this.outcomes_by_id[ocId] = oc;
                 }

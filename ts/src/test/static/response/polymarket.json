@@ -69,6 +69,7 @@
 					"mid": "0.1515"
 				},
 				"parsedResponse": {
+					"outcome": "JD_VANCE_WIN_2028_US_PRESIDENTIAL_ELECTION:YES",
 					"outcomeId": "16040015440196279900485035793550429453516625694844857319147506590755961451627",
 					"label": "Yes",
 					"market": "JD_VANCE_WIN_2028_US_PRESIDENTIAL_ELECTION",
@@ -204,7 +205,6 @@
 					},
 					"indexPrice": null,
 					"markPrice": null,
-					"outcome": "JD_VANCE_WIN_2028_US_PRESIDENTIAL_ELECTION:YES",
 					"event": null
 				}
 			}
@@ -271,7 +271,6 @@
 					"last_trade_price": "0.152"
 				},
 				"parsedResponse": {
-					"symbol": "JD_VANCE_WIN_2028_US_PRESIDENTIAL_ELECTION:YES",
 					"bids": [
 						[
 							0.005,

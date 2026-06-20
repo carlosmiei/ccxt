@@ -892,11 +892,15 @@ class Transpiler {
             'TransferEntry': /-> TransferEntry:/,
             'PredictionEvent': /-> (?:List\[)?PredictionEvent/,
             'PredictionOutcome': /: (?:List\[)?PredictionOutcome/,
+            'fetchEventsParams': /: (?:List\[)?fetchEventsParams\b/,
             'PredictionTicker': /-> (?:List\[)?PredictionTicker\b/,
             'PredictionTickers': /-> (?:List\[)?PredictionTickers\b/,
             'PredictionOrder': /-> (?:List\[)?PredictionOrder\b/,
+            'PredictionOrderBook': /-> (?:List\[)?PredictionOrderBook\b/,
             'PredictionTrade': /-> (?:List\[)?PredictionTrade\b/,
             'PredictionPosition': /-> (?:List\[)?PredictionPosition\b/,
+            'PredictionTradingFee': /-> (?:List\[)?PredictionTradingFee\b/,
+            'PredictionOpenInterest': /-> (?:List\[)?PredictionOpenInterest\b/,
         }
         const matches: string[] = []
         let match
@@ -1735,7 +1739,7 @@ class Transpiler {
                     'Dictionary<any>': 'array',
                     'Dict': 'array',
                 }
-                const phpArrayRegex = /^(?:Market|Currency|Account|AccountStructure|BalanceAccount|object|OHLCV|ADL|Order|OrderBook|Tickers?|Trade|Transaction|Balances?|MarketInterface|TransferEntry|TransferEntries|Leverages|Leverage|Greeks|MarginModes|MarginMode|MarketMarginModes|MarginModification|LastPrice|LastPrices|TradingFeeInterface|Currencies|TradingFees|CrossBorrowRate|IsolatedBorrowRate|FundingRates|FundingRate|LedgerEntry|LeverageTier|LeverageTiers|Conversion|DepositAddress|LongShortRatio|Position|BorrowInterest|PredictionTicker|PredictionTickers|PredictionOrder|PredictionTrade|PredictionPosition|PredictionOrderBook|PredictionEvent|PredictionMarket|PredictionOutcome|OpenInterests)( \| undefined)?$|\w+\[\]/
+                const phpArrayRegex = /^(?:Market|Currency|Account|AccountStructure|BalanceAccount|object|OHLCV|ADL|Order|OrderBook|Tickers?|Trade|Transaction|Balances?|MarketInterface|TransferEntry|TransferEntries|Leverages|Leverage|Greeks|MarginModes|MarginMode|MarketMarginModes|MarginModification|LastPrice|LastPrices|TradingFeeInterface|Currencies|TradingFees|CrossBorrowRate|IsolatedBorrowRate|FundingRates|FundingRate|LedgerEntry|LeverageTier|LeverageTiers|Conversion|DepositAddress|LongShortRatio|Position|BorrowInterest|PredictionTicker|PredictionTickers|PredictionOrder|PredictionTrade|PredictionPosition|PredictionOrderBook|PredictionEvent|PredictionMarket|PredictionOutcome|fetchEventsParams|OpenInterests)( \| undefined)?$|\w+\[\]/
 
                 phpArgs = argsArray.map (x => {
                     const parts = x.split (':')

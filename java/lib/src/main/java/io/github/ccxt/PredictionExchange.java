@@ -581,6 +581,20 @@ public Object isPrediction()
         return this.toPredictionStructure(parsed, position);
     }
 
+    public Object safePredictionOrderBook(Object orderbook, Object... optionalArgs)
+    {
+        // normalize a parsed order book to the prediction shape: replace the unified
+        // `symbol` with the `outcome` handle and attach the outcome identity fields
+        // (outcomeId / market) so books match the PredictionOrderBook structure.
+        Object outcomeObj = Helpers.getArg(optionalArgs, 0, null);
+        Object fallback = this.safeString2(orderbook, "outcome", "symbol");
+        Helpers.addElementToObject(orderbook, "outcome", ((Helpers.isTrue((Helpers.isEqual(outcomeObj, null))))) ? fallback : this.safeString(outcomeObj, "outcome", fallback));
+        Helpers.addElementToObject(orderbook, "outcomeId", ((Helpers.isTrue((Helpers.isEqual(outcomeObj, null))))) ? this.safeString(orderbook, "outcomeId") : this.safeString(outcomeObj, "outcomeId"));
+        Helpers.addElementToObject(orderbook, "market", ((Helpers.isTrue((Helpers.isEqual(outcomeObj, null))))) ? this.safeString(orderbook, "market") : this.safeString(outcomeObj, "market"));
+        // omit (not delete) — `del dict['symbol']` raises KeyError in python/php when absent
+        return this.omit(orderbook, "symbol");
+    }
+
     public Object toPredictionStructure(Object parsed, Object raw)
     {
         // rename the unified `symbol` to the prediction `outcome` handle and attach the
@@ -592,8 +606,8 @@ public Object isPrediction()
         Helpers.addElementToObject(parsed, "label", this.safeString(raw, "label"));
         Helpers.addElementToObject(parsed, "market", this.safeString(raw, "market"));
         Helpers.addElementToObject(parsed, "event", this.safeString(raw, "event"));
-        ((java.util.Map<String,Object>)parsed).remove((String)"symbol");
-        return parsed;
+        // omit (not delete) — `del dict['symbol']` raises KeyError in python/php when absent
+        return this.omit(parsed, "symbol");
     }
 
     public Object filterByOutcomeSinceLimit(Object array, Object... optionalArgs)

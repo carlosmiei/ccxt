@@ -1084,7 +1084,7 @@ public class LimitlessCore extends LimitlessApi
         final Object finalMidStr = midStr;
         final Object finalVolumeStr = volumeStr;
         return this.safePredictionTicker(new java.util.HashMap<String, Object>() {{
-            put( "symbol", outcomeSymbol );
+            put( "outcome", outcomeSymbol );
             put( "outcomeId", LimitlessCore.this.safeString(finalMarket, "outcomeId") );
             put( "label", LimitlessCore.this.safeString(finalMarket, "label") );
             put( "market", LimitlessCore.this.safeString(finalMarket, "market") );
@@ -1364,14 +1364,15 @@ public class LimitlessCore extends LimitlessApi
                 }
                 ((java.util.List<Object>)asks).add(new java.util.ArrayList<Object>(java.util.Arrays.asList(this.parseNumber(priceStr), this.parseNumber(sizeStr))));
             }
-            return new java.util.HashMap<String, Object>() {{
-                put( "symbol", LimitlessCore.this.safeOutcomeSymbol(outcome, outcomeObj) );
+            Object orderbook = new java.util.HashMap<String, Object>() {{
+                put( "outcome", LimitlessCore.this.safeOutcomeSymbol(outcome, outcomeObj) );
                 put( "bids", LimitlessCore.this.sortBy(bids, 0, true) );
                 put( "asks", LimitlessCore.this.sortBy(asks, 0) );
                 put( "timestamp", timestamp );
                 put( "datetime", LimitlessCore.this.iso8601(timestamp) );
                 put( "nonce", null );
             }};
+            return this.safePredictionOrderBook(orderbook, outcomeObj);
         });
 
     }
@@ -2017,7 +2018,6 @@ public class LimitlessCore extends LimitlessApi
             put( "datetime", datetime );
             put( "lastTradeTimestamp", null );
             put( "status", LimitlessCore.this.parseOrderStatus(finalRawStatus) );
-            put( "symbol", outcomeSymbol );
             put( "outcome", outcomeSymbol );
             put( "outcomeId", LimitlessCore.this.safeString(mkt, "outcomeId") );
             put( "label", LimitlessCore.this.safeString(mkt, "label") );
@@ -2701,7 +2701,6 @@ public class LimitlessCore extends LimitlessApi
                 put( "info", trade );
                 put( "timestamp", ts );
                 put( "datetime", LimitlessCore.this.iso8601(ts) );
-                put( "symbol", feedOutcome );
                 put( "outcome", feedOutcome );
                 put( "outcomeId", LimitlessCore.this.safeString(market, "outcomeId") );
                 put( "label", LimitlessCore.this.safeString(market, "label") );
@@ -2779,7 +2778,6 @@ public class LimitlessCore extends LimitlessApi
             put( "info", trade );
             put( "timestamp", timestamp );
             put( "datetime", LimitlessCore.this.iso8601(timestamp) );
-            put( "symbol", tradeOutcome );
             put( "outcome", tradeOutcome );
             put( "outcomeId", LimitlessCore.this.safeString(trade, "asset") );
             put( "label", LimitlessCore.this.safeString(outcome, "label") );
@@ -3005,7 +3003,6 @@ public class LimitlessCore extends LimitlessApi
         Object entryPrice = this.applyScale(this.safeString(position, "fillPrice"));
         return new java.util.HashMap<String, Object>() {{
             put( "id", null );
-            put( "symbol", outcomeSymbol );
             put( "outcome", outcomeSymbol );
             put( "outcomeId", LimitlessCore.this.safeString(market, "outcomeId") );
             put( "label", LimitlessCore.this.safeString(market, "label") );
@@ -3152,12 +3149,12 @@ public class LimitlessCore extends LimitlessApi
             for (var j = 0; Helpers.isLessThan(j, Helpers.getArrayLength(outcomesList)); j++)
             {
                 Object oc = Helpers.GetValue(outcomesList, j);
-                Object ocSymbol = this.safeString(oc, "symbol");
+                Object ocSymbol = this.safeString(oc, "outcome");
                 if (Helpers.isTrue(!Helpers.isEqual(ocSymbol, null)))
                 {
                     Helpers.addElementToObject(this.outcomes, ocSymbol, oc);
                 }
-                Object ocId = this.safeString(oc, "id");
+                Object ocId = this.safeString(oc, "outcomeId");
                 if (Helpers.isTrue(!Helpers.isEqual(ocId, null)))
                 {
                     Helpers.addElementToObject(this.outcomes_by_id, ocId, oc);

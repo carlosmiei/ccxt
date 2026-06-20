@@ -576,9 +576,7 @@ public partial class hyperliquid : PredictionExchange
         object outcomes = new List<object>() {new Dictionary<string, object>() {
     { "id", this.outcomeCoin(yesEncoding) },
     { "outcomeId", this.outcomeCoin(yesEncoding) },
-    { "symbol", yesOutcomeSymbol },
     { "outcome", yesOutcomeSymbol },
-    { "marketSymbol", parentSymbol },
     { "market", parentSymbol },
     { "label", yesLabel },
     { "active", active },
@@ -597,9 +595,7 @@ public partial class hyperliquid : PredictionExchange
 }, new Dictionary<string, object>() {
     { "id", this.outcomeCoin(noEncoding) },
     { "outcomeId", this.outcomeCoin(noEncoding) },
-    { "symbol", noOutcomeSymbol },
     { "outcome", noOutcomeSymbol },
-    { "marketSymbol", parentSymbol },
     { "market", parentSymbol },
     { "label", noLabel },
     { "active", active },
@@ -721,8 +717,7 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object info = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object coin = this.safeString(info, "coinName");
@@ -761,17 +756,16 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcomes = symbols;
-        await this.loadMarkets();
         object requestedOutcomeSymbols = new Dictionary<string, object>() {};
         if (isTrue(!isEqual(outcomes, null)))
         {
             for (object i = 0; isLessThan(i, getArrayLength(outcomes)); postFixIncrement(ref i))
             {
                 object requested = getValue(outcomes, i);
-                this.checkEventsAndMarkets(requested);
+                this.checkEvents(requested);
                 object requestedOutcomeObj = this.outcome(requested);
-                object requestedSymbol = this.safeString(requestedOutcomeObj, "symbol", requested);
-                ((IDictionary<string,object>)requestedOutcomeSymbols)[(string)requestedSymbol] = true;
+                object requestedOutcome = this.safeString(requestedOutcomeObj, "outcome", requested);
+                ((IDictionary<string,object>)requestedOutcomeSymbols)[(string)requestedOutcome] = true;
             }
         }
         object response = await this.publicPostInfo(this.extend(new Dictionary<string, object>() {
@@ -783,15 +777,15 @@ public partial class hyperliquid : PredictionExchange
         object mids = this.safeDict(response, "mids", response);
         object tickers = new Dictionary<string, object>() {};
         object outcomesMap = ((bool) isTrue((!isEqual(this.outcomes, null)))) ? this.outcomes : new Dictionary<string, object>() {};
-        object outcomeSymbols = new List<object>(((IDictionary<string,object>)outcomesMap).Keys);
-        for (object i = 0; isLessThan(i, getArrayLength(outcomeSymbols)); postFixIncrement(ref i))
+        object outcomeHandles = new List<object>(((IDictionary<string,object>)outcomesMap).Keys);
+        for (object i = 0; isLessThan(i, getArrayLength(outcomeHandles)); postFixIncrement(ref i))
         {
-            object outcomeSymbol = getValue(outcomeSymbols, i);
-            if (isTrue(isTrue(!isEqual(outcomes, null)) && !isTrue((inOp(requestedOutcomeSymbols, outcomeSymbol)))))
+            object outcomeHandle = getValue(outcomeHandles, i);
+            if (isTrue(isTrue(!isEqual(outcomes, null)) && !isTrue((inOp(requestedOutcomeSymbols, outcomeHandle)))))
             {
                 continue;
             }
-            object outcomeObj = this.safeDict(outcomesMap, outcomeSymbol, new Dictionary<string, object>() {});
+            object outcomeObj = this.safeDict(outcomesMap, outcomeHandle, new Dictionary<string, object>() {});
             object info = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
             object coin = this.safeString(info, "coinName");
             object mid = this.safeNumber(mids, coin);
@@ -805,7 +799,7 @@ public partial class hyperliquid : PredictionExchange
                 { "mid", mid },
                 { "time", this.milliseconds() },
             }, ((object)outcomeObj));
-            ((IDictionary<string,object>)tickers)[(string)outcomeSymbol] = ticker;
+            ((IDictionary<string,object>)tickers)[(string)outcomeHandle] = ticker;
         }
         return tickers;
     }
@@ -852,7 +846,7 @@ public partial class hyperliquid : PredictionExchange
             mid = divide(this.sum(bid, ask), 2);
         }
         // day volume lives on the parent market's ctx; resolve it from the outcome's marketSymbol
-        object parentSymbol = this.safeString(mkt, "marketSymbol");
+        object parentSymbol = this.safeString(mkt, "outcome");
         object parentMarket = ((bool) isTrue((!isEqual(parentSymbol, null)))) ? this.safeMarket(parentSymbol) : null;
         object ctx = ((bool) isTrue((!isEqual(parentMarket, null)))) ? this.safeDict(this.safeDict(((object)parentMarket), "info", new Dictionary<string, object>() {}), "ctx", new Dictionary<string, object>() {}) : new Dictionary<string, object>() {};
         object dayVolume = this.safeNumber(ctx, "dayNtlVlm");
@@ -860,7 +854,7 @@ public partial class hyperliquid : PredictionExchange
             { "symbol", symbol },
             { "outcomeId", this.safeString(mkt, "id") },
             { "label", this.safeString(mkt, "label") },
-            { "market", this.safeString(mkt, "marketSymbol") },
+            { "market", this.safeString(mkt, "outcome") },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
             { "high", null },
@@ -897,8 +891,7 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object info = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object request = new Dictionary<string, object>() {
@@ -932,10 +925,11 @@ public partial class hyperliquid : PredictionExchange
             object entry = getValue(rawAsks, i);
             ((IList<object>)asks).Add(new List<object> {this.safeNumber(entry, "px"), this.safeNumber(entry, "sz")});
         }
-        return this.parseOrderBook(new Dictionary<string, object>() {
+        object orderbook = this.parseOrderBook(new Dictionary<string, object>() {
             { "bids", bids },
             { "asks", asks },
         }, this.safeString(outcomeObj, "symbol", outcome), timestamp);
+        return this.safePredictionOrderBook(orderbook, outcomeObj);
     }
 
     /**
@@ -956,10 +950,9 @@ public partial class hyperliquid : PredictionExchange
         timeframe ??= "1m";
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
-        object market = this.market(this.safeString(outcomeObj, "marketSymbol"));
+        object market = this.market(this.safeString(outcomeObj, "outcome"));
         object info = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object until = this.safeInteger(parameters, "until", this.milliseconds());
         object startTime = since;
@@ -1093,17 +1086,16 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcomes = symbols;
-        await this.loadMarkets();
         object requestedOutcomeSymbols = new Dictionary<string, object>() {};
         if (isTrue(!isEqual(outcomes, null)))
         {
             for (object i = 0; isLessThan(i, getArrayLength(outcomes)); postFixIncrement(ref i))
             {
                 object requested = getValue(outcomes, i);
-                this.checkEventsAndMarkets(requested);
+                this.checkEvents(requested);
                 object requestedOutcomeObj = this.outcome(requested);
-                object requestedSymbol = this.safeString(requestedOutcomeObj, "symbol", requested);
-                ((IDictionary<string,object>)requestedOutcomeSymbols)[(string)requestedSymbol] = true;
+                object requestedOutcome = this.safeString(requestedOutcomeObj, "outcome", requested);
+                ((IDictionary<string,object>)requestedOutcomeSymbols)[(string)requestedOutcome] = true;
             }
         }
         object userAddress = null;
@@ -1136,8 +1128,8 @@ public partial class hyperliquid : PredictionExchange
             object outcomeObj = this.safeOutcome(outcomeId);
             if (isTrue(!isEqual(outcomes, null)))
             {
-                object outcomeSymbol = this.safeString(outcomeObj, "symbol");
-                if (isTrue(isTrue(isEqual(outcomeSymbol, null)) || !isTrue((inOp(requestedOutcomeSymbols, outcomeSymbol)))))
+                object outcomeHandle = this.safeString(outcomeObj, "outcome");
+                if (isTrue(isTrue(isEqual(outcomeHandle, null)) || !isTrue((inOp(requestedOutcomeSymbols, outcomeHandle)))))
                 {
                     continue;
                 }
@@ -1175,7 +1167,7 @@ public partial class hyperliquid : PredictionExchange
             { "symbol", this.safeString(outcomeObj, "symbol") },
             { "outcomeId", this.safeString(outcomeObj, "id") },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString(outcomeObj, "marketSymbol") },
+            { "market", this.safeString(outcomeObj, "outcome") },
             { "timestamp", null },
             { "datetime", null },
             { "isolated", false },
@@ -1345,11 +1337,10 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         await this.initializeClient();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
-        object market = this.market(this.safeString(outcomeObj, "marketSymbol"));
+        object market = this.market(this.safeString(outcomeObj, "outcome"));
         object outcomeInfo = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object nonce = this.milliseconds();
         object isBuy = (isEqual(((string)side).ToUpper(), "BUY"));
@@ -1379,12 +1370,12 @@ public partial class hyperliquid : PredictionExchange
         {
             object priceStr = this.numberToString(price);
             px = ((bool) isTrue(isBuy)) ? Precise.stringMul(priceStr, Precise.stringAdd("1", slippage)) : Precise.stringMul(priceStr, Precise.stringSub("1", slippage));
-            px = this.priceToPrecision(this.safeString(outcomeObj, "marketSymbol"), px);
+            px = this.priceToPrecision(this.safeString(outcomeObj, "outcome"), px);
         } else
         {
-            px = this.priceToPrecision(this.safeString(outcomeObj, "marketSymbol"), price);
+            px = this.priceToPrecision(this.safeString(outcomeObj, "outcome"), price);
         }
-        object sz = this.amountToPrecision(this.safeString(outcomeObj, "marketSymbol"), amount);
+        object sz = this.amountToPrecision(this.safeString(outcomeObj, "outcome"), amount);
         object orderType = new Dictionary<string, object>() {
             { "limit", new Dictionary<string, object>() {
                 { "tif", tif },
@@ -1452,10 +1443,10 @@ public partial class hyperliquid : PredictionExchange
             { "timestamp", nonce },
             { "datetime", this.iso8601(nonce) },
             { "status", orderStatus },
-            { "symbol", this.safeString(outcomeObj, "symbol", outcome) },
+            { "outcome", this.safeString(outcomeObj, "outcome", outcome) },
             { "outcomeId", this.safeString(outcomeObj, "id") },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString(outcomeObj, "marketSymbol") },
+            { "market", this.safeString(outcomeObj, "outcome") },
             { "type", type },
             { "side", side },
             { "price", price },
@@ -1507,9 +1498,8 @@ public partial class hyperliquid : PredictionExchange
         {
             throw new ArgumentsRequired ((string)add(this.id, " cancelOrders() requires an outcome argument")) ;
         }
-        await this.loadMarkets();
         await this.initializeClient();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object outcomeInfo = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object assetId = this.safeInteger(outcomeInfo, "assetId");
@@ -1563,7 +1553,7 @@ public partial class hyperliquid : PredictionExchange
         object innerResponse = this.safeDict(response, "response");
         object data = this.safeDict(innerResponse, "data");
         object statuses = this.safeList(data, "statuses", new List<object>() {});
-        object outcomeSymbol = this.safeString(outcomeObj, "symbol", outcome);
+        object outcomeSymbol = this.safeString(outcomeObj, "outcome", outcome);
         object requestIds = ids;
         if (isTrue(!isEqual(clientOrderId, null)))
         {
@@ -1595,11 +1585,10 @@ public partial class hyperliquid : PredictionExchange
                 { "clientOrderId", ((bool) isTrue((!isEqual(clientOrderId, null)))) ? requestId : null },
                 { "info", status },
                 { "status", "canceled" },
-                { "symbol", outcomeSymbol },
                 { "outcome", outcomeSymbol },
                 { "outcomeId", this.safeString(outcomeObj, "id") },
                 { "label", this.safeString(outcomeObj, "label") },
-                { "market", this.safeString(outcomeObj, "marketSymbol") },
+                { "market", this.safeString(outcomeObj, "outcome") },
                 { "timestamp", this.milliseconds() },
                 { "datetime", this.iso8601(this.milliseconds()) },
             };
@@ -1625,7 +1614,6 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object userAddress = null;
         var userAddressparametersVariable = this.handlePublicAddress("fetchOpenOrders", parameters);
         userAddress = ((IList<object>)userAddressparametersVariable)[0];
@@ -1651,9 +1639,9 @@ public partial class hyperliquid : PredictionExchange
         object outcomeHandle = null;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             object outcomeObj = this.outcome(outcome);
-            outcomeHandle = this.safeString(outcomeObj, "symbol");
+            outcomeHandle = this.safeString(outcomeObj, "outcome");
         }
         return this.filterByOutcomeSinceLimit(parsed, outcomeHandle, since, limit);
     }
@@ -1674,7 +1662,6 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object userAddress = null;
         var userAddressparametersVariable = this.handlePublicAddress("fetchOrders", parameters);
         userAddress = ((IList<object>)userAddressparametersVariable)[0];
@@ -1716,9 +1703,9 @@ public partial class hyperliquid : PredictionExchange
         object outcomeHandle = null;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             object outcomeObj = this.outcome(outcome);
-            outcomeHandle = this.safeString(outcomeObj, "symbol");
+            outcomeHandle = this.safeString(outcomeObj, "outcome");
         }
         return this.filterByOutcomeSinceLimit(parsed, outcomeHandle, since, limit);
     }
@@ -1739,7 +1726,6 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object userAddress = null;
         var userAddressparametersVariable = this.handlePublicAddress("fetchOrder", parameters);
         userAddress = ((IList<object>)userAddressparametersVariable)[0];
@@ -1763,9 +1749,9 @@ public partial class hyperliquid : PredictionExchange
         object parsed = this.parseOrder(orderWrapper, null);
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             object outcomeObj = this.outcome(outcome);
-            object expected = this.safeString(outcomeObj, "symbol");
+            object expected = this.safeString(outcomeObj, "outcome");
             if (isTrue(!isEqual(this.safeString(parsed, "outcome"), expected)))
             {
                 throw new OrderNotFound ((string)add(add(add(add(this.id, " fetchOrder() order "), id), " is not in outcome "), expected)) ;
@@ -1808,7 +1794,7 @@ public partial class hyperliquid : PredictionExchange
         object status = this.parseOrderStatus(this.safeString2(order, "ccxtStatus", "status"));
         object coin = this.safeString(entry, "coin");
         object outcomeObj = this.safeOutcome(coin, ((object)market));
-        object marketSymbol = this.safeString(outcomeObj, "marketSymbol");
+        object marketSymbol = this.safeString(outcomeObj, "outcome");
         object resolvedMarket = ((bool) isTrue(marketSymbol)) ? this.safeMarket(marketSymbol, ((object)market)) : market;
         object sideRaw = this.safeString(entry, "side");
         object side = ((bool) isTrue((isEqual(sideRaw, "B")))) ? "buy" : "sell";
@@ -1831,10 +1817,10 @@ public partial class hyperliquid : PredictionExchange
             { "datetime", this.iso8601(timestamp) },
             { "lastTradeTimestamp", null },
             { "status", status },
-            { "symbol", this.safeString(outcomeObj, "symbol") },
+            { "outcome", this.safeString(outcomeObj, "outcome") },
             { "outcomeId", this.safeString(outcomeObj, "id") },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString(outcomeObj, "marketSymbol") },
+            { "market", this.safeString(outcomeObj, "outcome") },
             { "type", this.parseOrderType(this.safeString(entry, "orderType", "limit")) },
             { "timeInForce", tif },
             { "postOnly", postOnly },
@@ -1916,7 +1902,6 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
         object userAddress = null;
         var userAddressparametersVariable = this.handlePublicAddress("fetchMyTrades", parameters);
         userAddress = ((IList<object>)userAddressparametersVariable)[0];
@@ -1943,9 +1928,9 @@ public partial class hyperliquid : PredictionExchange
         object outcomeHandle = null;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
             object outcomeObj = this.outcome(outcome);
-            outcomeHandle = this.safeString(outcomeObj, "symbol");
+            outcomeHandle = this.safeString(outcomeObj, "outcome");
         }
         return this.filterByOutcomeSinceLimit(parsed, outcomeHandle, since, limit);
     }
@@ -1985,13 +1970,13 @@ public partial class hyperliquid : PredictionExchange
         object amount = this.safeString(trade, "sz");
         object coin = this.safeString(trade, "coin");
         object outcomeObj = this.safeOutcome(coin, ((object)market));
-        object marketSymbol = this.safeString(outcomeObj, "marketSymbol");
+        object marketSymbol = this.safeString(outcomeObj, "outcome");
         object resolvedMarket = ((bool) isTrue(marketSymbol)) ? this.safeMarket(marketSymbol, ((object)market)) : market;
         object rawSide = this.safeString(trade, "side");
         object side = ((bool) isTrue((isEqual(rawSide, "B")))) ? "buy" : "sell";
         object fee = this.safeNumber(trade, "fee");
         object feeCurrency = this.safeString(trade, "feeToken", "USDC");
-        object outcomeSymbol = this.safeString(outcomeObj, "symbol");
+        object outcomeSymbol = this.safeString(outcomeObj, "outcome");
         object feeObject = null;
         if (isTrue(!isEqual(fee, null)))
         {
@@ -2010,11 +1995,10 @@ public partial class hyperliquid : PredictionExchange
             { "info", trade },
             { "timestamp", timestamp },
             { "datetime", this.iso8601(timestamp) },
-            { "symbol", outcomeSymbol },
             { "outcome", outcomeSymbol },
             { "outcomeId", this.safeString(outcomeObj, "id") },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString(outcomeObj, "marketSymbol") },
+            { "market", this.safeString(outcomeObj, "outcome") },
             { "order", this.safeString(trade, "oid") },
             { "type", "limit" },
             { "side", side },
@@ -2039,7 +2023,6 @@ public partial class hyperliquid : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object queries = this.parseSearchQueries(parameters);
-        await this.loadMarkets();
         object marketValues = new List<object>(((IDictionary<string,object>)this.markets).Values);
         // Group markets by parentSymbol
         object groupMap = new Dictionary<string, object>() {};
@@ -2106,7 +2089,7 @@ public partial class hyperliquid : PredictionExchange
             object ev = getValue(events, i);
             ((IDictionary<string,object>)this.events)[(string)getValue(ev, "symbol")] = ev;
         }
-        return events;
+        return this.applyEventFetchParams(events, parameters, queries);
     }
 
     /**

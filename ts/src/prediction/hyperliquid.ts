@@ -687,7 +687,8 @@ export default class hyperliquid extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure)
      */
-    async fetchTickers (outcomes: Strings = undefined, params = {}): Promise<PredictionTickers> {
+    async fetchTickers (symbols: Strings = undefined, params = {}): Promise<PredictionTickers> {
+        const outcomes = symbols;
         const requestedOutcomeSymbols = {};
         if (outcomes !== undefined) {
             for (let i = 0; i < outcomes.length; i++) {
@@ -841,9 +842,7 @@ export default class hyperliquid extends Exchange {
             asks.push ([ this.safeNumber (entry, 'px'), this.safeNumber (entry, 'sz') ]);
         }
         const orderbook = this.parseOrderBook ({ 'bids': bids, 'asks': asks }, this.safeString (outcomeObj, 'symbol', outcome), timestamp);
-        orderbook['outcome'] = this.safeString (outcomeObj, 'outcome');
-        orderbook['outcomeId'] = this.safeString (outcomeObj, 'outcomeId');
-        return orderbook as PredictionOrderBook;
+        return this.safePredictionOrderBook (orderbook, outcomeObj);
     }
 
     /**
@@ -992,7 +991,8 @@ export default class hyperliquid extends Exchange {
      * @param {string} [params.user] wallet address
      * @returns {object[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
      */
-    async fetchPositions (outcomes: Strings = undefined, params = {}): Promise<PredictionPosition[]> {
+    async fetchPositions (symbols: Strings = undefined, params = {}): Promise<PredictionPosition[]> {
+        const outcomes = symbols;
         const requestedOutcomeSymbols = {};
         if (outcomes !== undefined) {
             for (let i = 0; i < outcomes.length; i++) {

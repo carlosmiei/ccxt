@@ -5,7 +5,7 @@
 
 from ccxt.async_support.base.prediction_exchange import PredictionExchange
 from ccxt.abstract.prediction.hyperliquid import ImplicitAPI
-from ccxt.base.types import Any, Balances, Int, Market, Num, OrderBook, Str, Strings, PredictionEvent, PredictionTicker, PredictionTickers, PredictionOrder, PredictionTrade, PredictionPosition
+from ccxt.base.types import Any, Balances, Int, Market, Num, Str, Strings, PredictionEvent, fetchEventsParams, PredictionTicker, PredictionTickers, PredictionOrder, PredictionOrderBook, PredictionTrade, PredictionPosition
 from typing import List
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import ArgumentsRequired
@@ -450,16 +450,19 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         quoteCurrency = self.safe_string(self.options, 'outcomeQuoteCurrency', 'USDH')
         szDecimals = 4  # outcomes use 4 decimal places
         active = True
+        outcomePrecision = {
+            'amount': str(self.parse_number(self.parse_precision(szDecimals))),
+            'price': 0.0001,
+        }
         outcomes = [
             {
                 'id': self.outcome_coin(yesEncoding),
                 'outcomeId': self.outcome_coin(yesEncoding),
-                'symbol': yesOutcomeSymbol,
                 'outcome': yesOutcomeSymbol,
-                'marketSymbol': parentSymbol,
                 'market': parentSymbol,
                 'label': yesLabel,
                 'active': active,
+                'precision': outcomePrecision,
                 'info': {
                     'encoding': yesEncoding,
                     'assetId': self.outcome_asset_id(yesEncoding),
@@ -475,12 +478,11 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             {
                 'id': self.outcome_coin(noEncoding),
                 'outcomeId': self.outcome_coin(noEncoding),
-                'symbol': noOutcomeSymbol,
                 'outcome': noOutcomeSymbol,
-                'marketSymbol': parentSymbol,
                 'market': parentSymbol,
                 'label': noLabel,
                 'active': active,
+                'precision': outcomePrecision,
                 'info': {
                     'encoding': noEncoding,
                     'assetId': self.outcome_asset_id(noEncoding),
@@ -526,10 +528,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'percentage': True,
             'tierBased': False,
             'feeSide': 'get',
-            'precision': {
-                'amount': str(self.parse_number(self.parse_precision(szDecimals))),
-                'price': 0.0001,
-            },
+            'precision': outcomePrecision,
             'limits': {
                 'leverage': {'min': None, 'max': None},
                 'amount': {'min': None, 'max': None},
@@ -579,8 +578,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict: a [ticker structure](https://docs.ccxt.com/#/?id=ticker-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         info = self.safe_dict(outcomeObj, 'info', {})
         coin = self.safe_string(info, 'coinName')
@@ -614,15 +612,14 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure)
         """
         outcomes = symbols
-        await self.load_markets()
         requestedOutcomeSymbols = {}
         if outcomes is not None:
             for i in range(0, len(outcomes)):
                 requested = outcomes[i]
-                self.checkEventsAndMarkets(requested)
+                self.checkEvents(requested)
                 requestedOutcomeObj = self.outcome(requested)
-                requestedSymbol = self.safe_string(requestedOutcomeObj, 'symbol', requested)
-                requestedOutcomeSymbols[requestedSymbol] = True
+                requestedOutcome = self.safe_string(requestedOutcomeObj, 'outcome', requested)
+                requestedOutcomeSymbols[requestedOutcome] = True
         response = await self.publicPostInfo(self.extend({'type': 'allMids'}, params))
         #
         # {"mids": {"#10": "0.45", "#11": "0.55", ...}}
@@ -630,12 +627,12 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         mids = self.safe_dict(response, 'mids', response)
         tickers: PredictionTickers = {}
         outcomesMap = self.outcomes if (self.outcomes is not None) else {}
-        outcomeSymbols = list(outcomesMap.keys())
-        for i in range(0, len(outcomeSymbols)):
-            outcomeSymbol = outcomeSymbols[i]
-            if outcomes is not None and not (outcomeSymbol in requestedOutcomeSymbols):
+        outcomeHandles = list(outcomesMap.keys())
+        for i in range(0, len(outcomeHandles)):
+            outcomeHandle = outcomeHandles[i]
+            if outcomes is not None and not (outcomeHandle in requestedOutcomeSymbols):
                 continue
-            outcomeObj = self.safe_dict(outcomesMap, outcomeSymbol, {})
+            outcomeObj = self.safe_dict(outcomesMap, outcomeHandle, {})
             info = self.safe_dict(outcomeObj, 'info', {})
             coin = self.safe_string(info, 'coinName')
             mid = self.safe_number(mids, coin)
@@ -643,7 +640,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
                 continue
             # Build minimal ticker from mid price
             ticker = self.parse_ticker({'levels': [[], []], 'mid': mid, 'time': self.milliseconds()}, outcomeObj)
-            tickers[outcomeSymbol] = ticker
+            tickers[outcomeHandle] = ticker
         return tickers
 
     def parse_ticker(self, raw: dict, market: Market = None) -> PredictionTicker:
@@ -683,7 +680,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         if mid is None and bid is not None and ask is not None:
             mid = self.sum(bid, ask) / 2
         # day volume lives on the parent market's ctx; resolve it from the outcome's marketSymbol
-        parentSymbol = self.safe_string(mkt, 'marketSymbol')
+        parentSymbol = self.safe_string(mkt, 'outcome')
         parentMarket = self.safe_market(parentSymbol) if (parentSymbol is not None) else None
         ctx = self.safe_dict(self.safe_dict(parentMarket, 'info', {}), 'ctx', {}) if (parentMarket is not None) else {}
         dayVolume = self.safe_number(ctx, 'dayNtlVlm')
@@ -691,7 +688,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'symbol': symbol,
             'outcomeId': self.safe_string(mkt, 'id'),
             'label': self.safe_string(mkt, 'label'),
-            'market': self.safe_string(mkt, 'marketSymbol'),
+            'market': self.safe_string(mkt, 'outcome'),
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
             'high': None,
@@ -713,7 +710,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'info': raw,
         }, market)
 
-    async def fetch_order_book(self, symbol: str, limit: Int = None, params={}) -> OrderBook:
+    async def fetch_order_book(self, symbol: str, limit: Int = None, params={}) -> PredictionOrderBook:
         """
         fetches the L2 order book for an outcome market
 
@@ -725,8 +722,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict: an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure)
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         info = self.safe_dict(outcomeObj, 'info', {})
         request = {
@@ -756,7 +752,8 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         for i in range(0, len(rawAsks)):
             entry = rawAsks[i]
             asks.append([self.safe_number(entry, 'px'), self.safe_number(entry, 'sz')])
-        return self.parse_order_book({'bids': bids, 'asks': asks}, self.safe_string(outcomeObj, 'symbol', outcome), timestamp)
+        orderbook = self.parse_order_book({'bids': bids, 'asks': asks}, self.safe_string(outcomeObj, 'symbol', outcome), timestamp)
+        return self.safePredictionOrderBook(orderbook, outcomeObj)
 
     async def fetch_ohlcv(self, symbol: str, timeframe='1m', since: Int = None, limit: Int = None, params={}) -> List[list]:
         """
@@ -773,10 +770,9 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns int[][]: a list of candles ordered, open, high, low, close, volume
         """
         outcome = symbol
-        await self.load_markets()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
-        market = self.market(self.safe_string(outcomeObj, 'marketSymbol'))
+        market = self.market(self.safe_string(outcomeObj, 'outcome'))
         info = self.safe_dict(outcomeObj, 'info', {})
         until = self.safe_integer(params, 'until', self.milliseconds())
         startTime = since
@@ -897,15 +893,14 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
         """
         outcomes = symbols
-        await self.load_markets()
         requestedOutcomeSymbols = {}
         if outcomes is not None:
             for i in range(0, len(outcomes)):
                 requested = outcomes[i]
-                self.checkEventsAndMarkets(requested)
+                self.checkEvents(requested)
                 requestedOutcomeObj = self.outcome(requested)
-                requestedSymbol = self.safe_string(requestedOutcomeObj, 'symbol', requested)
-                requestedOutcomeSymbols[requestedSymbol] = True
+                requestedOutcome = self.safe_string(requestedOutcomeObj, 'outcome', requested)
+                requestedOutcomeSymbols[requestedOutcome] = True
         userAddress: Str
         userAddress, params = self.handle_public_address('fetchPositions', params)
         request = {
@@ -928,8 +923,8 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             outcomeId = '#' + coin[1:]  # +10 ->  #10
             outcomeObj = self.safeOutcome(outcomeId)
             if outcomes is not None:
-                outcomeSymbol = self.safe_string(outcomeObj, 'symbol')
-                if outcomeSymbol is None or not (outcomeSymbol in requestedOutcomeSymbols):
+                outcomeHandle = self.safe_string(outcomeObj, 'outcome')
+                if outcomeHandle is None or not (outcomeHandle in requestedOutcomeSymbols):
                     continue
             positions.append(self.parse_position(balance, outcomeObj))
         return positions
@@ -957,7 +952,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'symbol': self.safe_string(outcomeObj, 'symbol'),
             'outcomeId': self.safe_string(outcomeObj, 'id'),
             'label': self.safe_string(outcomeObj, 'label'),
-            'market': self.safe_string(outcomeObj, 'marketSymbol'),
+            'market': self.safe_string(outcomeObj, 'outcome'),
             'timestamp': None,
             'datetime': None,
             'isolated': False,
@@ -1074,11 +1069,10 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict: an [order structure](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
         await self.initialize_client()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
-        market = self.market(self.safe_string(outcomeObj, 'marketSymbol'))
+        market = self.market(self.safe_string(outcomeObj, 'outcome'))
         outcomeInfo = self.safe_dict(outcomeObj, 'info', {})
         nonce = self.milliseconds()
         isBuy = (side.upper() == 'BUY')
@@ -1101,10 +1095,10 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         if isMarket:
             priceStr = self.number_to_string(price)
             px = Precise.string_mul(priceStr, Precise.string_add('1', slippage)) if isBuy else Precise.string_mul(priceStr, Precise.string_sub('1', slippage))
-            px = self.price_to_precision(self.safe_string(outcomeObj, 'marketSymbol'), px)
+            px = self.price_to_precision(self.safe_string(outcomeObj, 'outcome'), px)
         else:
-            px = self.price_to_precision(self.safe_string(outcomeObj, 'marketSymbol'), price)
-        sz = self.amount_to_precision(self.safe_string(outcomeObj, 'marketSymbol'), amount)
+            px = self.price_to_precision(self.safe_string(outcomeObj, 'outcome'), price)
+        sz = self.amount_to_precision(self.safe_string(outcomeObj, 'outcome'), amount)
         orderType = {
             'limit': {'tif': tif},
         }
@@ -1162,10 +1156,10 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'timestamp': nonce,
             'datetime': self.iso8601(nonce),
             'status': orderStatus,
-            'symbol': self.safe_string(outcomeObj, 'symbol', outcome),
+            'outcome': self.safe_string(outcomeObj, 'outcome', outcome),
             'outcomeId': self.safe_string(outcomeObj, 'id'),
             'label': self.safe_string(outcomeObj, 'label'),
-            'market': self.safe_string(outcomeObj, 'marketSymbol'),
+            'market': self.safe_string(outcomeObj, 'outcome'),
             'type': type,
             'side': side,
             'price': price,
@@ -1209,9 +1203,8 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         self.check_required_credentials()
         if outcome is None:
             raise ArgumentsRequired(self.id + ' cancelOrders() requires an outcome argument')
-        await self.load_markets()
         await self.initialize_client()
-        self.checkEventsAndMarkets(outcome)
+        self.checkEvents(outcome)
         outcomeObj = self.outcome(outcome)
         outcomeInfo = self.safe_dict(outcomeObj, 'info', {})
         assetId = self.safe_integer(outcomeInfo, 'assetId')
@@ -1245,7 +1238,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         innerResponse = self.safe_dict(response, 'response')
         data = self.safe_dict(innerResponse, 'data')
         statuses = self.safe_list(data, 'statuses', [])
-        outcomeSymbol = self.safe_string(outcomeObj, 'symbol', outcome)
+        outcomeSymbol = self.safe_string(outcomeObj, 'outcome', outcome)
         requestIds = ids
         if clientOrderId is not None:
             if isinstance(clientOrderId, list):
@@ -1267,11 +1260,10 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
                 'clientOrderId': requestId if (clientOrderId is not None) else None,
                 'info': status,
                 'status': 'canceled',
-                'symbol': outcomeSymbol,
                 'outcome': outcomeSymbol,
                 'outcomeId': self.safe_string(outcomeObj, 'id'),
                 'label': self.safe_string(outcomeObj, 'label'),
-                'market': self.safe_string(outcomeObj, 'marketSymbol'),
+                'market': self.safe_string(outcomeObj, 'outcome'),
                 'timestamp': self.milliseconds(),
                 'datetime': self.iso8601(self.milliseconds()),
             }
@@ -1293,7 +1285,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
         userAddress: Str
         userAddress, params = self.handle_public_address('fetchOpenOrders', params)
         method: Str
@@ -1307,9 +1298,9 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         parsed = self.parse_orders(ordersWithStatus, None, since, None)
         outcomeHandle: Str = None
         if outcome is not None:
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
             outcomeObj = self.outcome(outcome)
-            outcomeHandle = self.safe_string(outcomeObj, 'symbol')
+            outcomeHandle = self.safe_string(outcomeObj, 'outcome')
         return self.filterByOutcomeSinceLimit(parsed, outcomeHandle, since, limit)
 
     async def fetch_orders(self, symbol: Str = None, since: Int = None, limit: Int = None, params={}) -> List[PredictionOrder]:
@@ -1326,7 +1317,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
         userAddress: Str
         userAddress, params = self.handle_public_address('fetchOrders', params)
         request = {'type': 'historicalOrders', 'user': userAddress}
@@ -1351,9 +1341,9 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         parsed = self.parse_orders(dedupedValues, None, since, None)
         outcomeHandle: Str = None
         if outcome is not None:
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
             outcomeObj = self.outcome(outcome)
-            outcomeHandle = self.safe_string(outcomeObj, 'symbol')
+            outcomeHandle = self.safe_string(outcomeObj, 'outcome')
         return self.filterByOutcomeSinceLimit(parsed, outcomeHandle, since, limit)
 
     async def fetch_order(self, id: str, symbol: Str = None, params={}) -> PredictionOrder:
@@ -1370,7 +1360,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict: an [order structure](https://docs.ccxt.com/#/?id=order-structure)
         """
         outcome = symbol
-        await self.load_markets()
         userAddress: Str
         userAddress, params = self.handle_public_address('fetchOrder', params)
         clientOrderId = self.safe_string(params, 'clientOrderId')
@@ -1385,9 +1374,9 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         orderWrapper = self.safe_dict(response, 'order', response)
         parsed = self.parse_order(orderWrapper, None)
         if outcome is not None:
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
             outcomeObj = self.outcome(outcome)
-            expected = self.safe_string(outcomeObj, 'symbol')
+            expected = self.safe_string(outcomeObj, 'outcome')
             if self.safe_string(parsed, 'outcome') != expected:
                 raise OrderNotFound(self.id + ' fetchOrder() order ' + id + ' is not in outcome ' + expected)
         return parsed
@@ -1423,7 +1412,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         status = self.parse_order_status(self.safe_string_2(order, 'ccxtStatus', 'status'))
         coin = self.safe_string(entry, 'coin')
         outcomeObj = self.safeOutcome(coin, market)
-        marketSymbol = self.safe_string(outcomeObj, 'marketSymbol')
+        marketSymbol = self.safe_string(outcomeObj, 'outcome')
         resolvedMarket = self.safe_market(marketSymbol, market) if marketSymbol else market
         sideRaw = self.safe_string(entry, 'side')
         side = 'buy' if (sideRaw == 'B') else 'sell'
@@ -1444,10 +1433,10 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'datetime': self.iso8601(timestamp),
             'lastTradeTimestamp': None,
             'status': status,
-            'symbol': self.safe_string(outcomeObj, 'symbol'),
+            'outcome': self.safe_string(outcomeObj, 'outcome'),
             'outcomeId': self.safe_string(outcomeObj, 'id'),
             'label': self.safe_string(outcomeObj, 'label'),
-            'market': self.safe_string(outcomeObj, 'marketSymbol'),
+            'market': self.safe_string(outcomeObj, 'outcome'),
             'type': self.parse_order_type(self.safe_string(entry, 'orderType', 'limit')),
             'timeInForce': tif,
             'postOnly': postOnly,
@@ -1514,7 +1503,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns dict[]: a list of [trade structures](https://docs.ccxt.com/#/?id=trade-structure)
         """
         outcome = symbol
-        await self.load_markets()
         userAddress: Str
         userAddress, params = self.handle_public_address('fetchMyTrades', params)
         request = {'user': userAddress}
@@ -1531,9 +1519,9 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         parsed = self.parse_trades(response, None, since, None)
         outcomeHandle: Str = None
         if outcome is not None:
-            self.checkEventsAndMarkets(outcome)
+            self.checkEvents(outcome)
             outcomeObj = self.outcome(outcome)
-            outcomeHandle = self.safe_string(outcomeObj, 'symbol')
+            outcomeHandle = self.safe_string(outcomeObj, 'outcome')
         return self.filterByOutcomeSinceLimit(parsed, outcomeHandle, since, limit)
 
     def parse_trade(self, trade: dict, market: Market = None) -> PredictionTrade:
@@ -1568,13 +1556,13 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         amount = self.safe_string(trade, 'sz')
         coin = self.safe_string(trade, 'coin')
         outcomeObj = self.safeOutcome(coin, market)
-        marketSymbol = self.safe_string(outcomeObj, 'marketSymbol')
+        marketSymbol = self.safe_string(outcomeObj, 'outcome')
         resolvedMarket = self.safe_market(marketSymbol, market) if marketSymbol else market
         rawSide = self.safe_string(trade, 'side')
         side = 'buy' if (rawSide == 'B') else 'sell'
         fee = self.safe_number(trade, 'fee')
         feeCurrency = self.safe_string(trade, 'feeToken', 'USDC')
-        outcomeSymbol = self.safe_string(outcomeObj, 'symbol')
+        outcomeSymbol = self.safe_string(outcomeObj, 'outcome')
         feeObject = None
         if fee is not None:
             feeObject = {'cost': fee, 'currency': feeCurrency}
@@ -1586,11 +1574,10 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'info': trade,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'symbol': outcomeSymbol,
             'outcome': outcomeSymbol,
             'outcomeId': self.safe_string(outcomeObj, 'id'),
             'label': self.safe_string(outcomeObj, 'label'),
-            'market': self.safe_string(outcomeObj, 'marketSymbol'),
+            'market': self.safe_string(outcomeObj, 'outcome'),
             'order': self.safe_string(trade, 'oid'),
             'type': 'limit',
             'side': side,
@@ -1601,7 +1588,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             'fee': feeObject,
         }, resolvedMarket)
 
-    async def fetch_events(self, params={}) -> List[PredictionEvent]:
+    async def fetch_events(self, params: fetchEventsParams = {}) -> List[PredictionEvent]:
         """
         Groups outcome markets by their underlying(e.g. BTC-ABOVE-78213) into event structures. Each event contains both the YES and NO markets.
         :param dict [params]: extra parameters
@@ -1610,7 +1597,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :returns PredictionEvent[]: array of event structures
         """
         queries = self.parseSearchQueries(params)
-        await self.load_markets()
         marketValues = list(self.markets.values())
         # Group markets by parentSymbol
         groupMap = {}
@@ -1652,7 +1638,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         for i in range(0, len(events)):
             ev = events[i]
             self.events[ev['symbol']] = ev
-        return events
+        return self.applyEventFetchParams(events, params, queries)
 
     def parse_event(self, raw: dict) -> Any:
         """

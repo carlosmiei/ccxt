@@ -3255,7 +3255,9 @@ class Exchange(object):
             result = []
             for i in range(0, len(parsedArray)):
                 entry = parsedArray[i]
-                entryFiledEqualValue = entry[field] == value
+                # safeValue(not entry[field]) so a missing field is a non-match, not a
+                # KeyError in python/php — prediction structures key on outcome, not symbol
+                entryFiledEqualValue = self.safe_value(entry, field) == value
                 firstCondition = entryFiledEqualValue if valueIsDefined else True
                 entryKeyValue = self.safe_value(entry, key)
                 entryKeyGESince = (entryKeyValue) and (since is not None) and (entryKeyValue >= since)
@@ -4997,15 +4999,18 @@ class Exchange(object):
             'bids': self.sort_by(self.aggregate(orderbook['bids']), 0, True),
         })
 
-    def filter_by_symbol(self, objects, symbol: Str = None):
-        if symbol is None:
+    def filter_by_key(self, objects, key: IndexType, value: Str = None):
+        if value is None:
             return objects
         result = []
         for i in range(0, len(objects)):
-            objectSymbol = self.safe_string(objects[i], 'symbol')
-            if objectSymbol == symbol:
+            objectValue = self.safe_string(objects[i], key)
+            if objectValue == value:
                 result.append(objects[i])
         return result
+
+    def filter_by_symbol(self, objects, symbol: Str = None):
+        return self.filter_by_key(objects, 'symbol', symbol)
 
     def parse_ohlcv(self, ohlcv, market: Market = None) -> list:
         if isinstance(ohlcv, list):

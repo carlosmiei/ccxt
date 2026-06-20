@@ -500,16 +500,19 @@ class hyperliquid extends Exchange {
         $quoteCurrency = $this->safe_string($this->options, 'outcomeQuoteCurrency', 'USDH');
         $szDecimals = 4;  // $outcomes use 4 decimal places
         $active = true;
+        $outcomePrecision = array(
+            'amount' => (string) $this->parse_number($this->parse_precision($szDecimals)),
+            'price' => 0.0001,
+        );
         $outcomes = array(
             array(
                 'id' => $this->outcome_coin($yesEncoding),
                 'outcomeId' => $this->outcome_coin($yesEncoding),
-                'symbol' => $yesOutcomeSymbol,
                 'outcome' => $yesOutcomeSymbol,
-                'marketSymbol' => $parentSymbol,
                 'market' => $parentSymbol,
                 'label' => $yesLabel,
                 'active' => $active,
+                'precision' => $outcomePrecision,
                 'info' => array(
                     'encoding' => $yesEncoding,
                     'assetId' => $this->outcome_asset_id($yesEncoding),
@@ -525,12 +528,11 @@ class hyperliquid extends Exchange {
             array(
                 'id' => $this->outcome_coin($noEncoding),
                 'outcomeId' => $this->outcome_coin($noEncoding),
-                'symbol' => $noOutcomeSymbol,
                 'outcome' => $noOutcomeSymbol,
-                'marketSymbol' => $parentSymbol,
                 'market' => $parentSymbol,
                 'label' => $noLabel,
                 'active' => $active,
+                'precision' => $outcomePrecision,
                 'info' => array(
                     'encoding' => $noEncoding,
                     'assetId' => $this->outcome_asset_id($noEncoding),
@@ -576,10 +578,7 @@ class hyperliquid extends Exchange {
             'percentage' => true,
             'tierBased' => false,
             'feeSide' => 'get',
-            'precision' => array(
-                'amount' => (string) $this->parse_number($this->parse_precision($szDecimals)),
-                'price' => 0.0001,
-            ),
+            'precision' => $outcomePrecision,
             'limits' => array(
                 'leverage' => array( 'min' => null, 'max' => null ),
                 'amount' => array( 'min' => null, 'max' => null ),
@@ -634,8 +633,7 @@ class hyperliquid extends Exchange {
              * @return {array} a [ticker structure](https://docs.ccxt.com/#/?id=ticker-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
-            $this->checkEventsAndMarkets ($outcome);
+            $this->checkEvents ($outcome);
             $outcomeObj = $this->outcome ($outcome);
             $info = $this->safe_dict($outcomeObj, 'info', array());
             $coin = $this->safe_string($info, 'coinName');
@@ -672,15 +670,14 @@ class hyperliquid extends Exchange {
              * @return {array} a dictionary of [$ticker structures](https://docs.ccxt.com/#/?id=$ticker-structure)
              */
             $outcomes = $symbols;
-            Async\await($this->load_markets());
             $requestedOutcomeSymbols = array();
             if ($outcomes !== null) {
                 for ($i = 0; $i < count($outcomes); $i++) {
                     $requested = $outcomes[$i];
-                    $this->checkEventsAndMarkets ($requested);
+                    $this->checkEvents ($requested);
                     $requestedOutcomeObj = $this->outcome ($requested);
-                    $requestedSymbol = $this->safe_string($requestedOutcomeObj, 'symbol', $requested);
-                    $requestedOutcomeSymbols[$requestedSymbol] = true;
+                    $requestedOutcome = $this->safe_string($requestedOutcomeObj, 'outcome', $requested);
+                    $requestedOutcomeSymbols[$requestedOutcome] = true;
                 }
             }
             $response = Async\await($this->publicPostInfo ($this->extend(array( 'type' => 'allMids' ), $params)));
@@ -690,13 +687,13 @@ class hyperliquid extends Exchange {
             $mids = $this->safe_dict($response, 'mids', $response);
             $tickers = array();
             $outcomesMap = ($this->outcomes !== null) ? $this->outcomes : array();
-            $outcomeSymbols = is_array($outcomesMap) ? array_keys($outcomesMap) : array();
-            for ($i = 0; $i < count($outcomeSymbols); $i++) {
-                $outcomeSymbol = $outcomeSymbols[$i];
-                if ($outcomes !== null && !(is_array($requestedOutcomeSymbols) && array_key_exists($outcomeSymbol, $requestedOutcomeSymbols))) {
+            $outcomeHandles = is_array($outcomesMap) ? array_keys($outcomesMap) : array();
+            for ($i = 0; $i < count($outcomeHandles); $i++) {
+                $outcomeHandle = $outcomeHandles[$i];
+                if ($outcomes !== null && !(is_array($requestedOutcomeSymbols) && array_key_exists($outcomeHandle, $requestedOutcomeSymbols))) {
                     continue;
                 }
-                $outcomeObj = $this->safe_dict($outcomesMap, $outcomeSymbol, array());
+                $outcomeObj = $this->safe_dict($outcomesMap, $outcomeHandle, array());
                 $info = $this->safe_dict($outcomeObj, 'info', array());
                 $coin = $this->safe_string($info, 'coinName');
                 $mid = $this->safe_number($mids, $coin);
@@ -705,7 +702,7 @@ class hyperliquid extends Exchange {
                 }
                 // Build minimal $ticker from $mid price
                 $ticker = $this->parse_ticker(array( 'levels' => array( array(), array() ), 'mid' => $mid, 'time' => $this->milliseconds() ), $outcomeObj);
-                $tickers[$outcomeSymbol] = $ticker;
+                $tickers[$outcomeHandle] = $ticker;
             }
             return $tickers;
         }) ();
@@ -749,7 +746,7 @@ class hyperliquid extends Exchange {
             $mid = $this->sum($bid, $ask) / 2;
         }
         // day volume lives on the parent market's $ctx; resolve it from the outcome's marketSymbol
-        $parentSymbol = $this->safe_string($mkt, 'marketSymbol');
+        $parentSymbol = $this->safe_string($mkt, 'outcome');
         $parentMarket = ($parentSymbol !== null) ? $this->safe_market($parentSymbol) : null;
         $ctx = ($parentMarket !== null) ? $this->safe_dict($this->safe_dict($parentMarket, 'info', array()), 'ctx', array()) : array();
         $dayVolume = $this->safe_number($ctx, 'dayNtlVlm');
@@ -757,7 +754,7 @@ class hyperliquid extends Exchange {
             'symbol' => $symbol,
             'outcomeId' => $this->safe_string($mkt, 'id'),
             'label' => $this->safe_string($mkt, 'label'),
-            'market' => $this->safe_string($mkt, 'marketSymbol'),
+            'market' => $this->safe_string($mkt, 'outcome'),
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601($timestamp),
             'high' => null,
@@ -793,8 +790,7 @@ class hyperliquid extends Exchange {
              * @return {array} an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
-            $this->checkEventsAndMarkets ($outcome);
+            $this->checkEvents ($outcome);
             $outcomeObj = $this->outcome ($outcome);
             $info = $this->safe_dict($outcomeObj, 'info', array());
             $request = array(
@@ -826,7 +822,8 @@ class hyperliquid extends Exchange {
                 $entry = $rawAsks[$i];
                 $asks[] = array( $this->safe_number($entry, 'px'), $this->safe_number($entry, 'sz') );
             }
-            return $this->parse_order_book(array( 'bids' => $bids, 'asks' => $asks ), $this->safe_string($outcomeObj, 'symbol', $outcome), $timestamp);
+            $orderbook = $this->parse_order_book(array( 'bids' => $bids, 'asks' => $asks ), $this->safe_string($outcomeObj, 'symbol', $outcome), $timestamp);
+            return $this->safePredictionOrderBook ($orderbook, $outcomeObj);
         }) ();
     }
 
@@ -846,10 +843,9 @@ class hyperliquid extends Exchange {
              * @return {int[][]} a list of candles ordered, open, high, low, close, volume
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
-            $this->checkEventsAndMarkets ($outcome);
+            $this->checkEvents ($outcome);
             $outcomeObj = $this->outcome ($outcome);
-            $market = $this->market($this->safe_string($outcomeObj, 'marketSymbol'));
+            $market = $this->market($this->safe_string($outcomeObj, 'outcome'));
             $info = $this->safe_dict($outcomeObj, 'info', array());
             $until = $this->safe_integer($params, 'until', $this->milliseconds());
             $startTime = $since;
@@ -979,15 +975,14 @@ class hyperliquid extends Exchange {
              * @return {array[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
              */
             $outcomes = $symbols;
-            Async\await($this->load_markets());
             $requestedOutcomeSymbols = array();
             if ($outcomes !== null) {
                 for ($i = 0; $i < count($outcomes); $i++) {
                     $requested = $outcomes[$i];
-                    $this->checkEventsAndMarkets ($requested);
+                    $this->checkEvents ($requested);
                     $requestedOutcomeObj = $this->outcome ($requested);
-                    $requestedSymbol = $this->safe_string($requestedOutcomeObj, 'symbol', $requested);
-                    $requestedOutcomeSymbols[$requestedSymbol] = true;
+                    $requestedOutcome = $this->safe_string($requestedOutcomeObj, 'outcome', $requested);
+                    $requestedOutcomeSymbols[$requestedOutcome] = true;
                 }
             }
             list($userAddress, $params) = $this->handle_public_address('fetchPositions', $params);
@@ -1013,8 +1008,8 @@ class hyperliquid extends Exchange {
                 $outcomeId = '#' . mb_substr($coin, 1); // +10 -> #10
                 $outcomeObj = $this->safeOutcome ($outcomeId);
                 if ($outcomes !== null) {
-                    $outcomeSymbol = $this->safe_string($outcomeObj, 'symbol');
-                    if ($outcomeSymbol === null || !(is_array($requestedOutcomeSymbols) && array_key_exists($outcomeSymbol, $requestedOutcomeSymbols))) {
+                    $outcomeHandle = $this->safe_string($outcomeObj, 'outcome');
+                    if ($outcomeHandle === null || !(is_array($requestedOutcomeSymbols) && array_key_exists($outcomeHandle, $requestedOutcomeSymbols))) {
                         continue;
                     }
                 }
@@ -1048,7 +1043,7 @@ class hyperliquid extends Exchange {
             'symbol' => $this->safe_string($outcomeObj, 'symbol'),
             'outcomeId' => $this->safe_string($outcomeObj, 'id'),
             'label' => $this->safe_string($outcomeObj, 'label'),
-            'market' => $this->safe_string($outcomeObj, 'marketSymbol'),
+            'market' => $this->safe_string($outcomeObj, 'outcome'),
             'timestamp' => null,
             'datetime' => null,
             'isolated' => false,
@@ -1192,11 +1187,10 @@ class hyperliquid extends Exchange {
              * @return {array} an [order structure](https://docs.ccxt.com/#/?id=order-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
             Async\await($this->initialize_client());
-            $this->checkEventsAndMarkets ($outcome);
+            $this->checkEvents ($outcome);
             $outcomeObj = $this->outcome ($outcome);
-            $market = $this->market($this->safe_string($outcomeObj, 'marketSymbol'));
+            $market = $this->market($this->safe_string($outcomeObj, 'outcome'));
             $outcomeInfo = $this->safe_dict($outcomeObj, 'info', array());
             $nonce = $this->milliseconds();
             $isBuy = (strtoupper($side) === 'BUY');
@@ -1221,11 +1215,11 @@ class hyperliquid extends Exchange {
             if ($isMarket) {
                 $priceStr = $this->number_to_string($price);
                 $px = $isBuy ? Precise::string_mul($priceStr, Precise::string_add('1', $slippage)) : Precise::string_mul($priceStr, Precise::string_sub('1', $slippage));
-                $px = $this->price_to_precision($this->safe_string($outcomeObj, 'marketSymbol'), $px);
+                $px = $this->price_to_precision($this->safe_string($outcomeObj, 'outcome'), $px);
             } else {
-                $px = $this->price_to_precision($this->safe_string($outcomeObj, 'marketSymbol'), $price);
+                $px = $this->price_to_precision($this->safe_string($outcomeObj, 'outcome'), $price);
             }
-            $sz = $this->amount_to_precision($this->safe_string($outcomeObj, 'marketSymbol'), $amount);
+            $sz = $this->amount_to_precision($this->safe_string($outcomeObj, 'outcome'), $amount);
             $orderType = array(
                 'limit' => array( 'tif' => $tif ),
             );
@@ -1286,10 +1280,10 @@ class hyperliquid extends Exchange {
                 'timestamp' => $nonce,
                 'datetime' => $this->iso8601($nonce),
                 'status' => $orderStatus,
-                'symbol' => $this->safe_string($outcomeObj, 'symbol', $outcome),
+                'outcome' => $this->safe_string($outcomeObj, 'outcome', $outcome),
                 'outcomeId' => $this->safe_string($outcomeObj, 'id'),
                 'label' => $this->safe_string($outcomeObj, 'label'),
-                'market' => $this->safe_string($outcomeObj, 'marketSymbol'),
+                'market' => $this->safe_string($outcomeObj, 'outcome'),
                 'type' => $type,
                 'side' => $side,
                 'price' => $price,
@@ -1340,9 +1334,8 @@ class hyperliquid extends Exchange {
             if ($outcome === null) {
                 throw new ArgumentsRequired($this->id . ' cancelOrders() requires an $outcome argument');
             }
-            Async\await($this->load_markets());
             Async\await($this->initialize_client());
-            $this->checkEventsAndMarkets ($outcome);
+            $this->checkEvents ($outcome);
             $outcomeObj = $this->outcome ($outcome);
             $outcomeInfo = $this->safe_dict($outcomeObj, 'info', array());
             $assetId = $this->safe_integer($outcomeInfo, 'assetId');
@@ -1380,7 +1373,7 @@ class hyperliquid extends Exchange {
             $innerResponse = $this->safe_dict($response, 'response');
             $data = $this->safe_dict($innerResponse, 'data');
             $statuses = $this->safe_list($data, 'statuses', array());
-            $outcomeSymbol = $this->safe_string($outcomeObj, 'symbol', $outcome);
+            $outcomeSymbol = $this->safe_string($outcomeObj, 'outcome', $outcome);
             $requestIds = $ids;
             if ($clientOrderId !== null) {
                 if ((gettype($clientOrderId) === 'array' && array_keys($clientOrderId) === array_keys(array_keys($clientOrderId)))) {
@@ -1406,11 +1399,10 @@ class hyperliquid extends Exchange {
                     'clientOrderId' => ($clientOrderId !== null) ? $requestId : null,
                     'info' => $status,
                     'status' => 'canceled',
-                    'symbol' => $outcomeSymbol,
                     'outcome' => $outcomeSymbol,
                     'outcomeId' => $this->safe_string($outcomeObj, 'id'),
                     'label' => $this->safe_string($outcomeObj, 'label'),
-                    'market' => $this->safe_string($outcomeObj, 'marketSymbol'),
+                    'market' => $this->safe_string($outcomeObj, 'outcome'),
                     'timestamp' => $this->milliseconds(),
                     'datetime' => $this->iso8601($this->milliseconds()),
                 );
@@ -1436,7 +1428,6 @@ class hyperliquid extends Exchange {
              * @return {array[]} a list of [$order structures](https://docs.ccxt.com/#/?id=$order-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
             list($userAddress, $params) = $this->handle_public_address('fetchOpenOrders', $params);
             list($method, $params) = $this->handle_option_and_params($params, 'fetchOpenOrders', 'method', 'frontendOpenOrders');
             $request = array( 'type' => $method, 'user' => $userAddress );
@@ -1449,9 +1440,9 @@ class hyperliquid extends Exchange {
             $parsed = $this->parse_orders($ordersWithStatus, null, $since, null);
             $outcomeHandle = null;
             if ($outcome !== null) {
-                $this->checkEventsAndMarkets ($outcome);
+                $this->checkEvents ($outcome);
                 $outcomeObj = $this->outcome ($outcome);
-                $outcomeHandle = $this->safe_string($outcomeObj, 'symbol');
+                $outcomeHandle = $this->safe_string($outcomeObj, 'outcome');
             }
             return $this->filterByOutcomeSinceLimit ($parsed, $outcomeHandle, $since, $limit);
         }) ();
@@ -1472,7 +1463,6 @@ class hyperliquid extends Exchange {
              * @return {array[]} a list of [order structures](https://docs.ccxt.com/#/?id=order-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
             list($userAddress, $params) = $this->handle_public_address('fetchOrders', $params);
             $request = array( 'type' => 'historicalOrders', 'user' => $userAddress );
             $response = Async\await($this->publicPostInfo ($this->extend($request, $params)));
@@ -1501,9 +1491,9 @@ class hyperliquid extends Exchange {
             $parsed = $this->parse_orders($dedupedValues, null, $since, null);
             $outcomeHandle = null;
             if ($outcome !== null) {
-                $this->checkEventsAndMarkets ($outcome);
+                $this->checkEvents ($outcome);
                 $outcomeObj = $this->outcome ($outcome);
-                $outcomeHandle = $this->safe_string($outcomeObj, 'symbol');
+                $outcomeHandle = $this->safe_string($outcomeObj, 'outcome');
             }
             return $this->filterByOutcomeSinceLimit ($parsed, $outcomeHandle, $since, $limit);
         }) ();
@@ -1524,7 +1514,6 @@ class hyperliquid extends Exchange {
              * @return {array} an [order structure](https://docs.ccxt.com/#/?$id=order-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
             list($userAddress, $params) = $this->handle_public_address('fetchOrder', $params);
             $clientOrderId = $this->safe_string($params, 'clientOrderId');
             $request = array( 'type' => 'orderStatus', 'user' => $userAddress );
@@ -1539,9 +1528,9 @@ class hyperliquid extends Exchange {
             $orderWrapper = $this->safe_dict($response, 'order', $response);
             $parsed = $this->parse_order($orderWrapper, null);
             if ($outcome !== null) {
-                $this->checkEventsAndMarkets ($outcome);
+                $this->checkEvents ($outcome);
                 $outcomeObj = $this->outcome ($outcome);
-                $expected = $this->safe_string($outcomeObj, 'symbol');
+                $expected = $this->safe_string($outcomeObj, 'outcome');
                 if ($this->safe_string($parsed, 'outcome') !== $expected) {
                     throw new OrderNotFound($this->id . ' fetchOrder() order ' . $id . ' is not in $outcome ' . $expected);
                 }
@@ -1581,7 +1570,7 @@ class hyperliquid extends Exchange {
         $status = $this->parse_order_status($this->safe_string_2($order, 'ccxtStatus', 'status'));
         $coin = $this->safe_string($entry, 'coin');
         $outcomeObj = $this->safeOutcome ($coin, $market);
-        $marketSymbol = $this->safe_string($outcomeObj, 'marketSymbol');
+        $marketSymbol = $this->safe_string($outcomeObj, 'outcome');
         $resolvedMarket = $marketSymbol ? $this->safe_market($marketSymbol, $market) : $market;
         $sideRaw = $this->safe_string($entry, 'side');
         $side = ($sideRaw === 'B') ? 'buy' : 'sell';
@@ -1603,10 +1592,10 @@ class hyperliquid extends Exchange {
             'datetime' => $this->iso8601($timestamp),
             'lastTradeTimestamp' => null,
             'status' => $status,
-            'symbol' => $this->safe_string($outcomeObj, 'symbol'),
+            'outcome' => $this->safe_string($outcomeObj, 'outcome'),
             'outcomeId' => $this->safe_string($outcomeObj, 'id'),
             'label' => $this->safe_string($outcomeObj, 'label'),
-            'market' => $this->safe_string($outcomeObj, 'marketSymbol'),
+            'market' => $this->safe_string($outcomeObj, 'outcome'),
             'type' => $this->parse_order_type($this->safe_string($entry, 'orderType', 'limit')),
             'timeInForce' => $tif,
             'postOnly' => $postOnly,
@@ -1681,7 +1670,6 @@ class hyperliquid extends Exchange {
              * @return {array[]} a list of [trade structures](https://docs.ccxt.com/#/?id=trade-structure)
              */
             $outcome = $symbol;
-            Async\await($this->load_markets());
             list($userAddress, $params) = $this->handle_public_address('fetchMyTrades', $params);
             $request = array( 'user' => $userAddress );
             if ($since !== null) {
@@ -1699,9 +1687,9 @@ class hyperliquid extends Exchange {
             $parsed = $this->parse_trades($response, null, $since, null);
             $outcomeHandle = null;
             if ($outcome !== null) {
-                $this->checkEventsAndMarkets ($outcome);
+                $this->checkEvents ($outcome);
                 $outcomeObj = $this->outcome ($outcome);
-                $outcomeHandle = $this->safe_string($outcomeObj, 'symbol');
+                $outcomeHandle = $this->safe_string($outcomeObj, 'outcome');
             }
             return $this->filterByOutcomeSinceLimit ($parsed, $outcomeHandle, $since, $limit);
         }) ();
@@ -1739,13 +1727,13 @@ class hyperliquid extends Exchange {
         $amount = $this->safe_string($trade, 'sz');
         $coin = $this->safe_string($trade, 'coin');
         $outcomeObj = $this->safeOutcome ($coin, $market);
-        $marketSymbol = $this->safe_string($outcomeObj, 'marketSymbol');
+        $marketSymbol = $this->safe_string($outcomeObj, 'outcome');
         $resolvedMarket = $marketSymbol ? $this->safe_market($marketSymbol, $market) : $market;
         $rawSide = $this->safe_string($trade, 'side');
         $side = ($rawSide === 'B') ? 'buy' : 'sell';
         $fee = $this->safe_number($trade, 'fee');
         $feeCurrency = $this->safe_string($trade, 'feeToken', 'USDC');
-        $outcomeSymbol = $this->safe_string($outcomeObj, 'symbol');
+        $outcomeSymbol = $this->safe_string($outcomeObj, 'outcome');
         $feeObject = null;
         if ($fee !== null) {
             $feeObject = array( 'cost' => $fee, 'currency' => $feeCurrency );
@@ -1759,11 +1747,10 @@ class hyperliquid extends Exchange {
             'info' => $trade,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601($timestamp),
-            'symbol' => $outcomeSymbol,
             'outcome' => $outcomeSymbol,
             'outcomeId' => $this->safe_string($outcomeObj, 'id'),
             'label' => $this->safe_string($outcomeObj, 'label'),
-            'market' => $this->safe_string($outcomeObj, 'marketSymbol'),
+            'market' => $this->safe_string($outcomeObj, 'outcome'),
             'order' => $this->safe_string($trade, 'oid'),
             'type' => 'limit',
             'side' => $side,
@@ -1775,71 +1762,68 @@ class hyperliquid extends Exchange {
         ), $resolvedMarket);
     }
 
-    public function fetch_events($params = array ()): PromiseInterface {
-        return Async\async(function () use ($params) {
-            /**
-             * Groups outcome markets by their underlying (e.g. BTC-ABOVE-78213) into $event structures. Each $event contains both the YES and NO markets.
-             * @param {array} [$params] extra parameters
-             * @param {string} [$params->query] a single query string to filter by ($matches description/symbol)
-             * @param {string[]} [$params->queries] multiple query strings (alternative to query)
-             * @return {PredictionEvent[]} array of $event structures
-             */
-            $queries = $this->parseSearchQueries ($params);
-            Async\await($this->load_markets());
-            $marketValues = is_array($this->markets) ? array_values($this->markets) : array();
-            // Group markets by $parentSymbol
-            $groupMap = array();
-            $lowerQueries = array();
-            for ($i = 0; $i < count($queries); $i++) {
-                $queryString = $queries[$i];
-                $lowerQueries[] = strtolower($queryString);
+    public function fetch_events(array $params = array ()): PromiseInterface {
+        /**
+         * Groups outcome markets by their underlying (e.g. BTC-ABOVE-78213) into $event structures. Each $event contains both the YES and NO markets.
+         * @param {array} [$params] extra parameters
+         * @param {string} [$params->query] a single query string to filter by ($matches description/symbol)
+         * @param {string[]} [$params->queries] multiple query strings (alternative to query)
+         * @return {PredictionEvent[]} array of $event structures
+         */
+        $queries = $this->parseSearchQueries ($params);
+        $marketValues = is_array($this->markets) ? array_values($this->markets) : array();
+        // Group markets by $parentSymbol
+        $groupMap = array();
+        $lowerQueries = array();
+        for ($i = 0; $i < count($queries); $i++) {
+            $queryString = $queries[$i];
+            $lowerQueries[] = strtolower($queryString);
+        }
+        $lowerQueriesLength = count($lowerQueries);
+        for ($i = 0; $i < count($marketValues); $i++) {
+            $mkt = $marketValues[$i];
+            if (!$this->safe_bool($mkt, 'prediction', false)) {
+                continue;
             }
-            $lowerQueriesLength = count($lowerQueries);
-            for ($i = 0; $i < count($marketValues); $i++) {
-                $mkt = $marketValues[$i];
-                if (!$this->safe_bool($mkt, 'prediction', false)) {
+            $info = $this->safe_dict($mkt, 'info', array());
+            $parentSymbol = $this->safe_string($info, 'parentSymbol', $this->safe_string($mkt, 'symbol'));
+            // Apply query filter
+            if ($lowerQueriesLength > 0) {
+                $description = strtolower($this->safe_string($info, 'description', ''));
+                $parentSymbolOrEmpty = ($parentSymbol !== null) ? $parentSymbol : '';
+                $symLower = strtolower($parentSymbolOrEmpty);
+                $matches = false;
+                for ($qi = 0; $qi < count($lowerQueries); $qi++) {
+                    if (mb_strpos($description, $lowerQueries[$qi]) > -1 || mb_strpos($symLower, $lowerQueries[$qi]) > -1) {
+                        $matches = true;
+                        break;
+                    }
+                }
+                if (!$matches) {
                     continue;
                 }
-                $info = $this->safe_dict($mkt, 'info', array());
-                $parentSymbol = $this->safe_string($info, 'parentSymbol', $this->safe_string($mkt, 'symbol'));
-                // Apply query filter
-                if ($lowerQueriesLength > 0) {
-                    $description = strtolower($this->safe_string($info, 'description', ''));
-                    $parentSymbolOrEmpty = ($parentSymbol !== null) ? $parentSymbol : '';
-                    $symLower = strtolower($parentSymbolOrEmpty);
-                    $matches = false;
-                    for ($qi = 0; $qi < count($lowerQueries); $qi++) {
-                        if (mb_strpos($description, $lowerQueries[$qi]) > -1 || mb_strpos($symLower, $lowerQueries[$qi]) > -1) {
-                            $matches = true;
-                            break;
-                        }
-                    }
-                    if (!$matches) {
-                        continue;
-                    }
-                }
-                if (!(is_array($groupMap) && array_key_exists($parentSymbol, $groupMap))) {
-                    $groupMap[$parentSymbol] = array();
-                }
-                ($groupMap[$parentSymbol])[] = $mkt;
             }
-            $events = array();
-            $groupKeys = is_array($groupMap) ? array_keys($groupMap) : array();
-            for ($gi = 0; $gi < count($groupKeys); $gi++) {
-                $key = $groupKeys[$gi];
-                $groupMarkets = $groupMap[$key];
-                $event = $this->parse_event(array( 'parentSymbol' => $key, 'markets' => $groupMarkets ));
-                $events[] = $event;
+            if (!(is_array($groupMap) && array_key_exists($parentSymbol, $groupMap))) {
+                $groupMap[$parentSymbol] = array();
             }
-            if (!$this->events) {
-                $this->events = array();
-            }
-            for ($i = 0; $i < count($events); $i++) {
-                $ev = $events[$i];
-                $this->events[$ev['symbol']] = $ev;
-            }
-            return $events;
-        }) ();
+            ($groupMap[$parentSymbol])[] = $mkt;
+        }
+        $events = array();
+        $groupKeys = is_array($groupMap) ? array_keys($groupMap) : array();
+        for ($gi = 0; $gi < count($groupKeys); $gi++) {
+            $key = $groupKeys[$gi];
+            $groupMarkets = $groupMap[$key];
+            $event = $this->parse_event(array( 'parentSymbol' => $key, 'markets' => $groupMarkets ));
+            $events[] = $event;
+        }
+        if (!$this->events) {
+            $this->events = array();
+        }
+        for ($i = 0; $i < count($events); $i++) {
+            $ev = $events[$i];
+            $this->events[$ev['symbol']] = $ev;
+        }
+        return $this->applyEventFetchParams ($events, $params, $queries);
     }
 
     public function parse_event(array $raw): mixed {

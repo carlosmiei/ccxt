@@ -188,11 +188,12 @@
 					"lastTradePrice": null
 				},
 				"parsedResponse": {
+					"outcome": "USA_AUSTRALIA_BOTH_SCORE_1779980360817:YES",
 					"outcomeId": "86754852064474869881286364251658764942266025328391522221494274517474936254814",
 					"label": "yes",
 					"market": "USA_AUSTRALIA_BOTH_SCORE_1779980360817",
-					"timestamp": 1781895630727,
-					"datetime": "2026-06-19T19:00:30.727Z",
+					"timestamp": 1781915899427,
+					"datetime": "2026-06-20T00:38:19.427Z",
 					"high": null,
 					"low": null,
 					"bid": 0.466,
@@ -561,7 +562,6 @@
 					},
 					"indexPrice": null,
 					"markPrice": null,
-					"outcome": "USA_AUSTRALIA_BOTH_SCORE_1779980360817:YES",
 					"event": null
 				}
 			}
@@ -636,7 +636,7 @@
 					"lastTradePrice": null
 				},
 				"parsedResponse": {
-					"symbol": "USA_AUSTRALIA_BOTH_SCORE_1779980360817:YES",
+					"outcome": "USA_AUSTRALIA_BOTH_SCORE_1779980360817:YES",
 					"bids": [
 						[
 							0.466,
@@ -681,9 +681,11 @@
 							500
 						]
 					],
-					"timestamp": 1781895630929,
-					"datetime": "2026-06-19T19:00:30.929Z",
-					"nonce": null
+					"timestamp": 1781915899630,
+					"datetime": "2026-06-20T00:38:19.630Z",
+					"nonce": null,
+					"outcomeId": "86754852064474869881286364251658764942266025328391522221494274517474936254814",
+					"market": "USA_AUSTRALIA_BOTH_SCORE_1779980360817"
 				}
 			}
 		],

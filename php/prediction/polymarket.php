@@ -980,10 +980,7 @@ class polymarket extends Exchange {
             //
             $timestamp = $this->safe_integer($response, 'timestamp');
             $orderbook = $this->parse_order_book($response, $this->safeOutcomeSymbol ($outcome, $outcomeObj), $timestamp, 'bids', 'asks', 'price', 'size');
-            $orderbook['outcome'] = $this->safe_string($outcomeObj, 'outcome');
-            $orderbook['outcomeId'] = $this->safe_string($outcomeObj, 'outcomeId');
-            $orderbook['market'] = $this->safe_string($outcomeObj, 'market');
-            return $orderbook;
+            return $this->safePredictionOrderBook ($orderbook, $outcomeObj);
         }) ();
     }
 
@@ -2071,7 +2068,7 @@ class polymarket extends Exchange {
         }) ();
     }
 
-    public function fetch_events(fetchEventsParams $params = array ()): PromiseInterface {
+    public function fetch_events(array $params = array ()): PromiseInterface {
         return Async\async(function () use ($params) {
             /**
              * fetches prediction-$market events matching the given search terms (or all active events when omitted) and caches their markets and outcomes on the instance

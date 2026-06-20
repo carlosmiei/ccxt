@@ -783,8 +783,9 @@ public class HyperliquidCore extends HyperliquidApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
+            Object symbols = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object outcomes = symbols;
             Object requestedOutcomeSymbols = new java.util.HashMap<String, Object>() {{}};
             if (Helpers.isTrue(!Helpers.isEqual(outcomes, null)))
             {
@@ -969,9 +970,7 @@ public class HyperliquidCore extends HyperliquidApi
                 put( "bids", bids );
                 put( "asks", asks );
             }}, this.safeString(outcomeObj, "symbol", outcome), timestamp);
-            Helpers.addElementToObject(orderbook, "outcome", this.safeString(outcomeObj, "outcome"));
-            Helpers.addElementToObject(orderbook, "outcomeId", this.safeString(outcomeObj, "outcomeId"));
-            return orderbook;
+            return this.safePredictionOrderBook(orderbook, outcomeObj);
         });
 
     }
@@ -1146,8 +1145,9 @@ public class HyperliquidCore extends HyperliquidApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
+            Object symbols = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object outcomes = symbols;
             Object requestedOutcomeSymbols = new java.util.HashMap<String, Object>() {{}};
             if (Helpers.isTrue(!Helpers.isEqual(outcomes, null)))
             {

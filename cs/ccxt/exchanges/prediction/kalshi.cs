@@ -373,9 +373,7 @@ public partial class kalshi : PredictionExchange
             ((IList<object>)outcomes).Add(new Dictionary<string, object>() {
                 { "id", getValue(outcomeIds, oi) },
                 { "outcomeId", getValue(outcomeIds, oi) },
-                { "symbol", outcomeHandle },
                 { "outcome", outcomeHandle },
-                { "marketSymbol", marketSymbol },
                 { "market", marketSymbol },
                 { "label", label },
                 { "active", active },
@@ -470,8 +468,7 @@ public partial class kalshi : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object ticker = this.safeString(getValue(outcomeObj, "info"), "ticker");
         object request = new Dictionary<string, object>() {
@@ -575,8 +572,7 @@ public partial class kalshi : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object ticker = this.safeString(getValue(outcomeObj, "info"), "ticker");
         object request = new Dictionary<string, object>() {
@@ -593,7 +589,7 @@ public partial class kalshi : PredictionExchange
         //     { "ticker": "...", "open_interest_fp": "60802.01", ... }   // open interest in contracts
         //
         object timestamp = this.milliseconds();
-        return this.safeOpenInterest(new Dictionary<string, object>() {
+        object openInterest = this.safeOpenInterest(new Dictionary<string, object>() {
             { "symbol", this.safeSymbol(null, market) },
             { "openInterestAmount", this.safeNumber2(interest, "open_interest_fp", "open_interest") },
             { "openInterestValue", null },
@@ -603,6 +599,10 @@ public partial class kalshi : PredictionExchange
             { "datetime", this.iso8601(timestamp) },
             { "info", interest },
         }, market);
+        ((IDictionary<string,object>)openInterest)["outcome"] = this.safeOutcomeSymbol(null, market);
+        ((IDictionary<string,object>)openInterest)["outcomeId"] = this.safeString(market, "outcomeId");
+        ((IDictionary<string,object>)openInterest).Remove((string)"symbol");
+        return openInterest;
     }
 
     /**
@@ -672,11 +672,11 @@ public partial class kalshi : PredictionExchange
         //     }
         //
         object marketAny = ((object)market);
-        object outcomeObj = this.safeOutcome(this.safeString(marketAny, "symbol"), marketAny);
+        object outcomeObj = this.safeOutcome(this.safeString(marketAny, "outcome"), marketAny);
         object outcomeLabel = ((bool) isTrue(market)) ? this.safeString(market, "label", this.safeString(getValue(market, "info"), "outcomeLabel", "YES")) : "YES";
         object isNo = isEqual(((string)outcomeLabel).ToUpper(), "NO");
         object now = this.milliseconds();
-        object symbol = this.safeString(outcomeObj, "symbol");
+        object symbol = this.safeString(outcomeObj, "outcome");
         object yesAsk = this.safeNumber(raw, "yes_ask_dollars");
         object yesBid = this.safeNumber(raw, "yes_bid_dollars");
         object noAsk = this.safeNumber(raw, "no_ask_dollars");
@@ -705,10 +705,10 @@ public partial class kalshi : PredictionExchange
             average = this.parseNumber(Precise.stringDiv(Precise.stringAdd(this.numberToString(bid), this.numberToString(ask)), "2"));
         }
         return this.safePredictionTicker(new Dictionary<string, object>() {
-            { "symbol", symbol },
+            { "outcome", symbol },
             { "outcomeId", this.safeString2(outcomeObj, "outcomeId", "id") },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString2(outcomeObj, "market", "marketSymbol") },
+            { "market", this.safeString2(outcomeObj, "market", "outcome") },
             { "timestamp", now },
             { "datetime", this.iso8601(now) },
             { "high", null },
@@ -743,18 +743,17 @@ public partial class kalshi : PredictionExchange
     public async override Task<object> fetchTickers(object symbols = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        await this.loadMarkets();
         object targets = new List<object>() {};
         if (isTrue(!isEqual(symbols, null)))
         {
             for (object i = 0; isLessThan(i, getArrayLength(symbols)); postFixIncrement(ref i))
             {
-                this.checkEventsAndMarkets(getValue(symbols, i));
+                this.checkEvents(getValue(symbols, i));
                 ((IList<object>)targets).Add(getValue(symbols, i));
             }
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
             object allKeys = new List<object>(((IDictionary<string,object>)this.outcomes).Keys);
             for (object i = 0; isLessThan(i, getArrayLength(allKeys)); postFixIncrement(ref i))
             {
@@ -842,8 +841,7 @@ public partial class kalshi : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object ticker = this.safeString(getValue(outcomeObj, "info"), "ticker");
         object isNo = isEqual(getValue(outcomeObj, "label"), "NO");
@@ -900,7 +898,7 @@ public partial class kalshi : PredictionExchange
                 ((IList<object>)asks).Add(new List<object>() {price, this.safeNumber(getValue(rawNo, ai), 1)});
             }
         }
-        return this.sortedOrders(this.safeString(outcomeObj, "symbol", outcome), timestamp, bids, asks);
+        return this.safePredictionOrderBook(this.sortedOrders(this.safeString(outcomeObj, "outcome", outcome), timestamp, bids, asks), outcomeObj);
     }
 
     /**
@@ -920,7 +918,7 @@ public partial class kalshi : PredictionExchange
         bids = this.sortBy(bids, 0, true);
         asks = this.sortBy(asks, 0);
         return new Dictionary<string, object>() {
-            { "symbol", symbol },
+            { "outcome", symbol },
             { "bids", bids },
             { "asks", asks },
             { "timestamp", timestamp },
@@ -946,8 +944,7 @@ public partial class kalshi : PredictionExchange
         timeframe ??= "1m";
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object ticker = this.safeString(getValue(outcomeObj, "info"), "ticker");
         object seriesTicker = this.safeString(getValue(outcomeObj, "info"), "seriesTicker", ticker);
@@ -1087,8 +1084,7 @@ public partial class kalshi : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object ticker = this.safeString(getValue(outcomeObj, "info"), "ticker");
         object request = new Dictionary<string, object>() {
@@ -1140,10 +1136,10 @@ public partial class kalshi : PredictionExchange
         object amount = this.safeNumber(trade, "count", amountFp);
         object rawSide = this.safeStringLower(trade, "taker_side");
         object marketAny = ((object)market);
-        object outcomeObj = this.safeOutcome(this.safeString(marketAny, "symbol"), marketAny);
+        object outcomeObj = this.safeOutcome(this.safeString(marketAny, "outcome"), marketAny);
         object marketInfo = this.safeDict(outcomeObj, "info", new Dictionary<string, object>() {});
         object requestedOutcomeLabel = this.safeStringLower(outcomeObj, "label", this.safeStringLower(marketInfo, "outcomeLabel"));
-        object outcomeSymbol = this.safeString(outcomeObj, "symbol");
+        object outcomeSymbol = this.safeString(outcomeObj, "outcome");
         object outcomeId = this.safeString2(outcomeObj, "outcomeId", "id");
         object side = null;
         if (isTrue(isTrue(isEqual(rawSide, "yes")) || isTrue(isEqual(rawSide, "no"))))
@@ -1166,11 +1162,10 @@ public partial class kalshi : PredictionExchange
             { "info", trade },
             { "timestamp", ts },
             { "datetime", this.iso8601(ts) },
-            { "symbol", outcomeSymbol },
             { "outcome", outcomeSymbol },
             { "outcomeId", outcomeId },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString2(outcomeObj, "market", "marketSymbol") },
+            { "market", this.safeString2(outcomeObj, "market", "outcome") },
             { "order", null },
             { "type", null },
             { "side", side },
@@ -1193,7 +1188,7 @@ public partial class kalshi : PredictionExchange
     public async override Task<object> fetchBalance(object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        this.checkEventsAndMarkets();
+        this.checkEvents();
         object response = await this.kalshiPrivateGetPortfolioBalance(parameters);
         return this.parseBalance(response);
     }
@@ -1248,11 +1243,11 @@ public partial class kalshi : PredictionExchange
         {
             for (object i = 0; isLessThan(i, getArrayLength(outcomes)); postFixIncrement(ref i))
             {
-                this.checkEventsAndMarkets(getValue(outcomes, i));
+                this.checkEvents(getValue(outcomes, i));
             }
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object response = await this.kalshiPrivateGetPortfolioPositions(parameters);
         object positions = (IList<object>)(this.safeList(response, "market_positions", new List<object>() {}));
@@ -1282,10 +1277,10 @@ public partial class kalshi : PredictionExchange
         }
         return this.safePredictionPosition(new Dictionary<string, object>() {
             { "id", null },
-            { "symbol", this.safeString(outcomeObj, "symbol", ticker) },
+            { "outcome", this.safeString(outcomeObj, "outcome", ticker) },
             { "outcomeId", this.safeString2(outcomeObj, "outcomeId", "id") },
             { "label", this.safeString(outcomeObj, "label") },
-            { "market", this.safeString2(outcomeObj, "market", "marketSymbol") },
+            { "market", this.safeString2(outcomeObj, "market", "outcome") },
             { "timestamp", null },
             { "datetime", null },
             { "contracts", contractsValue },
@@ -1329,10 +1324,10 @@ public partial class kalshi : PredictionExchange
         object outcome = symbol;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object request = new Dictionary<string, object>() {
             { "status", "resting" },
@@ -1363,10 +1358,10 @@ public partial class kalshi : PredictionExchange
         parameters ??= new Dictionary<string, object>();
         if (isTrue(!isEqual(symbol, null)))
         {
-            this.checkEventsAndMarkets(symbol);
+            this.checkEvents(symbol);
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object response = await this.kalshiPrivateGetPortfolioOrdersOrderId(this.extend(new Dictionary<string, object>() {
             { "order_id", id },
@@ -1413,10 +1408,10 @@ public partial class kalshi : PredictionExchange
             { "datetime", this.iso8601(ts) },
             { "lastTradeTimestamp", null },
             { "status", status },
-            { "symbol", this.safeString(mkt, "symbol") },
+            { "outcome", this.safeString(mkt, "outcome") },
             { "outcomeId", this.safeString2(mkt, "outcomeId", "id") },
             { "label", this.safeString(mkt, "label") },
-            { "market", this.safeString2(mkt, "market", "marketSymbol") },
+            { "market", this.safeString2(mkt, "market", "outcome") },
             { "type", this.safeStringLower(order, "type", "limit") },
             { "timeInForce", "GTC" },
             { "postOnly", null },
@@ -1470,8 +1465,7 @@ public partial class kalshi : PredictionExchange
     {
         parameters ??= new Dictionary<string, object>();
         object outcome = symbol;
-        await this.loadMarkets();
-        this.checkEventsAndMarkets(outcome);
+        this.checkEvents(outcome);
         object outcomeObj = this.outcome(outcome);
         object ticker = this.safeString(getValue(outcomeObj, "info"), "ticker");
         object outcomeLabel = getValue(outcomeObj, "label");
@@ -1511,10 +1505,10 @@ public partial class kalshi : PredictionExchange
         parameters ??= new Dictionary<string, object>();
         if (isTrue(!isEqual(symbol, null)))
         {
-            this.checkEventsAndMarkets(symbol);
+            this.checkEvents(symbol);
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object response = await this.kalshiPrivateDeletePortfolioOrdersOrderId(this.extend(new Dictionary<string, object>() {
             { "order_id", id },
@@ -1537,15 +1531,14 @@ public partial class kalshi : PredictionExchange
         object outcome = symbol;
         if (isTrue(!isEqual(outcome, null)))
         {
-            this.checkEventsAndMarkets(outcome);
+            this.checkEvents(outcome);
         } else
         {
-            this.checkEventsAndMarkets();
+            this.checkEvents();
         }
         object request = new Dictionary<string, object>() {};
         if (isTrue(!isEqual(outcome, null)))
         {
-            await this.loadMarkets();
             object outcomeObj = this.outcome(outcome);
             ((IDictionary<string,object>)request)["ticker"] = this.safeString(getValue(outcomeObj, "info"), "ticker");
         }
@@ -1571,10 +1564,16 @@ public partial class kalshi : PredictionExchange
         parameters ??= new Dictionary<string, object>();
         object queries = this.parseSearchQueries(parameters);
         parameters = this.omit(parameters, new List<object>() {"query", "queries"});
-        object status = this.safeString(parameters, "status", this.safeString(this.options, "defaultEventStatus", "open"));
+        // map the unified status onto the kalshi event status (open / closed) so it is pushed server-side
+        object requestedStatus = this.safeString(parameters, "status", this.safeString(this.options, "defaultEventStatus", "active"));
+        object status = "open";
+        if (isTrue(isTrue((isEqual(requestedStatus, "closed"))) || isTrue((isEqual(requestedStatus, "inactive")))))
+        {
+            status = "closed";
+        }
         object pageLimit = this.safeInteger(parameters, "limit", 200);
         object maxPages = this.safeInteger(parameters, "maxPages", 50);
-        object rest = this.omit(parameters, new List<object>() {"status", "limit", "maxPages"});
+        object rest = this.omit(parameters, new List<object>() {"status", "limit", "maxPages", "sort", "searchIn", "eventId", "slug"});
         if (!isTrue(this.events))
         {
             this.events = new Dictionary<string, object>() {};
@@ -1701,19 +1700,19 @@ public partial class kalshi : PredictionExchange
             for (object j = 0; isLessThan(j, getArrayLength(outcomesList)); postFixIncrement(ref j))
             {
                 object oc = getValue(outcomesList, j);
-                object ocSymbol = this.safeString(oc, "symbol");
+                object ocSymbol = this.safeString(oc, "outcome");
                 if (isTrue(!isEqual(ocSymbol, null)))
                 {
                     ((IDictionary<string,object>)this.outcomes)[(string)ocSymbol] = oc;
                 }
-                object ocId = this.safeString(oc, "id");
+                object ocId = this.safeString(oc, "outcomeId");
                 if (isTrue(!isEqual(ocId, null)))
                 {
                     ((IDictionary<string,object>)this.outcomes_by_id)[(string)ocId] = oc;
                 }
             }
         }
-        return result;
+        return this.applyEventFetchParams(result, parameters, queries);
     }
 
     /**
@@ -1819,23 +1818,41 @@ public partial class kalshi : PredictionExchange
         // }
         object rawMarkets = (IList<object>)(this.safeList(rawEvent, "markets", new List<object>() {}));
         object marketsList = new List<object>() {};
+        // aggregate volume/liquidity from the markets and derive the creation time so sort works
+        object totalVolume = 0;
+        object totalLiquidity = 0;
+        object earliestCreated = null;
         for (object i = 0; isLessThan(i, getArrayLength(rawMarkets)); postFixIncrement(ref i))
         {
             object rawMarket = getValue(rawMarkets, i);
             object parsed = this.parseMarket(rawMarket);
             ((IList<object>)marketsList).Add(parsed);
+            totalVolume = this.sum(totalVolume, this.safeNumber2(rawMarket, "volume_fp", "volume", 0));
+            totalLiquidity = this.sum(totalLiquidity, this.safeNumber2(rawMarket, "liquidity_dollars", "liquidity", 0));
+            object marketCreated = this.parse8601(this.safeString(rawMarket, "open_time"));
+            if (isTrue(isTrue((!isEqual(marketCreated, null))) && isTrue((isTrue((isEqual(earliestCreated, null))) || isTrue((isLessThan(marketCreated, earliestCreated)))))))
+            {
+                earliestCreated = marketCreated;
+            }
         }
         object ticker = this.safeString(rawEvent, "event_ticker");
         object title = this.safeString(rawEvent, "title");
+        object created = this.parse8601(this.safeString(rawEvent, "created_date_iso"));
+        if (isTrue(isEqual(created, null)))
+        {
+            created = earliestCreated;
+        }
         return this.extend(new Dictionary<string, object>() {
             { "id", ticker },
             { "slug", ticker },
             { "symbol", ((bool) isTrue(title)) ? this.shortenSlug(title) : null },
             { "title", title },
             { "markets", marketsList },
+            { "volume", totalVolume },
+            { "liquidity", totalLiquidity },
             { "url", this.safeString(rawEvent, "url") },
             { "image", this.safeString(rawEvent, "image_url") },
-            { "created", this.parse8601(this.safeString(rawEvent, "created_date_iso")) },
+            { "created", created },
             { "createdDatetime", this.safeString(rawEvent, "created_date_iso") },
             { "end", this.parse8601(this.safeString(rawEvent, "end_date_iso")) },
             { "endDatetime", this.safeString(rawEvent, "end_date_iso") },

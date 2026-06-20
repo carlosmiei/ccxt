@@ -972,10 +972,7 @@ export default class polymarket extends Exchange {
         //
         const timestamp = this.safeInteger (response, 'timestamp');
         const orderbook = this.parseOrderBook (response, this.safeOutcomeSymbol (outcome, outcomeObj), timestamp, 'bids', 'asks', 'price', 'size');
-        orderbook['outcome'] = this.safeString (outcomeObj, 'outcome');
-        orderbook['outcomeId'] = this.safeString (outcomeObj, 'outcomeId');
-        orderbook['market'] = this.safeString (outcomeObj, 'market');
-        return orderbook as PredictionOrderBook;
+        return this.safePredictionOrderBook (orderbook, outcomeObj);
     }
 
     /**

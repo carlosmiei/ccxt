@@ -155,11 +155,11 @@ public partial class limitless
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure).</returns>
-    public async Task<OrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
+    public async Task<PredictionOrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
     {
         var limit = limit2 == 0 ? null : (object)limit2;
         var res = await this.fetchOrderBook(symbol, limit, parameters);
-        return new OrderBook(res);
+        return new PredictionOrderBook(res);
     }
     /// <summary>
     /// fetches historical prices for a single limitless market outcome and maps them to OHLCV format, uses the `interval` query parameter and selects the YES/NO series that matches the requested outcome
@@ -585,7 +585,7 @@ public partial class limitless
     /// </list>
     /// </remarks>
     /// <returns> <term>object[]</term> an array of event structures.</returns>
-    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters = null)
+    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters)
     {
         var res = await this.fetchEvents(parameters);
         return ((IList<object>)res).Select(item => (item as Dictionary<string, object>)).ToList();

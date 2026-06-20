@@ -68,8 +68,8 @@
 					"outcomeId": "KXELONMARS-99",
 					"label": "YES",
 					"market": "ELON_MUSK_VISIT_MARS_AUG_1_2099",
-					"timestamp": 1781895629840,
-					"datetime": "2026-06-19T19:00:29.840Z",
+					"timestamp": 1781915898497,
+					"datetime": "2026-06-20T00:38:18.497Z",
 					"high": null,
 					"low": null,
 					"bid": 0.08,
@@ -257,8 +257,8 @@
 						"outcomeId": "KXELONMARS-99",
 						"label": "YES",
 						"market": "ELON_MUSK_VISIT_MARS_AUG_1_2099",
-						"timestamp": 1781895629941,
-						"datetime": "2026-06-19T19:00:29.941Z",
+						"timestamp": 1781915898599,
+						"datetime": "2026-06-20T00:38:18.599Z",
 						"high": null,
 						"low": null,
 						"bid": 0.08,
@@ -332,8 +332,8 @@
 						"outcomeId": "KXCOLONIZEMARS-50",
 						"label": "YES",
 						"market": "HUMANS_COLONIZE_MARS_2050",
-						"timestamp": 1781895629941,
-						"datetime": "2026-06-19T19:00:29.941Z",
+						"timestamp": 1781915898599,
+						"datetime": "2026-06-20T00:38:18.599Z",
 						"high": null,
 						"low": null,
 						"bid": 0.163,
@@ -634,9 +634,11 @@
 							13553
 						]
 					],
-					"timestamp": 1781895630041,
-					"datetime": "2026-06-19T19:00:30.041Z",
-					"nonce": null
+					"timestamp": 1781915898700,
+					"datetime": "2026-06-20T00:38:18.700Z",
+					"nonce": null,
+					"outcomeId": "KXELONMARS-99",
+					"market": "ELON_MUSK_VISIT_MARS_AUG_1_2099"
 				}
 			}
 		],

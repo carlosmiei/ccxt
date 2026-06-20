@@ -9,7 +9,7 @@
 import asyncio
 from typing import Any, List
 from ccxt.async_support.base.exchange import Exchange
-from ccxt.base.types import Str, Strings, Int, Num, OrderType, OrderSide
+from ccxt.base.types import Str, Strings, Int, Num, OrderType, OrderSide, fetchEventsParams
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import BadSymbol
 from ccxt.base.errors import NotSupported
@@ -29,14 +29,7 @@ class PredictionExchange(Exchange):
     def is_prediction(self) -> bool:
         return self.safe_bool(self.has, 'prediction', False)
 
-    async def load_markets_and_events(self, reload=False, params={}):
-        res = await asyncio.gather(*[self.load_markets(reload, params), self.load_events(reload, params)])
-        return {
-            'markets': res[0],
-            'events': res[1],
-        }
-
-    def check_events_and_markets(self, outcome: Str = None):
+    def check_events(self, outcome: Str = None):
         # pure synchronous guard(no I/O) — callers invoke it without await, so leaving it
         # async would make the coroutine never run in Python/PHP and silently skip validation.
         # outcomes are the real dependency for resolving a symbol; they are populated by
@@ -58,7 +51,79 @@ class PredictionExchange(Exchange):
             return [singleQuery]
         return self.safe_list(params, 'queries', [])
 
-    async def fetch_events(self, params={}):
+    def apply_event_fetch_params(self, events: List[Any], params={}, queries: List[str] = None):
+        # applies the unified fetchEvents options client-side(eventId/slug/status/searchIn/sort/limit)
+        # so exchanges whose API can't filter natively still support them consistently
+        result = events
+        eventId = self.safe_string(params, 'eventId')
+        slug = self.safe_string(params, 'slug')
+        if (eventId is not None) or (slug is not None):
+            filtered = []
+            for i in range(0, len(result)):
+                event = result[i]
+                idMatch = (eventId is not None) and (self.safe_string(event, 'id') == eventId)
+                slugMatch = (slug is not None) and (self.safe_string(event, 'slug') == slug)
+                if idMatch or slugMatch:
+                    filtered.append(event)
+            result = filtered
+        result = self.filter_events_by_status(result, self.safe_string(params, 'status'))
+        if (queries is not None) and (len(queries) > 0):
+            result = self.filter_events_by_search_in(result, queries, self.safe_string(params, 'searchIn'))
+        sort = self.safe_string(params, 'sort')
+        if sort is not None:
+            sortKey = None
+            if sort == 'volume':
+                sortKey = 'volume'
+            elif sort == 'liquidity':
+                sortKey = 'liquidity'
+            elif sort == 'newest':
+                sortKey = 'created'
+            if sortKey is not None:
+                result = self.sort_by(result, sortKey, True, 0)
+        limit = self.safe_integer(params, 'limit')
+        if limit is not None:
+            result = self.array_slice(result, 0, limit)
+        return result
+
+    def filter_events_by_status(self, events: List[Any], status: Str = None):
+        # 'active' | 'inactive' | 'closed' | 'all' — 'inactive' and 'closed' are interchangeable
+        if (status is None) or (status == 'all'):
+            return events
+        wantActive = (status == 'active')
+        result = []
+        for i in range(0, len(events)):
+            event = events[i]
+            isActive = self.safe_bool(event, 'active')
+            # keep events whose status is unknown(already filtered server-side, no `active` field)
+            if (isActive is None) or (isActive == wantActive):
+                result.append(event)
+        return result
+
+    def filter_events_by_search_in(self, events: List[Any], queries: List[str], searchIn: Str = None):
+        # keep events whose title and/or description contains one of the queries(searchIn defaults to 'both')
+        if (searchIn is None) or (queries is None) or (len(queries) == 0):
+            return events
+        checkTitle = (searchIn == 'title') or (searchIn == 'both')
+        checkDescription = (searchIn == 'description') or (searchIn == 'both')
+        result = []
+        for i in range(0, len(events)):
+            event = events[i]
+            title = self.safe_string_lower(event, 'title', '')
+            description = self.safe_string_lower(event, 'description', '')
+            matched = False
+            for qi in range(0, len(queries)):
+                q = queries[qi].lower()
+                if checkTitle and (title.find(q) >= 0):
+                    matched = True
+                    break
+                if checkDescription and (description.find(q) >= 0):
+                    matched = True
+                    break
+            if matched:
+                result.append(event)
+        return result
+
+    async def fetch_events(self, params: fetchEventsParams = {}):
         raise NotSupported(self.id + ' fetchEvents() is not supported yet')
 
     async def fetch_event(self, id: str, params={}):
@@ -253,6 +318,17 @@ class PredictionExchange(Exchange):
         parsed = super(PredictionExchange, self).safe_position(position)
         return self.to_prediction_structure(parsed, position)
 
+    def safe_prediction_order_book(self, orderbook: dict, outcomeObj: dict = None):
+        # normalize a parsed order book to the prediction shape: replace the unified
+        # `symbol` with the `outcome` handle and attach the outcome identity fields
+        #(outcomeId / market) so books match the PredictionOrderBook structure.
+        fallback = self.safe_string_2(orderbook, 'outcome', 'symbol')
+        orderbook['outcome'] = fallback if (outcomeObj is None) else self.safe_string(outcomeObj, 'outcome', fallback)
+        orderbook['outcomeId'] = self.safe_string(orderbook, 'outcomeId') if (outcomeObj is None) else self.safe_string(outcomeObj, 'outcomeId')
+        orderbook['market'] = self.safe_string(orderbook, 'market') if (outcomeObj is None) else self.safe_string(outcomeObj, 'market')
+        # omit(not delete) — `del dict['symbol']` raises KeyError in python/php when absent
+        return self.omit(orderbook, 'symbol')
+
     def to_prediction_structure(self, parsed: dict, raw: dict):
         # rename the unified `symbol` to the prediction `outcome` handle and attach the
         # prediction identity fields(raw exchange id, label, parent market/event) that the
@@ -263,8 +339,8 @@ class PredictionExchange(Exchange):
         parsed['label'] = self.safe_string(raw, 'label')
         parsed['market'] = self.safe_string(raw, 'market')
         parsed['event'] = self.safe_string(raw, 'event')
-        del parsed['symbol']
-        return parsed
+        # omit(not delete) — `del dict['symbol']` raises KeyError in python/php when absent
+        return self.omit(parsed, 'symbol')
 
     def filter_by_outcome_since_limit(self, array, outcome: Str = None, since: Int = None, limit: Int = None, tail=False):
         return self.filter_by_value_since_limit(array, 'outcome', outcome, since, limit, 'timestamp', tail)

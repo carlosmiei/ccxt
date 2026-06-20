@@ -4606,7 +4606,9 @@ public Object describe()
             for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(parsedArray)); i++)
             {
                 Object entry = Helpers.GetValue(parsedArray, i);
-                Object entryFiledEqualValue = Helpers.isEqual(Helpers.GetValue(entry, field), value);
+                // safeValue (not entry[field]) so a missing field is a non-match, not a
+                // KeyError in python/php — prediction structures key on outcome, not symbol
+                Object entryFiledEqualValue = Helpers.isEqual(this.safeValue(entry, field), value);
                 Object firstCondition = ((Helpers.isTrue(valueIsDefined))) ? entryFiledEqualValue : true;
                 Object entryKeyValue = this.safeValue(entry, key);
                 Object entryKeyGESince = Helpers.isTrue(Helpers.isTrue((entryKeyValue)) && Helpers.isTrue((!Helpers.isEqual(since, null)))) && Helpers.isTrue((Helpers.isGreaterThanOrEqual(entryKeyValue, since)));
@@ -7805,23 +7807,29 @@ public Object describe()
 
     }
 
-    public Object filterBySymbol(Object objects, Object... optionalArgs)
+    public Object filterByKey(Object objects, Object key, Object... optionalArgs)
     {
-        Object symbol = Helpers.getArg(optionalArgs, 0, null);
-        if (Helpers.isTrue(Helpers.isEqual(symbol, null)))
+        Object value = Helpers.getArg(optionalArgs, 0, null);
+        if (Helpers.isTrue(Helpers.isEqual(value, null)))
         {
             return objects;
         }
         Object result = new java.util.ArrayList<Object>(java.util.Arrays.asList());
         for (var i = 0; Helpers.isLessThan(i, Helpers.getArrayLength(objects)); i++)
         {
-            Object objectSymbol = this.safeString(Helpers.GetValue(objects, i), "symbol");
-            if (Helpers.isTrue(Helpers.isEqual(objectSymbol, symbol)))
+            Object objectValue = this.safeString(Helpers.GetValue(objects, i), key);
+            if (Helpers.isTrue(Helpers.isEqual(objectValue, value)))
             {
                 ((java.util.List<Object>)result).add(Helpers.GetValue(objects, i));
             }
         }
         return result;
+    }
+
+    public Object filterBySymbol(Object objects, Object... optionalArgs)
+    {
+        Object symbol = Helpers.getArg(optionalArgs, 0, null);
+        return this.filterByKey(objects, "symbol", symbol);
     }
 
     public Object parseOHLCV(Object ohlcv, Object... optionalArgs)

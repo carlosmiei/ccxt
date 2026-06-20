@@ -93,10 +93,10 @@ public partial class kalshi
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> an [open interest structure](https://docs.ccxt.com/#/?id=open-interest-structure).</returns>
-    public async Task<OpenInterest> FetchOpenInterest(string symbol, Dictionary<string, object> parameters = null)
+    public async Task<PredictionOpenInterest> FetchOpenInterest(string symbol, Dictionary<string, object> parameters = null)
     {
         var res = await this.fetchOpenInterest(symbol, parameters);
-        return new OpenInterest(res);
+        return new PredictionOpenInterest(res);
     }
     /// <summary>
     /// fetches tickers for multiple outcomes at once, batching their market tickers through the markets endpoint
@@ -139,11 +139,11 @@ public partial class kalshi
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> an [order book structure](https://docs.ccxt.com/#/?id=order-book-structure).</returns>
-    public async Task<OrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
+    public async Task<PredictionOrderBook> FetchOrderBook(string symbol, Int64? limit2 = 0, Dictionary<string, object> parameters = null)
     {
         var limit = limit2 == 0 ? null : (object)limit2;
         var res = await this.fetchOrderBook(symbol, limit, parameters);
-        return new OrderBook(res);
+        return new PredictionOrderBook(res);
     }
     /// <summary>
     /// fetches OHLCV candlesticks for a single kalshi outcome from the candlesticks endpoint
@@ -437,7 +437,7 @@ public partial class kalshi
     /// </list>
     /// </remarks>
     /// <returns> <term>object[]</term> an array of event structures.</returns>
-    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters = null)
+    public async Task<List<Dictionary<string, object>>> FetchEvents(Dictionary<string, object> parameters)
     {
         var res = await this.fetchEvents(parameters);
         return ((IList<object>)res).Select(item => (item as Dictionary<string, object>)).ToList();

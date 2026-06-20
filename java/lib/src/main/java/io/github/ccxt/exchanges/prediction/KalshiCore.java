@@ -957,7 +957,7 @@ final Object finalOi = oi;
                     ((java.util.List<Object>)asks).add(new java.util.ArrayList<Object>(java.util.Arrays.asList(price, this.safeNumber(Helpers.GetValue(rawNo, ai), 1))));
                 }
             }
-            return this.sortedOrders(this.safeString(outcomeObj, "symbol", outcome), timestamp, bids, asks);
+            return this.safePredictionOrderBook(this.sortedOrders(this.safeString(outcomeObj, "outcome", outcome), timestamp, bids, asks), outcomeObj);
         });
 
     }

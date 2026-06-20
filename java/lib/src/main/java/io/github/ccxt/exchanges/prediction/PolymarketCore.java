@@ -1107,10 +1107,7 @@ final Object finalMarketSymbol = marketSymbol;
             //
             Object timestamp = this.safeInteger(response, "timestamp");
             Object orderbook = this.parseOrderBook(response, this.safeOutcomeSymbol(outcome, outcomeObj), timestamp, "bids", "asks", "price", "size");
-            Helpers.addElementToObject(orderbook, "outcome", this.safeString(outcomeObj, "outcome"));
-            Helpers.addElementToObject(orderbook, "outcomeId", this.safeString(outcomeObj, "outcomeId"));
-            Helpers.addElementToObject(orderbook, "market", this.safeString(outcomeObj, "market"));
-            return orderbook;
+            return this.safePredictionOrderBook(orderbook, outcomeObj);
         });
 
     }
