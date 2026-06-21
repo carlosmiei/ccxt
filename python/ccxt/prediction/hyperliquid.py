@@ -601,7 +601,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         tickerData = self.safe_dict({'book': response}, 'book', {})
         return self.parse_ticker(tickerData, outcomeObj)
 
-    async def fetch_tickers(self, symbols: Strings = None, params={}) -> PredictionTickers:
+    async def fetch_tickers(self, outcomes: Strings = None, params={}) -> PredictionTickers:
         """
         fetches all outcome market tickers using allMids then optionally enriches with l2Book
 
@@ -611,7 +611,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure)
         """
-        outcomes = symbols
         requestedOutcomeSymbols = {}
         if outcomes is not None:
             for i in range(0, len(outcomes)):
@@ -884,7 +883,7 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
             result[coin] = account
         return self.safe_balance(result)
 
-    async def fetch_positions(self, symbols: Strings = None, params={}) -> List[PredictionPosition]:
+    async def fetch_positions(self, outcomes: Strings = None, params={}) -> List[PredictionPosition]:
         """
         fetches outcome token positions from spot clearinghouse state, outcome tokens appear token balances starting with '+'
         :param str[] [symbols]: filter by outcome ids or symbols
@@ -892,7 +891,6 @@ class hyperliquid(PredictionExchange, ImplicitAPI):
         :param str [params.user]: wallet address
         :returns dict[]: a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
         """
-        outcomes = symbols
         requestedOutcomeSymbols = {}
         if outcomes is not None:
             for i in range(0, len(outcomes)):

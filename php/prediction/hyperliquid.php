@@ -658,18 +658,17 @@ class hyperliquid extends Exchange {
         }) ();
     }
 
-    public function fetch_tickers(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_tickers(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetches all outcome market $tickers using allMids then optionally enriches with l2Book
              *
              * @see https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#retrieve-all-$mids-for-all-actively-traded-coins
              *
-             * @param {string[]} [$symbols] filter by outcome ids or $symbols
+             * @param {string[]} [symbols] filter by outcome ids or symbols
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a dictionary of [$ticker structures](https://docs.ccxt.com/#/?id=$ticker-structure)
              */
-            $outcomes = $symbols;
             $requestedOutcomeSymbols = array();
             if ($outcomes !== null) {
                 for ($i = 0; $i < count($outcomes); $i++) {
@@ -965,16 +964,15 @@ class hyperliquid extends Exchange {
         }) ();
     }
 
-    public function fetch_positions(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_positions(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetches outcome token $positions from spot clearinghouse state, outcome tokens appear token $balances starting with '+'
-             * @param {string[]} [$symbols] filter by outcome ids or $symbols
+             * @param {string[]} [symbols] filter by outcome ids or symbols
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @param {string} [$params->user] wallet address
              * @return {array[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
              */
-            $outcomes = $symbols;
             $requestedOutcomeSymbols = array();
             if ($outcomes !== null) {
                 for ($i = 0; $i < count($outcomes); $i++) {

@@ -722,7 +722,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
             outcomeObj
         )
 
-    async def fetch_tickers(self, symbols: Strings = None, params={}) -> PredictionTickers:
+    async def fetch_tickers(self, outcomes: Strings = None, params={}) -> PredictionTickers:
         """
         fetches tickers for multiple outcome tokens at once using the batched CLOB book and midpoint endpoints
 
@@ -733,7 +733,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol
         """
-        outcomes = symbols
         outcomesLength = 0
         if outcomes is not None:
             outcomesLength = len(outcomes)
@@ -1300,7 +1299,7 @@ class polymarket(PredictionExchange, ImplicitAPI):
         }
         return self.safe_balance(result)
 
-    async def fetch_positions(self, symbols: Strings = None, params={}) -> List[PredictionPosition]:
+    async def fetch_positions(self, outcomes: Strings = None, params={}) -> List[PredictionPosition]:
         """
         fetches open outcome token positions for the wallet from the data API
 
@@ -1310,7 +1309,6 @@ class polymarket(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
         """
-        outcomes = symbols
         outcomesLength = 0
         if outcomes is not None:
             outcomesLength = len(outcomes)

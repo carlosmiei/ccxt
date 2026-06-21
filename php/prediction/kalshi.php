@@ -693,17 +693,18 @@ class kalshi extends Exchange {
         ), $market);
     }
 
-    public function fetch_tickers(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_tickers(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
-             * fetches $tickers for multiple outcomes at once, batching their market $tickers through the markets endpoint
+             * fetches $tickers for multiple $outcomes at once, batching their market $tickers through the markets endpoint
              *
              * @see https://docs.kalshi.com/api-reference/market/get-markets
              *
-             * @param {string[]} [$symbols] unified outcome $symbols, fetches $tickers for all loaded outcomes when omitted
+             * @param {string[]} [$symbols] unified outcome $symbols, fetches $tickers for all loaded $outcomes when omitted
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a dictionary of [$ticker structures](https://docs.ccxt.com/#/?id=$ticker-structure) indexed by outcome symbol
              */
+            $symbols = $outcomes;
             $targets = array();
             if ($symbols !== null) {
                 for ($i = 0; $i < count($symbols); $i++) {
@@ -717,7 +718,7 @@ class kalshi extends Exchange {
                     $targets[] = $allKeys[$i];
                 }
             }
-            // group requested outcomes by their market $ticker, yes and no outcomes share one market
+            // group requested $outcomes by their market $ticker, yes and no $outcomes share one market
             $outcomesByTicker = array();
             $tickers = array();
             for ($i = 0; $i < count($targets); $i++) {
@@ -1135,18 +1136,17 @@ class kalshi extends Exchange {
         return $result;
     }
 
-    public function fetch_positions(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_positions(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetches open market $positions for the authenticated kalshi user
              *
              * @see https://trading-api.readme.io/reference/getportfoliopositions
              *
-             * @param {string[]} [$symbols] filter by outcome ids or $symbols
+             * @param {string[]} [symbols] filter by outcome ids or symbols
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
              */
-            $outcomes = $symbols;
             $outcomesLength = 0;
             if ($outcomes !== null) {
                 $outcomesLength = count($outcomes);

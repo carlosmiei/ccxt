@@ -365,8 +365,8 @@ class myriad extends Exchange {
         }) ();
     }
 
-    public function fetch_positions(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_positions(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetch the open outcome-token positions held by a wallet (myriad settles trades on-chain, so only read-only portfolio $data is exposed by the API)
              *
@@ -377,6 +377,7 @@ class myriad extends Exchange {
              * @param {string} [$params->address] the wallet $address to query, defaults to $this->walletAddress
              * @return {array[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
              */
+            $symbols = $outcomes;
             $address = $this->safe_string_2($params, 'address', 'user', $this->walletAddress);
             if ($address === null) {
                 throw new ArgumentsRequired($this->id . ' fetchPositions() requires a walletAddress or an $address parameter');
@@ -2235,17 +2236,18 @@ class myriad extends Exchange {
         );
     }
 
-    public function fetch_tickers(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_tickers(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
-             * fetches tickers for multiple outcomes, grouping requested outcomes by their parent market to fetch each market only once
+             * fetches tickers for multiple $outcomes, grouping requested $outcomes by their parent market to fetch each market only once
              *
              * @see https://docs.myriad.markets/builders/myriad-api-reference
              *
-             * @param {string[]} [$symbols] unified outcome $symbols, refreshes the markets listing and returns tickers for all outcomes when omitted
+             * @param {string[]} [$symbols] unified outcome $symbols, refreshes the markets listing and returns tickers for all $outcomes when omitted
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a dictionary of [$ticker structures](https://docs.ccxt.com/#/?id=$ticker-structure) indexed by outcome symbol
              */
+            $symbols = $outcomes;
             $this->ensure_outcomes_loaded();
             $result = array();
             if ($symbols === null) {
@@ -2264,7 +2266,7 @@ class myriad extends Exchange {
                 }
                 return $result;
             }
-            // group target outcomes by their parent market to fetch each market only once
+            // group target $outcomes by their parent market to fetch each market only once
             $outcomesByMarket = array();
             $marketKeys = array();
             for ($i = 0; $i < count($symbols); $i++) {

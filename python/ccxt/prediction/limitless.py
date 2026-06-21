@@ -976,7 +976,7 @@ class limitless(PredictionExchange, ImplicitAPI):
             'info': ticker,
         })
 
-    async def fetch_tickers(self, symbols: Strings = None, params={}) -> PredictionTickers:
+    async def fetch_tickers(self, outcomes: Strings = None, params={}) -> PredictionTickers:
         """
         fetches tickers for multiple outcome tokens, grouping requested outcomes by their parent market, fetches all active markets when symbols is omitted
 
@@ -987,6 +987,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol
         """
+        symbols = outcomes
         result: PredictionTickers = {}
         if symbols is None:
             # parse tickers for every loaded outcome from the cached listing data, without the per-market order books
@@ -2272,7 +2273,7 @@ class limitless(PredictionExchange, ImplicitAPI):
                 return outcome
         return None
 
-    async def fetch_positions(self, symbols: Strings = None, params={}) -> List[PredictionPosition]:
+    async def fetch_positions(self, outcomes: Strings = None, params={}) -> List[PredictionPosition]:
         """
         fetches open positions for the authenticated limitless user from the portfolio endpoint
 
@@ -2282,6 +2283,7 @@ class limitless(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
         """
+        symbols = outcomes
         symbolsLength = 0
         if symbols is not None:
             symbolsLength = len(symbols)

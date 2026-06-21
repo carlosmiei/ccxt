@@ -422,8 +422,9 @@ public class MyriadCore extends MyriadApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object symbols = outcomes;
             Object address = this.safeString2(parameters, "address", "user", this.walletAddress);
             if (Helpers.isTrue(Helpers.isEqual(address, null)))
             {
@@ -2685,8 +2686,9 @@ final Object finalNetworkId = networkId;
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object symbols = outcomes;
             this.ensureOutcomesLoaded();
             Object result = new java.util.HashMap<String, Object>() {{}};
             if (Helpers.isTrue(Helpers.isEqual(symbols, null)))

@@ -1018,10 +1018,10 @@ class limitless extends Exchange {
         ));
     }
 
-    public function fetch_tickers(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_tickers(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
-             * fetches tickers for multiple outcome tokens, grouping requested outcomes by their parent market, fetches all active markets when $symbols is omitted
+             * fetches tickers for multiple outcome tokens, grouping requested $outcomes by their parent market, fetches all active markets when $symbols is omitted
              *
              * @see https://docs.limitless.exchange/api-reference/markets/get-market
              * @see https://docs.limitless.exchange/api-reference/trading/orderbook
@@ -1030,6 +1030,7 @@ class limitless extends Exchange {
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a dictionary of [$ticker structures](https://docs.ccxt.com/#/?id=$ticker-structure) indexed by outcome symbol
              */
+            $symbols = $outcomes;
             $result = array();
             if ($symbols === null) {
                 // parse tickers for every loaded outcome from the cached listing data, without the per-market order books
@@ -1048,7 +1049,7 @@ class limitless extends Exchange {
                 }
                 return $result;
             }
-            // group target outcomes by their parent market to fetch each market and $book only once
+            // group target $outcomes by their parent market to fetch each market and $book only once
             $outcomesBySlug = array();
             $slugs = array();
             for ($i = 0; $i < count($symbols); $i++) {
@@ -2440,8 +2441,8 @@ class limitless extends Exchange {
         return null;
     }
 
-    public function fetch_positions(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_positions(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetches open positions for the authenticated limitless user from the portfolio endpoint
              *
@@ -2451,6 +2452,7 @@ class limitless extends Exchange {
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array[]} a list of [$position structures](https://docs.ccxt.com/#/?id=$position-structure)
              */
+            $symbols = $outcomes;
             $symbolsLength = 0;
             if ($symbols !== null) {
                 $symbolsLength = count($symbols);

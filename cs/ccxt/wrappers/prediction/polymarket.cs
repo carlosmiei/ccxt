@@ -140,9 +140,9 @@ public partial class polymarket
     /// </list>
     /// </remarks>
     /// <returns> <term>object</term> a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol.</returns>
-    public async Task<PredictionTickers> FetchTickers(List<String> symbols = null, Dictionary<string, object> parameters = null)
+    public async Task<PredictionTickers> FetchTickers(List<String> outcomes = null, Dictionary<string, object> parameters = null)
     {
-        var res = await this.fetchTickers(symbols, parameters);
+        var res = await this.fetchTickers(outcomes, parameters);
         return new PredictionTickers(res);
     }
     /// <summary>
@@ -441,9 +441,9 @@ public partial class polymarket
     /// </list>
     /// </remarks>
     /// <returns> <term>object[]</term> a list of [position structures](https://docs.ccxt.com/#/?id=position-structure).</returns>
-    public async Task<List<PredictionPosition>> FetchPositions(List<String> symbols = null, Dictionary<string, object> parameters = null)
+    public async Task<List<PredictionPosition>> FetchPositions(List<String> outcomes = null, Dictionary<string, object> parameters = null)
     {
-        var res = await this.fetchPositions(symbols, parameters);
+        var res = await this.fetchPositions(outcomes, parameters);
         return ((IList<object>)res).Select(item => new PredictionPosition(item)).ToList<PredictionPosition>();
     }
     /// <summary>

@@ -794,8 +794,9 @@ final Object finalOi = oi;
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object symbols = outcomes;
             Object targets = new java.util.ArrayList<Object>(java.util.Arrays.asList());
             if (Helpers.isTrue(!Helpers.isEqual(symbols, null)))
             {
@@ -1324,9 +1325,8 @@ final Object finalOi = oi;
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
-            Object outcomes = symbols;
             Object outcomesLength = 0;
             if (Helpers.isTrue(!Helpers.isEqual(outcomes, null)))
             {

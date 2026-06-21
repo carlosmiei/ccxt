@@ -383,7 +383,8 @@ export default class myriad extends Exchange {
      * @param {string} [params.address] the wallet address to query, defaults to this.walletAddress
      * @returns {object[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
      */
-    async fetchPositions (symbols: Strings = undefined, params = {}): Promise<PredictionPosition[]> {
+    async fetchPositions (outcomes: Strings = undefined, params = {}): Promise<PredictionPosition[]> {
+        const symbols = outcomes;
         const address = this.safeString2 (params, 'address', 'user', this.walletAddress);
         if (address === undefined) {
             throw new ArgumentsRequired (this.id + ' fetchPositions() requires a walletAddress or an address parameter');
@@ -2232,7 +2233,8 @@ export default class myriad extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol
      */
-    async fetchTickers (symbols: Strings = undefined, params = {}): Promise<PredictionTickers> {
+    async fetchTickers (outcomes: Strings = undefined, params = {}): Promise<PredictionTickers> {
+        const symbols = outcomes;
         this.ensureOutcomesLoaded ();
         const result: PredictionTickers = {};
         if (symbols === undefined) {

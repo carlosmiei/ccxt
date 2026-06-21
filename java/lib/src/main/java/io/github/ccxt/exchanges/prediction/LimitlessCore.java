@@ -1125,8 +1125,9 @@ public class LimitlessCore extends LimitlessApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object symbols = outcomes;
             Object result = new java.util.HashMap<String, Object>() {{}};
             if (Helpers.isTrue(Helpers.isEqual(symbols, null)))
             {
@@ -2824,8 +2825,9 @@ public class LimitlessCore extends LimitlessApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
+            Object symbols = outcomes;
             Object symbolsLength = 0;
             if (Helpers.isTrue(!Helpers.isEqual(symbols, null)))
             {

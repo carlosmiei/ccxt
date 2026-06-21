@@ -752,10 +752,9 @@ public partial class hyperliquid : PredictionExchange
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure)
      */
-    public async override Task<object> fetchTickers(object symbols = null, object parameters = null)
+    public async override Task<object> fetchTickers(object outcomes = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        object outcomes = symbols;
         object requestedOutcomeSymbols = new Dictionary<string, object>() {};
         if (isTrue(!isEqual(outcomes, null)))
         {
@@ -1082,10 +1081,9 @@ public partial class hyperliquid : PredictionExchange
      * @param {string} [params.user] wallet address
      * @returns {object[]} a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
      */
-    public async override Task<object> fetchPositions(object symbols = null, object parameters = null)
+    public async override Task<object> fetchPositions(object outcomes = null, object parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
-        object outcomes = symbols;
         object requestedOutcomeSymbols = new Dictionary<string, object>() {};
         if (isTrue(!isEqual(outcomes, null)))
         {

@@ -783,9 +783,8 @@ public class HyperliquidCore extends HyperliquidApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
-            Object outcomes = symbols;
             Object requestedOutcomeSymbols = new java.util.HashMap<String, Object>() {{}};
             if (Helpers.isTrue(!Helpers.isEqual(outcomes, null)))
             {
@@ -1145,9 +1144,8 @@ public class HyperliquidCore extends HyperliquidApi
 
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
 
-            Object symbols = Helpers.getArg(optionalArgs, 0, null);
+            Object outcomes = Helpers.getArg(optionalArgs, 0, null);
             Object parameters = Helpers.getArg(optionalArgs, 1, new java.util.HashMap<String, Object>() {{}});
-            Object outcomes = symbols;
             Object requestedOutcomeSymbols = new java.util.HashMap<String, Object>() {{}};
             if (Helpers.isTrue(!Helpers.isEqual(outcomes, null)))
             {

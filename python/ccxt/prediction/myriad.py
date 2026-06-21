@@ -344,7 +344,7 @@ class myriad(PredictionExchange, ImplicitAPI):
         event: Any = self.parse_market_to_event(response, market)
         return event
 
-    async def fetch_positions(self, symbols: Strings = None, params={}) -> List[PredictionPosition]:
+    async def fetch_positions(self, outcomes: Strings = None, params={}) -> List[PredictionPosition]:
         """
         fetch the open outcome-token positions held by a wallet(myriad settles trades on-chain, so only read-only portfolio data is exposed by the API)
 
@@ -355,6 +355,7 @@ class myriad(PredictionExchange, ImplicitAPI):
         :param str [params.address]: the wallet address to query, defaults to self.walletAddress
         :returns dict[]: a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
         """
+        symbols = outcomes
         address = self.safe_string_2(params, 'address', 'user', self.walletAddress)
         if address is None:
             raise ArgumentsRequired(self.id + ' fetchPositions() requires a walletAddress or an address parameter')
@@ -2028,7 +2029,7 @@ class myriad(PredictionExchange, ImplicitAPI):
             0,   # price_charts endpoint has no volume
         ]
 
-    async def fetch_tickers(self, symbols: Strings = None, params={}) -> PredictionTickers:
+    async def fetch_tickers(self, outcomes: Strings = None, params={}) -> PredictionTickers:
         """
         fetches tickers for multiple outcomes, grouping requested outcomes by their parent market to fetch each market only once
 
@@ -2038,6 +2039,7 @@ class myriad(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol
         """
+        symbols = outcomes
         self.ensure_outcomes_loaded()
         result: PredictionTickers = {}
         if symbols is None:

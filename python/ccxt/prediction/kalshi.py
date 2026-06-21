@@ -660,7 +660,7 @@ class kalshi(PredictionExchange, ImplicitAPI):
             'info': raw,
         }, market)
 
-    async def fetch_tickers(self, symbols: Strings = None, params={}) -> PredictionTickers:
+    async def fetch_tickers(self, outcomes: Strings = None, params={}) -> PredictionTickers:
         """
         fetches tickers for multiple outcomes at once, batching their market tickers through the markets endpoint
 
@@ -670,6 +670,7 @@ class kalshi(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of [ticker structures](https://docs.ccxt.com/#/?id=ticker-structure) indexed by outcome symbol
         """
+        symbols = outcomes
         targets: List[Any] = []
         if symbols is not None:
             for i in range(0, len(symbols)):
@@ -1054,7 +1055,7 @@ class kalshi(PredictionExchange, ImplicitAPI):
         result['USD'] = {'free': total, 'used': 0, 'total': total}
         return result
 
-    async def fetch_positions(self, symbols: Strings = None, params={}) -> List[PredictionPosition]:
+    async def fetch_positions(self, outcomes: Strings = None, params={}) -> List[PredictionPosition]:
         """
         fetches open market positions for the authenticated kalshi user
 
@@ -1064,7 +1065,6 @@ class kalshi(PredictionExchange, ImplicitAPI):
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: a list of [position structures](https://docs.ccxt.com/#/?id=position-structure)
         """
-        outcomes = symbols
         outcomesLength = 0
         if outcomes is not None:
             outcomesLength = len(outcomes)

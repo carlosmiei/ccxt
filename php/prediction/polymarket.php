@@ -770,19 +770,18 @@ class polymarket extends Exchange {
         }) ();
     }
 
-    public function fetch_tickers(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_tickers(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetches tickers for multiple outcome tokens at once using the batched CLOB $book and midpoint endpoints
              *
              * @see https://docs.polymarket.com/api-reference/market-data/get-order-$books-request-body
              * @see https://docs.polymarket.com/api-reference/market-data/get-midpoint-prices-request-body
              *
-             * @param {string[]} [$symbols] unified outcome $symbols or outcome token ids, fetches all loaded $outcomes when omitted
+             * @param {string[]} [symbols] unified outcome symbols or outcome token ids, fetches all loaded $outcomes when omitted
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a dictionary of [$ticker structures](https://docs.ccxt.com/#/?id=$ticker-structure) indexed by outcome symbol
              */
-            $outcomes = $symbols;
             $outcomesLength = 0;
             if ($outcomes !== null) {
                 $outcomesLength = count($outcomes);
@@ -1421,18 +1420,17 @@ class polymarket extends Exchange {
         return $this->safe_balance($result);
     }
 
-    public function fetch_positions(?array $symbols = null, $params = array ()): PromiseInterface {
-        return Async\async(function () use ($symbols, $params) {
+    public function fetch_positions(?array $outcomes = null, $params = array ()): PromiseInterface {
+        return Async\async(function () use ($outcomes, $params) {
             /**
              * fetches open outcome token $positions for the wallet from the data API
              *
              * @see https://docs.polymarket.com/api-reference/core/get-current-$positions-for-a-user
              *
-             * @param {string[]} [$symbols] unified outcome $symbols to filter by
+             * @param {string[]} [symbols] unified outcome symbols to filter by
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array[]} a list of [$position structures](https://docs.ccxt.com/#/?id=$position-structure)
              */
-            $outcomes = $symbols;
             $outcomesLength = 0;
             if ($outcomes !== null) {
                 $outcomesLength = count($outcomes);
