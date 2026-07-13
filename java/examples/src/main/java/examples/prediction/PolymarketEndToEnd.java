@@ -47,6 +47,8 @@ public class PolymarketEndToEnd {
 
         // 1) pick a high-volume event and an outcome with a live two-sided book ------------
         Map<String, Object> eventsParams = new HashMap<>();
+        // fetchEvents requires a scope (query/queries/tags/eventId/slug); sort/limit apply within it
+        eventsParams.put("query", "fed");
         eventsParams.put("sort", "volume");
         eventsParams.put("limit", 15);
         List<PredictionEvent> events = exchange.fetchEvents(eventsParams);
