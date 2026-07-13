@@ -13,6 +13,7 @@ from ccxt.base.precise import Precise                    # noqa: F401
 from ccxt.base import errors                             # noqa: F401
 from ccxt.base.errors import error_hierarchy             # noqa: F401
 
+from ccxt.prediction.binance import binance                                     # noqa: F401
 from ccxt.prediction.hyperliquid import hyperliquid                             # noqa: F401
 from ccxt.prediction.kalshi import kalshi                                       # noqa: F401
 from ccxt.prediction.limitless import limitless                                 # noqa: F401
@@ -20,6 +21,7 @@ from ccxt.prediction.myriad import myriad                                       
 from ccxt.prediction.polymarket import polymarket                               # noqa: F401
 
 exchanges = [
+    'binance',
     'hyperliquid',
     'kalshi',
     'limitless',
