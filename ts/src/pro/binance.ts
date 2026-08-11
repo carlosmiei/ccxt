@@ -1076,8 +1076,10 @@ export default class binance extends binanceRest {
             const orderbook = this.safeValue (this.orderbooks, symbol);
             orderbook.reset (snapshot);
             // unroll the accumulated deltas
+            // the cache is cleared after the loop — clearing it first would
+            // empty `messages` too in go, where the cache is reached through
+            // a live pointer rather than a rebound reference
             const messages = orderbook.cache;
-            orderbook.cache = [];
             for (let i = 0; i < messages.length; i++) {
                 const messageItem = messages[i];
                 const U = this.safeInteger (messageItem, 'U');
@@ -1106,6 +1108,7 @@ export default class binance extends binanceRest {
                     }
                 }
             }
+            orderbook.cache = [];
             if (symbol !== undefined) {
                 this.orderbooks[symbol] = orderbook;
             }
