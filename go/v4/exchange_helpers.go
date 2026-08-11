@@ -312,6 +312,20 @@ func GetValue(collection any, key any) any {
 		return nil
 	}
 
+	// ws orderbook caches are handed around as *any (GetCache()) — dereference
+	// pointer wrappers so indexed reads see the slice, mirroring GetArrayLength;
+	// without this every buffered orderbook delta read through GetValue during
+	// snapshot reconciliation is nil and gets silently dropped
+	if interfacePtr, ok := collection.(*any); ok {
+		if *interfacePtr == nil {
+			return nil
+		}
+		collection = *interfacePtr
+	}
+	if arrayPtr, ok := collection.(*[]any); ok {
+		collection = *arrayPtr
+	}
+
 	keyNum := -1
 	keyStr, isStr := key.(string)
 	if !isStr {
