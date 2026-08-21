@@ -92,6 +92,14 @@ pub trait TypedExchangeExt: TypedExchange {
             Ok(dict_from_value(&v, FundingRate::from_value))
         }
     }
+    /// Typed `watchOHLCV`.
+    fn watch_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("watch_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
+        }
+    }
     /// Typed `watchBalance`.
     fn watch_balance<'a>(&'a mut self, params: Value) -> impl ::std::future::Future<Output = crate::Result<Balances>> + Send + 'a {
         let __args: Vec<Value> = vec![params];

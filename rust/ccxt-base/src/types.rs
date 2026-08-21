@@ -237,6 +237,28 @@ impl OrderBook {
 /// A unified OHLCV candle: [timestamp, open, high, low, close, volume].
 pub type OHLCV = [f64; 6];
 
+/// Decode one unified OHLCV candle from a `Value::Arr`.
+///
+/// Free function rather than a `from_value` inherent, because `OHLCV` is a
+/// plain array alias and not a struct. The typed-wrapper generator wires this
+/// up for `fetchOHLCV`'s `Promise<OHLCV[]>` return via `vec_from_value`.
+/// Missing or non-numeric slots decode to `0.0`, matching the lenient
+/// fallback semantics of the struct `from_value` impls.
+pub fn ohlcv_from_value(v: Value) -> OHLCV {
+    let mut out: OHLCV = [0.0; 6];
+    if let Value::Arr(items) = v {
+        for (i, slot) in out.iter_mut().enumerate() {
+            *slot = match items.get(i) {
+                Some(Value::Float(f)) => *f,
+                Some(Value::Int(n)) => *n as f64,
+                Some(Value::Str(s)) => s.parse::<f64>().unwrap_or(0.0),
+                _ => 0.0,
+            };
+        }
+    }
+    out
+}
+
 /// Unified balance / account info.
 #[derive(Debug, Clone, Default)]
 pub struct Balances {

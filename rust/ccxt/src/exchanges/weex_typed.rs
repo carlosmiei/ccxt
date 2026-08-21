@@ -155,6 +155,24 @@ impl Weex {
         Ok(dict_from_value(&v, OpenInterest::from_value))
     }
 
+    /// Typed wrapper around `fetchOHLCV`.
+    pub async fn fetch_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().fetch_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
+    }
+
+    /// Typed wrapper around `fetchSpotOHLCV`.
+    pub async fn fetch_spot_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().fetch_spot_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
+    }
+
+    /// Typed wrapper around `fetchContractOHLCV`.
+    pub async fn fetch_contract_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().fetch_contract_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
+    }
+
     /// Typed wrapper around `fetchBorrowInterest`.
     pub async fn fetch_borrow_interest(&mut self, code: Option<&str>, symbol: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<BorrowInterest>> {
         let v = crate::runtime::call_typed(self.core_mut().fetch_borrow_interest(&[code.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), symbol.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
@@ -369,6 +387,24 @@ impl Weex {
     pub async fn fetch_funding_interval(&mut self, symbol: &str, params: Value) -> crate::Result<FundingRate> {
         let v = crate::runtime::call_typed(self.core_mut().fetch_funding_interval(Value::Str(symbol.to_string()), &[params])).await?;
         Ok(FundingRate::from_value(v))
+    }
+
+    /// Typed wrapper around `fetchMarkOHLCV`.
+    pub async fn fetch_mark_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().fetch_mark_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
+    }
+
+    /// Typed wrapper around `fetchIndexOHLCV`.
+    pub async fn fetch_index_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().fetch_index_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
+    }
+
+    /// Typed wrapper around `fetchPremiumIndexOHLCV`.
+    pub async fn fetch_premium_index_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().fetch_premium_index_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
     }
 
     /// Typed wrapper around `fetchTransactions`.

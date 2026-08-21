@@ -164,6 +164,30 @@ pub trait TypedExchangeExt: TypedExchange {
             Ok(dict_from_value(&v, OpenInterest::from_value))
         }
     }
+    /// Typed `fetchOHLCV`.
+    fn fetch_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("fetch_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
+        }
+    }
+    /// Typed `fetchSpotOHLCV`.
+    fn fetch_spot_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("fetch_spot_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
+        }
+    }
+    /// Typed `fetchContractOHLCV`.
+    fn fetch_contract_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("fetch_contract_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
+        }
+    }
     /// Typed `fetchBorrowInterest`.
     fn fetch_borrow_interest<'a>(&'a mut self, code: Option<&str>, symbol: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<BorrowInterest>>> + Send + 'a {
         let __args: Vec<Value> = vec![code.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), symbol.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
@@ -450,6 +474,30 @@ pub trait TypedExchangeExt: TypedExchange {
         async move {
             let v = self.call_raw("fetch_funding_interval", __args).await?;
             Ok(FundingRate::from_value(v))
+        }
+    }
+    /// Typed `fetchMarkOHLCV`.
+    fn fetch_mark_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("fetch_mark_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
+        }
+    }
+    /// Typed `fetchIndexOHLCV`.
+    fn fetch_index_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("fetch_index_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
+        }
+    }
+    /// Typed `fetchPremiumIndexOHLCV`.
+    fn fetch_premium_index_ohlcv<'a>(&'a mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> impl ::std::future::Future<Output = crate::Result<Vec<OHLCV>>> + Send + 'a {
+        let __args: Vec<Value> = vec![Value::Str(symbol.to_string()), timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params];
+        async move {
+            let v = self.call_raw("fetch_premium_index_ohlcv", __args).await?;
+            Ok(vec_from_value(&v, ohlcv_from_value))
         }
     }
     /// Typed `fetchTransactions`.

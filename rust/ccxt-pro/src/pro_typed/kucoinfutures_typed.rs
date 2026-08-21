@@ -101,6 +101,12 @@ impl Kucoinfutures {
         Ok(dict_from_value(&v, FundingRate::from_value))
     }
 
+    /// Typed wrapper around `watchOHLCV`.
+    pub async fn watch_ohlcv(&mut self, symbol: &str, timeframe: Option<&str>, since: Option<i64>, limit: Option<i64>, params: Value) -> crate::Result<Vec<OHLCV>> {
+        let v = crate::runtime::call_typed(self.core_mut().watch_ohlcv(Value::Str(symbol.to_string()), &[timeframe.map(|s| Value::Str(s.to_string())).unwrap_or(Value::Null), since.map(Value::Int).unwrap_or(Value::Null), limit.map(Value::Int).unwrap_or(Value::Null), params])).await?;
+        Ok(vec_from_value(&v, ohlcv_from_value))
+    }
+
     /// Typed wrapper around `watchBalance`.
     pub async fn watch_balance(&mut self, params: Value) -> crate::Result<Balances> {
         let v = crate::runtime::call_typed(self.core_mut().watch_balance(&[params])).await?;

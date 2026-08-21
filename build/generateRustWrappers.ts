@@ -97,6 +97,14 @@ const KNOWN_MAP_TYPES = new Map<string, string>([
     ['TradingFees', 'TradingFee'],
 ]);
 
+// Element types that are NOT structs with a `from_value` inherent, but plain
+// aliases in `types.rs` decoded by a free function. Keyed by the TS type name;
+// the value is the Rust type and the free function that decodes one element.
+const KNOWN_FREE_FN_ELEMS = new Map<string, { rustType: string, fn: string }>([
+    // `pub type OHLCV = [f64; 6];` — decoded by `ohlcv_from_value`.
+    ['OHLCV', { rustType: 'OHLCV', fn: 'ohlcv_from_value' }],
+]);
+
 // Combined lookup for "is this a name we can produce a decoder for?".
 function knownReturnType(name: string): { rustType: string, decode: (v: string) => string } | null {
     const struct = KNOWN_STRUCT_TYPES.get(name);
@@ -226,6 +234,13 @@ function mapReturnType(name: string, tsReturn: string): { rustReturn: string, de
             return {
                 rustReturn: `Vec<${rustElem}>`,
                 decode: v => `vec_from_value(&${v}, ${rustElem}::from_value)`,
+            };
+        }
+        const freeElem = KNOWN_FREE_FN_ELEMS.get(elem);
+        if (freeElem) {
+            return {
+                rustReturn: `Vec<${freeElem.rustType}>`,
+                decode: v => `vec_from_value(&${v}, ${freeElem.fn})`,
             };
         }
         if (elem === 'string') {
