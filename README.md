@@ -2,7 +2,7 @@
 
 [![NPM Downloads](https://img.shields.io/npm/dy/ccxt.svg)](https://www.npmjs.com/package/ccxt) [![npm](https://img.shields.io/npm/v/ccxt.svg)](https://npmjs.com/package/ccxt) [![PyPI](https://img.shields.io/pypi/v/ccxt.svg)](https://pypi.python.org/pypi/ccxt) [![NuGet version](https://img.shields.io/nuget/v/ccxt)](https://www.nuget.org/packages/ccxt) [![GoDoc](https://img.shields.io/github/v/tag/ccxt/ccxt?label=go)](https://godoc.org/github.com/ccxt/ccxt/go/v4) [![Mvn](https://badges.mvnrepository.com/badge/io.github.ccxt/ccxt/badge.svg?label=mvn)](https://mvnrepository.com/artifact/io.github.ccxt/ccxt) [![Packagist](https://img.shields.io/packagist/v/ccxt/ccxt)](https://packagist.org/packages/ccxt/ccxt) [![Supported Exchanges](https://img.shields.io/badge/exchanges-103-blue.svg)](https://github.com/ccxt/ccxt/wiki/Exchange-Markets) [![CCXT Chat in Telegram](https://telegram-badge.vercel.app/api/telegram-badge?channelId=@ccxt_chat&label=chat)](https://t.me/ccxt_chat) [![CCXT Discord Server](https://img.shields.io/discord/690203284119617602?logo=discord&logoColor=white)](https://discord.gg/ccxt) [![Follow CCXT at x.com](https://img.shields.io/twitter/follow/ccxt_official.svg?style=social&label=CCXT)](https://x.com/ccxt_official)
 
-A crypto trading API with more than 100 exchanges and prediction markets in JavaScript / TypeScript / Python / C# / PHP / Go / Java.
+A crypto trading API with more than 100 exchanges and prediction markets in JavaScript / TypeScript / Python / C# / PHP / Go / Java / Rust.
 
 ### [Install](#install) · [Usage](#usage) · [Manual](https://github.com/ccxt/ccxt/wiki) · [FAQ](https://github.com/ccxt/ccxt/wiki/FAQ) · [Examples](https://github.com/ccxt/ccxt/tree/master/examples) · [Contributing](https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md) · [Disclaimer](#disclaimer) · [Social](#social)
 
@@ -22,7 +22,7 @@ Current feature list:
 - optionally normalizes data for cross-exchange analytics and arbitrage
 - has an out of the box unified API that is extremely easy to integrate
 - ideal for AI agents, LLMs and vibe coding
-- works in Node 18+, Python 3, PHP 8.1+, netstandard2.0/2.1, Go 1.20+, Java 21+ and web browsers
+- works in Node 18+, Python 3, PHP 8.1+, netstandard2.0/2.1, Go 1.20+, Java 21+, Rust 1.80+ (preview) and web browsers
 
 ## Sponsored Promotion
 
@@ -227,6 +227,7 @@ This library is shipped as an all-in-one module implementation with minimalistic
 - [cs/](https://github.com/ccxt/ccxt/blob/master/cs/)  in C# (generated from TS)
 - [go/](https://github.com/ccxt/ccxt/blob/master/go/)  in Go (generated from TS)
 - [java/](https://github.com/ccxt/ccxt/blob/master/java/) in Java (generated from TS)
+- [rust/](https://github.com/ccxt/ccxt/blob/master/rust/) in Rust (generated from TS, preview)
 
 You can also clone it into your project directory from [ccxt GitHub repository](https://github.com/ccxt/ccxt):
 
@@ -416,6 +417,42 @@ CompletableFuture<Ticker> future = exchange.watchTickerAsync("BTC/USDT", null);
 ```
 
 See [java/examples/](https://github.com/ccxt/ccxt/tree/master/java/examples) for more usage examples.
+
+### Rust
+
+> **Preview.** The Rust target is not yet published to crates.io and its public API is still
+> settling. See [rust/ccxt-base/README.md](https://github.com/ccxt/ccxt/blob/master/rust/ccxt-base/README.md).
+
+Add the crates as git dependencies:
+
+```toml
+[dependencies]
+ccxt = { git = "https://github.com/ccxt/ccxt", package = "ccxt" }
+tokio = { version = "1", features = ["full"] }
+# optional: WebSocket (watch_*) venues
+ccxt-pro = { git = "https://github.com/ccxt/ccxt", package = "ccxt-pro" }
+```
+
+Every exchange has a typed wrapper whose unified methods return `Result<T, ExchangeError>`:
+
+```rust
+use ccxt::{Value, TypedExchangeExt};
+
+#[tokio::main]
+async fn main() -> Result<(), ccxt::ExchangeError> {
+    let mut exchange = ccxt::Kraken::new(None);
+    exchange.load_markets(false).await;
+
+    let ticker = exchange.fetch_ticker("BTC/USD", Value::Null).await?;
+    println!("{} {:?}", ticker.symbol, ticker.last);
+    Ok(())
+}
+```
+
+Pick the exchange at runtime with `ccxt::from_id("kraken", None)`, and stream over WebSocket
+with the matching `ccxt_pro::from_id` plus `watch_ticker` / `watch_order_book` / `watch_trades`.
+
+See [examples/rust/](https://github.com/ccxt/ccxt/tree/master/examples/rust) for more usage examples.
 
 ### Docker
 
