@@ -1324,8 +1324,8 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
             }
         }
         let __json_t0 = std::time::Instant::now();
-        let json = match serde_json::from_str::<serde_json::Value>(&text) {
-            Ok(j)  => Value::from_json(&j),
+        let json = match serde_json::from_str::<Value>(&text) {
+            Ok(v)  => v,
             Err(_) => Value::Null,
         };
         JSON_NANOS.fetch_add(__json_t0.elapsed().as_nanos() as u64,

@@ -488,6 +488,86 @@ impl Value {
     }
 }
 
+/// Deserialize straight into `Value`.
+///
+/// The previous path was `serde_json::from_str::<serde_json::Value>` followed
+/// by `Value::from_json`, which builds the whole document twice: once as
+/// serde's tree and again as ours, cloning every key and every string on the
+/// way. Implementing `Deserialize` lets serde drive our own construction in a
+/// single pass. `from_json` stays for callers that already hold a
+/// `serde_json::Value`.
+///
+/// Number handling mirrors `from_json` exactly: integers that fit `i64` become
+/// `Int`, an unsigned integer past `i64::MAX` keeps its exact digits as `Str`
+/// (an order id would otherwise round through `f64`), and anything else
+/// becomes `Float`.
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ValueVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ValueVisitor {
+            type Value = Value;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("any valid JSON value")
+            }
+
+            fn visit_unit<E>(self) -> Result<Value, E> { Ok(Value::Null) }
+            fn visit_none<E>(self) -> Result<Value, E> { Ok(Value::Null) }
+
+            fn visit_some<D2>(self, d: D2) -> Result<Value, D2::Error>
+            where D2: serde::Deserializer<'de> {
+                serde::Deserialize::deserialize(d)
+            }
+
+            fn visit_bool<E>(self, b: bool) -> Result<Value, E> { Ok(Value::Bool(b)) }
+
+            fn visit_i64<E>(self, n: i64) -> Result<Value, E> { Ok(Value::Int(n)) }
+
+            fn visit_u64<E>(self, n: u64) -> Result<Value, E> {
+                Ok(if n <= i64::MAX as u64 {
+                    Value::Int(n as i64)
+                } else {
+                    // past i64 — keep the digits, see the doc comment above
+                    Value::Str(n.to_string())
+                })
+            }
+
+            fn visit_f64<E>(self, f: f64) -> Result<Value, E> { Ok(Value::Float(f)) }
+
+            fn visit_str<E>(self, s: &str) -> Result<Value, E> { Ok(Value::Str(s.to_string())) }
+
+            fn visit_string<E>(self, s: String) -> Result<Value, E> { Ok(Value::Str(s)) }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Value, A::Error>
+            where A: serde::de::SeqAccess<'de> {
+                let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(8));
+                while let Some(item) = seq.next_element()? {
+                    out.push(item);
+                }
+                Ok(Value::Array(out))
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Value, A::Error>
+            where A: serde::de::MapAccess<'de> {
+                // IndexMap, so document order is preserved exactly as the
+                // serde_json `preserve_order` path did
+                let mut out: HashMap<String, Value> =
+                    HashMap::with_capacity(map.size_hint().unwrap_or(8));
+                while let Some((k, v)) = map.next_entry::<String, Value>()? {
+                    out.insert(k, v);
+                }
+                Ok(Value::Map(out))
+            }
+        }
+
+        deserializer.deserialize_any(ValueVisitor)
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -522,8 +522,8 @@ pub fn get_index_of(haystack: &Value, needle: &Value) -> Value {
 
 pub fn json_parse(v: &Value) -> Value {
     match v {
-        Value::Str(s) => match serde_json::from_str::<serde_json::Value>(s) {
-            Ok(j)  => Value::from_json(&j),
+        Value::Str(s) => match serde_json::from_str::<Value>(s) {
+            Ok(v)  => v,
             Err(_) => Value::Null,
         },
         _ => Value::Null,
