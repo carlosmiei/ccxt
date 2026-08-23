@@ -1197,12 +1197,16 @@ impl Exchange {
     }
 
     // ── exchange-specific signing helpers (above-the-marker base methods) ──
-    // These wrap heavy crypto (curve25519, StarkNet, dydx protobuf, lighter
-    // zk-proofs) that has not yet been ported to Rust. The terminal
-    // signature-producing methods fail loudly with NotSupported rather than
-    // returning a null/empty signature — an unsigned request silently sent to an
-    // exchange is worse than an explicit error (review #4). The static request
-    // fixtures mark the affected private cases `disabledRS`, as Go/Java do.
+    // These wrap heavy crypto (curve25519, StarkNet, dydx protobuf) that has not
+    // yet been ported to Rust. The terminal signature-producing methods fail
+    // loudly with NotSupported rather than returning a null/empty signature — an
+    // unsigned request silently sent to an exchange is worse than an explicit
+    // error (review #4). The static request fixtures mark the affected private
+    // cases `disabledRS`, as Go/Java do.
+    //
+    // The `lighter*` group below is the exception: it is implemented, by binding
+    // the prebuilt signer library the way python/php/c# do — see
+    // `src/lighter_signer.rs`.
 
     /// Fail loudly for an unported crypto/signing primitive. Diverges (`-> !`),
     /// so it satisfies any `-> Value` stub body.
@@ -1306,33 +1310,68 @@ impl Exchange {
     }
 
     /// `loadLighterLibrary(libraryPath, chainId, privateKey, apiKeyIndex, accountIndex, createClient?)`.
+    /// Returns the handle the `lighter*` helpers below take as their `signer`
+    /// argument. It is a dict carrying the resolved library path, because the
+    /// generated exchange caches it back through `safeDict` — the library itself
+    /// lives in `lighter_signer`, so repeat loads are free.
     pub async fn load_lighter_library(
         &self,
-        _library_path: Value,
-        _chain_id: Value,
-        _private_key: Value,
-        _api_key_index: Value,
-        _account_index: Value,
-        _optional_args: &[Value],
+        library_path: Value,
+        chain_id: Value,
+        private_key: Value,
+        api_key_index: Value,
+        account_index: Value,
+        optional_args: &[Value],
     ) -> Value {
-        Value::Null
+        let path = match &library_path {
+            Value::Str(p) if !p.is_empty() => p.clone(),
+            _ => panic!("{}", crate::exchange_errors::not_supported(Value::Str(
+                "lighter loadLighterLibrary(): options[\"libraryPath\"] must point at the lighter signer build for your platform, from https://github.com/elliottech/lighter-python/tree/main/lighter/signers".to_string(),
+            ))),
+        };
+        let signer = crate::lighter_signer::load_library(&path);
+        // sixth arg is `createClient` — the TS default is true
+        let create = !matches!(optional_args.first(), Some(Value::Bool(false)));
+        if create {
+            self.lighter_create_client(
+                signer.clone(),
+                chain_id,
+                private_key,
+                api_key_index,
+                account_index,
+            );
+        }
+        signer
     }
 
     /// `lighterCreateClient(signer, chainId, privateKey, apiKeyIndex, accountIndex)`.
     pub fn lighter_create_client(
         &self,
-        _signer: Value,
-        _chain_id: Value,
-        _private_key: Value,
-        _api_key_index: Value,
-        _account_index: Value,
+        signer: Value,
+        chain_id: Value,
+        private_key: Value,
+        api_key_index: Value,
+        account_index: Value,
     ) -> Value {
-        Value::Null
+        use crate::lighter_signer::as_i64;
+        let url = crate::lighter_signer::client_url(&self.urls, &self.hostname);
+        let key = match &private_key {
+            Value::Str(k) => k.clone(),
+            _ => String::new(),
+        };
+        crate::lighter_signer::create_client(
+            &signer,
+            &url,
+            &key,
+            as_i64(&chain_id),
+            as_i64(&api_key_index),
+            as_i64(&account_index),
+        )
     }
 
     /// `lighterGenerateApiKey(signer)`.
-    pub fn lighter_generate_api_key(&self, _signer: Value) -> Value {
-        self.crypto_not_supported("lighterGenerateApiKey")
+    pub fn lighter_generate_api_key(&self, signer: Value) -> Value {
+        crate::lighter_signer::generate_api_key(&signer)
     }
 
     /// `getZKTransferSignatureObj(seeds, order)` — apex StarkEx signing.
@@ -1366,44 +1405,44 @@ impl Exchange {
     }
 
     /// `lighterSign*(signer, request)` — lighter zk-proof signing helpers.
-    pub fn lighter_sign_create_order(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignCreateOrder")
+    pub fn lighter_sign_create_order(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_create_order(&signer, &request)
     }
-    pub fn lighter_sign_create_grouped_orders(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignCreateGroupedOrders")
+    pub fn lighter_sign_create_grouped_orders(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_create_grouped_orders(&signer, &request)
     }
-    pub fn lighter_sign_cancel_order(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignCancelOrder")
+    pub fn lighter_sign_cancel_order(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_cancel_order(&signer, &request)
     }
-    pub fn lighter_sign_cancel_all_orders(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignCancelAllOrders")
+    pub fn lighter_sign_cancel_all_orders(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_cancel_all_orders(&signer, &request)
     }
-    pub fn lighter_sign_withdraw(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignWithdraw")
+    pub fn lighter_sign_withdraw(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_withdraw(&signer, &request)
     }
-    pub fn lighter_sign_create_sub_account(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignCreateSubAccount")
+    pub fn lighter_sign_create_sub_account(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_create_sub_account(&signer, &request)
     }
-    pub fn lighter_sign_modify_order(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignModifyOrder")
+    pub fn lighter_sign_modify_order(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_modify_order(&signer, &request)
     }
-    pub fn lighter_sign_transfer(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignTransfer")
+    pub fn lighter_sign_transfer(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_transfer(&signer, &request)
     }
-    pub fn lighter_sign_update_leverage(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignUpdateLeverage")
+    pub fn lighter_sign_update_leverage(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_update_leverage(&signer, &request)
     }
-    pub fn lighter_sign_update_margin(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignUpdateMargin")
+    pub fn lighter_sign_update_margin(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_update_margin(&signer, &request)
     }
-    pub fn lighter_sign_approve_integrator(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignApproveIntegrator")
+    pub fn lighter_sign_approve_integrator(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_approve_integrator(&signer, &request)
     }
-    pub fn lighter_sign_change_pubkey(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterSignChangePubkey")
+    pub fn lighter_sign_change_pubkey(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::sign_change_pubkey(&signer, &request)
     }
-    pub fn lighter_create_auth_token(&self, _signer: Value, _request: Value) -> Value {
-        self.crypto_not_supported("lighterCreateAuthToken")
+    pub fn lighter_create_auth_token(&self, signer: Value, request: Value) -> Value {
+        crate::lighter_signer::create_auth_token(&signer, &request)
     }
 
     /// `urlencodeWithArrayRepeat(params)` — `qs.stringify(object, { arrayFormat: 'repeat' })`:
