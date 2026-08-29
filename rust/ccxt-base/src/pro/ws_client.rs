@@ -82,8 +82,8 @@ fn now_ms() -> i64 {
 /// Decode a text frame into a `Value` — JSON when it parses, else a raw string
 /// (some venues send bare `"pong"` etc. that `handle_message` matches on).
 fn parse_text(t: &str) -> Value {
-    match serde_json::from_str::<serde_json::Value>(t) {
-        Ok(j) => Value::from_json(&j),
+    match serde_json::from_str::<Value>(t) {
+        Ok(v) => v,
         Err(_) => Value::Str(t.to_string()),
     }
 }
