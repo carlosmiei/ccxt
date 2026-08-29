@@ -429,6 +429,10 @@ fn base_http_exceptions() -> Value {
 
 impl Exchange {
     pub fn new(config: Option<Value>) -> Self {
+        // Transpiled bodies signal errors by unwinding with a `"[Kind] msg"`
+        // payload; keep the default hook from printing those recovered
+        // control-flow panics. Idempotent, and only filters CCXT payloads.
+        crate::runtime::install_quiet_panic_hook();
         let mut ex = Exchange {
             // Base-class id (Exchange.ts describe()). A derived exchange's
             // describe() overrides this with its own id.

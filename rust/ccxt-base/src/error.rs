@@ -97,6 +97,15 @@ fn error_parent(kind: &str) -> Option<&'static str> {
     })
 }
 
+/// Is `kind` a name from the CCXT error hierarchy (`errorHierarchy.ts`)?
+///
+/// Used to tell a CCXT error payload — panics carrying `"[Kind] message"` —
+/// apart from an unrelated `panic!` raised by user code, so the quiet panic
+/// hook in `runtime` only suppresses the former.
+pub fn is_known_error_kind(kind: &str) -> bool {
+    kind == "BaseError" || error_parent(kind).is_some()
+}
+
 #[cfg(test)]
 mod error_hierarchy_tests {
     use super::ExchangeError;
@@ -114,6 +123,20 @@ mod error_hierarchy_tests {
         assert!(ExchangeError::new("OnMaintenance", "x").is("OperationFailed"));
         assert!(!ExchangeError::new("AuthenticationError", "x").is("BadRequest"));
         assert!(!ExchangeError::new("Unknown", "x").is("ExchangeError"));
+    }
+
+    #[test]
+    fn known_error_kinds() {
+        use super::is_known_error_kind;
+        assert!(is_known_error_kind("BaseError"));
+        assert!(is_known_error_kind("NetworkError"));
+        assert!(is_known_error_kind("InsufficientFunds"));
+        assert!(is_known_error_kind("ChecksumError"));
+        // Not error classes — a user panic starting with "[...]" must not be
+        // mistaken for a CCXT error payload.
+        assert!(!is_known_error_kind("Unknown"));
+        assert!(!is_known_error_kind("my own bracketed note"));
+        assert!(!is_known_error_kind(""));
     }
 }
 

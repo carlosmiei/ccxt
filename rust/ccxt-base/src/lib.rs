@@ -95,6 +95,7 @@ pub use error::ExchangeError;
 pub use params::{Config, Params};
 pub use value::{Value, get_value, set_value, safe_string, safe_number, safe_integer, safe_bool};
 pub use exchange::Exchange;
+pub use runtime::install_quiet_panic_hook;
 
 /// Convenience Result alias used throughout the crate.
 pub type Result<T> = std::result::Result<T, ExchangeError>;

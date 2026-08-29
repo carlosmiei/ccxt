@@ -242,6 +242,57 @@ pub fn panic_msg_to_error(msg: &str) -> crate::ExchangeError {
     crate::ExchangeError::new("ExchangeError", msg)
 }
 
+/// Does this panic payload carry a transpiled CCXT error (`"[Kind] message"`
+/// with a `Kind` from the error hierarchy)?
+fn is_ccxt_error_payload(payload: &(dyn std::any::Any + Send)) -> bool {
+    let msg = match payload.downcast_ref::<String>() {
+        Some(s) => s.as_str(),
+        None => match payload.downcast_ref::<&str>() {
+            Some(s) => *s,
+            None => return false,
+        },
+    };
+    let rest = match msg.strip_prefix('[') {
+        Some(r) => r,
+        None => return false,
+    };
+    match rest.find(']') {
+        Some(end) => crate::error::is_known_error_kind(&rest[..end]),
+        None => false,
+    }
+}
+
+/// Silence the default panic output for CCXT's *expected* error panics.
+///
+/// Errors inside the transpiled exchange bodies are raised with
+/// `panic!("[Kind] message")` and recovered by `call_typed` (and by the
+/// transpiled `try`/`catch` arms). Those unwinds are control flow, not
+/// crashes, but the default panic hook still prints each one — so a fully
+/// handled `Result::Err` looked identical to a crash on stderr.
+///
+/// This hook suppresses output only for payloads that parse as a CCXT error
+/// kind; every other panic — including any raised by the caller's own code —
+/// is forwarded to the hook that was installed before us, so normal panic
+/// reporting is untouched.
+///
+/// Idempotent, and a no-op when `CCXT_VERBOSE_PANICS` is set (use that to get
+/// the raw panic output back while debugging).
+pub fn install_quiet_panic_hook() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        if std::env::var_os("CCXT_VERBOSE_PANICS").is_some() {
+            return;
+        }
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if is_ccxt_error_payload(info.payload()) {
+                return;
+            }
+            previous(info);
+        }));
+    });
+}
+
 /// Bridge an async exchange call's panic-based error convention onto Rust's
 /// `Result`. The transpiled bodies use `panic!("[Kind] message")` (mirroring
 /// the TS `throw new <Kind>(message)` pattern); the typed-wrapper layer
@@ -271,6 +322,7 @@ where
 {
     use futures::FutureExt;
     use std::panic::AssertUnwindSafe;
+    install_quiet_panic_hook();
     match AssertUnwindSafe(fut).catch_unwind().await {
         Ok(v) => Ok(v),
         Err(payload) => {
