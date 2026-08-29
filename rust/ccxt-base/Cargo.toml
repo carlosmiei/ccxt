@@ -101,6 +101,8 @@ tokio-tungstenite = { version = "0.24", default-features = false, features = ["c
 flate2 = "1"
 # Global lazy statics for the WS client registry.
 once_cell = "1"
+# dlopen, for lighter’s prebuilt signer library (src/lighter_signer.rs)
+libloading = "0.8"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

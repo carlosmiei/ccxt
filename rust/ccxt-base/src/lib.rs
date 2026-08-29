@@ -37,6 +37,9 @@ pub mod types;
 pub mod params;
 pub mod exchange;
 pub mod precise;
+// Bindings for lighter’s prebuilt signer library — the same binary python /
+// php / c# load. See the module docs for the ABI notes.
+pub mod lighter_signer;
 pub mod runtime;
 
 pub mod exchange_errors;
