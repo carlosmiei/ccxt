@@ -68,6 +68,8 @@ pub fn take_http_timings() -> (u64, u64, u64) {
 // ── Internals (Rust-typed runtime state, not exposed to transpiled code) ─────
 
 pub struct Internals {
+    /// Stable identity used to isolate WebSocket clients owned by this exchange.
+    pub ws_owner_id:    u64,
     pub http_client:    Option<reqwest::Client>,
     pub describe_cb:    Option<DescribeCallback>,
     pub last_rest_ts:   i64,
@@ -150,13 +152,32 @@ pub trait DerivedExchange {
 // A cloned Exchange gets a fresh `Internals` — the http client and dispatch
 // state are per-instance and must not be shared.
 // Test-only callers (`clone_self`) only read `Value` fields off the copy.
+//
+// NOTE: the clone therefore gets its OWN `ws_owner_id` and is a different
+// WebSocket owner than the original. That is deliberate — a copy must not be
+// able to close or resolve the original's sockets — but it means `client()`,
+// `watch()` and `close()` on a clone address an empty registry partition.
+// WebSocket work must be done on the original instance.
 impl Clone for Internals {
     fn clone(&self) -> Self { Internals::default() }
 }
 
+// Releasing the instance releases its WebSockets. The client registry is
+// process-global and keyed by `(ws_owner_id, url)`, so without this every
+// dropped exchange would strand its `ClientState` plus its reader / writer /
+// keep-alive tasks there for the life of the process.
+impl Drop for Internals {
+    fn drop(&mut self) {
+        crate::pro::ws_client::close_owner(self.ws_owner_id);
+    }
+}
+
 impl Default for Internals {
     fn default() -> Self {
+        static NEXT_WS_OWNER_ID: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(1);
         Self {
+            ws_owner_id:       NEXT_WS_OWNER_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             http_client:      None,
             describe_cb:      None,
             last_rest_ts:     0,
@@ -1089,7 +1110,8 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
         subscribe_hashes: Vec<String>,
         subscription: Value,
     ) -> impl ::std::future::Future<Output = Value> + Send { async move {
-        let client = match crate::pro::ws_client::ensure_client(&url).await {
+        let owner_id = self.internals.ws_owner_id;
+        let client = match crate::pro::ws_client::ensure_client(owner_id, &url).await {
             Ok(c) => c,
             Err(e) => panic!("{}", e),
         };
@@ -1111,7 +1133,10 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
                 Value::Str(s) => s.clone(),
                 v => v.to_json().to_string(),
             };
-            client.send_text(payload);
+            client.remember_subscribe_message(&subscribe_hashes, payload.clone());
+            if !client.send_text(payload) {
+                panic!("[NetworkError] {} websocket outgoing queue full", url);
+            }
         }
         // If an ancestor ws_run on this task is already driving `url`, don't
         // start a nested loop — the subscribe frame was sent above; report the
@@ -1120,7 +1145,11 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
             .try_with(|s| s.lock().unwrap().contains(&url))
             .unwrap_or(false);
         if nested_same {
-            return match client.take_settled(&hashes) {
+            // A non-owning poll: the ancestor loop is the one registered on these
+            // hashes, so take the value if it is there but leave the pending set
+            // alone — retiring here would drop the ancestor's registration and
+            // silently discard every later resolve for it.
+            return match client.take_settled_no_retire(&hashes) {
                 Some(Ok(v)) => v,
                 _ => Value::Null,
             };
@@ -1130,14 +1159,14 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
         // the first (top-level) drive; nested-different-url calls extend it.
         if WS_DRIVEN_URLS.try_with(|_| ()).is_ok() {
             WS_DRIVEN_URLS.with(|s| { s.lock().unwrap().insert(url.clone()); });
-            let r = self.ws_drive_loop(client, hashes, url.clone()).await;
+            let r = self.ws_drive_loop(client, hashes, owner_id, url.clone()).await;
             WS_DRIVEN_URLS.with(|s| { s.lock().unwrap().remove(&url); });
             r
         } else {
             let mut set = std::collections::HashSet::new();
             set.insert(url.clone());
             WS_DRIVEN_URLS
-                .scope(std::sync::Mutex::new(set), self.ws_drive_loop(client, hashes, url.clone()))
+                .scope(std::sync::Mutex::new(set), self.ws_drive_loop(client, hashes, owner_id, url.clone()))
                 .await
         }
     } }
@@ -1148,8 +1177,14 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
         &mut self,
         client: std::sync::Arc<crate::pro::ws_client::ClientState>,
         hashes: Vec<String>,
+        owner_id: u64,
         url: String,
     ) -> impl ::std::future::Future<Output = Value> + Send { async move {
+        // Consecutive reconnects that produced no frame. A peer that accepts and
+        // immediately hangs up would otherwise spin here forever, since each
+        // reconnect "succeeds"; after this many we surface the drop instead.
+        const MAX_BARREN_RECONNECTS: u32 = 10;
+        let mut barren_reconnects = 0u32;
         loop {
             if let Some(settled) = client.take_settled(&hashes) {
                 match settled {
@@ -1164,8 +1199,68 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
                 }
             }
             let msg = match client.next_message().await {
-                Some(m) => m,
-                None => panic!("[NetworkError] {} websocket connection closed", url),
+                Some(m) => {
+                    barren_reconnects = 0;
+                    m
+                }
+                None => {
+                    // Closed by `close()`: `drop_client` already recorded the
+                    // rejection and dropped the registry entry, so reconnecting
+                    // would dial a fresh socket nobody is driving.
+                    if client.is_closed() {
+                        // `take_settled` CONSUMES the entry, so every arm must be
+                        // handled here: a value delivered before the close is the
+                        // watch's result, not something to discard on the way to
+                        // reporting the close.
+                        match client.take_settled(&hashes) {
+                            Some(Ok(v)) => return v,
+                            Some(Err(e)) => panic!(
+                                "{}",
+                                match &e {
+                                    Value::Str(s) => s.clone(),
+                                    v => crate::runtime::stringify_param(v),
+                                }
+                            ),
+                            None => panic!(
+                                "[ExchangeClosedByUser] {} websocket client closed",
+                                url
+                            ),
+                        }
+                    }
+                    // The static-WS mock never reconnects: it is permanently
+                    // "connected", so `ensure_client` always succeeds and an
+                    // exhausted fixture would spin here instead of failing.
+                    if client.is_mock() {
+                        panic!("[NetworkError] {} websocket connection closed", url);
+                    }
+                    barren_reconnects += 1;
+                    if barren_reconnects > MAX_BARREN_RECONNECTS {
+                        panic!(
+                            "[NetworkError] {} websocket connection closed repeatedly without delivering a message",
+                            url
+                        );
+                    }
+                    let mut delay_ms = 100u64;
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        if client.is_closed() {
+                            break;
+                        }
+                        match crate::pro::ws_client::ensure_client(owner_id, &url).await {
+                            // A different Arc means our slot was dropped and
+                            // re-created underneath us; the frames now go to the
+                            // new client, so stop driving this one.
+                            Ok(c) if !std::sync::Arc::ptr_eq(&c, &client) => panic!(
+                                "[ExchangeClosedByUser] {} websocket client was replaced",
+                                url
+                            ),
+                            Ok(_) => break,
+                            Err(_) if !client.is_closed() => delay_ms = (delay_ms * 2).min(30_000),
+                            Err(e) => panic!("{}", e),
+                        }
+                    }
+                    continue;
+                }
             };
             if std::env::var("CCXT_WS_DEBUG").is_ok() {
                 let n: usize = std::env::var("CCXT_WS_DEBUG").ok()
@@ -1173,7 +1268,7 @@ pub trait ExchangeRuntime: crate::exchange_generated::ExchangeBase {
                 let s = msg.to_json().to_string();
                 eprintln!("[wsmsg] {}", s.chars().take(n).collect::<String>());
             }
-            let client_value = crate::pro::ws_client::client_value(&url);
+            let client_value = crate::pro::ws_client::client_value(owner_id, &url);
             let _ = self
                 .dispatch_to_derived("handle_message", vec![client_value, msg])
                 .await;

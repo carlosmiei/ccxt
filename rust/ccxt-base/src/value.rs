@@ -696,7 +696,9 @@ pub fn get_value(obj: &Value, key: &Value) -> Value {
                 && m.contains_key("subscriptions") && m.contains_key("futures")
             {
                 if let Some(Value::Str(url)) = m.get("url") {
-                    return crate::pro::ws_client::client_field_live(url, k);
+                    if let Some(Value::Int(owner_id)) = m.get("__ws_owner_id") {
+                        return crate::pro::ws_client::client_field_live(*owner_id as u64, url, k);
+                    }
                 }
             }
             // Snapshot value wins WHEN PRESENT AND NON-NULL. Tests that
@@ -1515,9 +1517,9 @@ pub(crate) fn book_cache_len_of(m: &HashMap<String, Value>) -> Option<usize> {
 /// If `m` is a tagged live-subscriptions snapshot, apply `client.subscriptions
 /// [key] = val` to the live WS client and return true.
 pub(crate) fn try_ws_subs_write(m: &HashMap<String, Value>, key: &str, val: &Value) -> bool {
-    if key == "__ws_subs_url" { return false; }
-    if let Some(Value::Str(url)) = m.get("__ws_subs_url") {
-        crate::pro::ws_client::value_subs_insert(url, key, val.clone());
+    if key == "__ws_subs_url" || key == "__ws_owner_id" { return false; }
+    if let (Some(Value::Int(owner)), Some(Value::Str(url))) = (m.get("__ws_owner_id"), m.get("__ws_subs_url")) {
+        crate::pro::ws_client::value_subs_insert(*owner as u64, url, key, val.clone());
         return true;
     }
     false
@@ -1526,9 +1528,9 @@ pub(crate) fn try_ws_subs_write(m: &HashMap<String, Value>, key: &str, val: &Val
 /// If `m` is a tagged subscription dict (`__ws_sub_ref`), persist a field write
 /// `subscription[key] = val` to the live WS client and return true.
 pub(crate) fn try_ws_sub_field_write(m: &HashMap<String, Value>, key: &str, val: &Value) -> bool {
-    if key == "__ws_sub_ref" { return false; }
-    if let Some(Value::Str(subref)) = m.get("__ws_sub_ref") {
-        crate::pro::ws_client::value_sub_field_write(subref, key, val.clone());
+    if key == "__ws_sub_ref" || key == "__ws_sub_url" || key == "__ws_owner_id" { return false; }
+    if let (Some(Value::Int(owner)), Some(Value::Str(url)), Some(Value::Str(hash))) = (m.get("__ws_owner_id"), m.get("__ws_sub_url"), m.get("__ws_sub_ref")) {
+        crate::pro::ws_client::value_sub_field_write(*owner as u64, url, hash, key, val.clone());
         return true;
     }
     false
@@ -1537,8 +1539,8 @@ pub(crate) fn try_ws_sub_field_write(m: &HashMap<String, Value>, key: &str, val:
 /// If `m` is a tagged live-subscriptions snapshot, apply `delete
 /// client.subscriptions[key]` to the live WS client and return true.
 pub(crate) fn try_ws_subs_remove(m: &HashMap<String, Value>, key: &str) -> bool {
-    if let Some(Value::Str(url)) = m.get("__ws_subs_url") {
-        crate::pro::ws_client::value_subs_remove(url, key);
+    if let (Some(Value::Int(owner)), Some(Value::Str(url))) = (m.get("__ws_owner_id"), m.get("__ws_subs_url")) {
+        crate::pro::ws_client::value_subs_remove(*owner as u64, url, key);
         return true;
     }
     false

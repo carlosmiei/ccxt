@@ -476,7 +476,7 @@ pub fn in_op(obj: &Value, key: &Value) -> bool {
 /// enumerates `client.subscriptions` (upbit builds its subscribe frame from
 /// those keys), so filter it out of key/value enumeration.
 fn is_ws_internal_tag(k: &str) -> bool {
-    k == "__ws_subs_url" || k == "__ws_sub_ref"
+    k == "__ws_subs_url" || k == "__ws_sub_ref" || k == "__ws_sub_url" || k == "__ws_owner_id"
 }
 
 pub fn object_keys(v: &Value) -> Value {

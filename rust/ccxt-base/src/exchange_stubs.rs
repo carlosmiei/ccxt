@@ -917,9 +917,15 @@ impl Exchange {
     // established lazily by `watch()`.
     pub fn client(&mut self, args: &[Value]) -> Value {
         match args.get(0) {
-            Some(Value::Str(url)) => crate::pro::ws_client::client_value(url),
+            Some(Value::Str(url)) => crate::pro::ws_client::client_value(self.internals.ws_owner_id, url),
             _ => Value::Null,
         }
+    }
+    /// Close every WebSocket owned by this exchange instance and reject its
+    /// pending watches without affecting other instances using the same URL.
+    pub async fn close(&mut self) -> Value {
+        crate::pro::ws_client::close_owner(self.internals.ws_owner_id);
+        Value::Null
     }
     // `spawn(fn, ...)` / `delay(ms, fn, ...)`: the transpiler lowers the JS
     // function reference to `Value::Null` (it has no Rust callable to pass), so
