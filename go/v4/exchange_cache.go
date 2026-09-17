@@ -61,7 +61,8 @@ func cacheTimestampOf(item any) (int64, bool) {
 	if !ok || len(arr) == 0 {
 		return 0, false
 	}
-	switch v := arr[0].(type) {
+	// rows built by generated parsers can carry typed pointers (e.g. *int64 from SafeInteger)
+	switch v := derefScalar(arr[0]).(type) {
 	case int:
 		return int64(v), true
 	case int32:
@@ -107,6 +108,7 @@ type ArrayCache struct {
 }
 
 func NewArrayCache(MaxSize any) *ArrayCache {
+	MaxSize = derefScalar(MaxSize) // generated callers pass *int64 from SafeInteger
 	size := 0
 	switch v := MaxSize.(type) {
 	case int:
@@ -320,6 +322,9 @@ func (c *ArrayCache) ToArray() []any {
 // The function returns any so the transpiled code that works with
 // loosely-typed limits continues to compile.
 func (c *ArrayCache) GetLimit(symbol any, limit any) any {
+	// generated callers now pass typed pointers (*string / *int64); a typed nil must read as absent
+	symbol = derefScalar(symbol)
+	limit = derefScalar(limit)
 	// if limit != nil {
 	// 	return limit
 	// }
@@ -367,7 +372,7 @@ func (c *ArrayCache) Remove(symbol string) {
 	var filteredData []any
 	for _, item := range c.Data {
 		if m, ok := item.(map[string]any); ok {
-			if s, ok := m["symbol"].(string); ok && s == symbol {
+			if s, ok := derefScalar(m["symbol"]).(string); ok && s == symbol {
 				continue // Skip this item
 			}
 		}
@@ -388,6 +393,7 @@ type ArrayCacheByTimestamp struct {
 }
 
 func NewArrayCacheByTimestamp(MaxSize any) *ArrayCacheByTimestamp {
+	MaxSize = derefScalar(MaxSize) // generated callers pass *int64 from SafeInteger
 	size := 0
 	switch v := MaxSize.(type) {
 	case int:
@@ -507,6 +513,9 @@ func (c *ArrayCacheByTimestamp) ToArray() []any {
 // GetLimit for timestamp cache ignores symbol because entries are not
 // symbol-segmented.  It mirrors the same precedence order as ArrayCache.
 func (c *ArrayCacheByTimestamp) GetLimit(symbol any, limit any) any {
+	// generated callers now pass typed pointers (*string / *int64); a typed nil must read as absent
+	symbol = derefScalar(symbol)
+	limit = derefScalar(limit)
 	c.clearUpdates = true
 	if limit == nil {
 		return c.newUpdates
@@ -523,7 +532,7 @@ func (c *ArrayCacheByTimestamp) Remove(symbol string) {
 	var filteredData []any
 	for _, item := range c.Data {
 		if m, ok := item.(map[string]any); ok {
-			if s, ok := m["symbol"].(string); ok && s == symbol {
+			if s, ok := derefScalar(m["symbol"]).(string); ok && s == symbol {
 				continue
 			}
 		}
@@ -588,10 +597,10 @@ func NewArrayCacheBySymbolBySide() *ArrayCacheBySymbolBySide {
 func (c *ArrayCacheBySymbolBySide) Append(item any) {
 	var symbol, side string
 	if m, ok := item.(map[string]any); ok {
-		if s, ok := m["symbol"].(string); ok {
+		if s, ok := derefScalar(m["symbol"]).(string); ok {
 			symbol = s
 		}
-		if sd, ok := m["side"].(string); ok {
+		if sd, ok := derefScalar(m["side"]).(string); ok {
 			side = sd
 		}
 	}
